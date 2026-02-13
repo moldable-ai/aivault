@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "square",
+  "vaultSecrets": {
+    "SQUARE_ACCESS_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

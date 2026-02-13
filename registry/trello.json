@@ -1,41 +1,31 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "trello",
+  "vaultSecrets": {
+    "TRELLO_API_KEY": "key",
+    "TRELLO_TOKEN": "token"
+  },
   "auth": {
-    "multi_header": [
+    "multi_query": [
       {
-        "header_name": "authorization",
-        "value_template": "OAuth oauth_consumer_key=\"{{key}}\", oauth_token=\"{{token}}\""
+        "param_name": "key",
+        "value_template": "{{key}}"
+      },
+      {
+        "param_name": "token",
+        "value_template": "{{token}}"
       }
     ]
   },
   "hosts": ["api.trello.com"],
   "capabilities": [
     {
-      "id": "trello/members",
-      "provider": "trello",
-      "allow": {
-        "hosts": ["api.trello.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/1/members"]
-      }
-    },
-    {
       "id": "trello/boards",
       "provider": "trello",
       "allow": {
         "hosts": ["api.trello.com"],
-        "methods": ["GET"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
         "pathPrefixes": ["/1/boards"]
-      }
-    },
-    {
-      "id": "trello/lists",
-      "provider": "trello",
-      "allow": {
-        "hosts": ["api.trello.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/1/lists"]
       }
     },
     {
@@ -43,10 +33,144 @@
       "provider": "trello",
       "allow": {
         "hosts": ["api.trello.com"],
-        "methods": ["GET", "POST"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
         "pathPrefixes": ["/1/cards"]
+      }
+    },
+    {
+      "id": "trello/lists",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST", "PUT"],
+        "pathPrefixes": ["/1/lists"]
+      }
+    },
+    {
+      "id": "trello/members",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "PUT"],
+        "pathPrefixes": ["/1/members"]
+      }
+    },
+    {
+      "id": "trello/actions",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/1/actions"]
+      }
+    },
+    {
+      "id": "trello/checklists",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/1/checklists"]
+      }
+    },
+    {
+      "id": "trello/labels",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/1/labels"]
+      }
+    },
+    {
+      "id": "trello/organizations",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/1/organizations"]
+      }
+    },
+    {
+      "id": "trello/notifications",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "PUT"],
+        "pathPrefixes": ["/1/notifications"]
+      }
+    },
+    {
+      "id": "trello/search",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/search"]
+      }
+    },
+    {
+      "id": "trello/webhooks",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/1/webhooks"]
+      }
+    },
+    {
+      "id": "trello/custom-fields",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/1/customFields", "/1/customField"]
+      }
+    },
+    {
+      "id": "trello/tokens",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "DELETE"],
+        "pathPrefixes": ["/1/tokens"]
+      }
+    },
+    {
+      "id": "trello/batch",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/batch"]
+      }
+    },
+    {
+      "id": "trello/enterprises",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/enterprises"]
+      }
+    },
+    {
+      "id": "trello/plugins",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/plugins"]
+      }
+    },
+    {
+      "id": "trello/emoji",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/emoji"]
       }
     }
   ]
 }
-

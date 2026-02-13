@@ -11,6 +11,7 @@
     "lint": "cargo clippy --all-targets --all-features -- -D warnings",
     "check-types": "cargo check --all-targets --all-features",
     "test": "cargo test --all-targets --all-features",
+    "test:release": "cargo test --release --all-features --lib && cargo test --release --all-features --test release_signing_contract",
     "test:e2e": "cargo test --test e2e_cli_local --test e2e_cli_local_tls --test e2e_cli_invoke",
     "test:e2e:local": "cargo test --test e2e_cli_local --test e2e_cli_local_tls",
     "test:e2e:network": "AIVAULT_E2E_NETWORK=1 cargo test --test e2e_cli_invoke",
@@ -18,7 +19,9 @@
     "evidence": "node scripts/evidence-computed.js",
     "trace": "node scripts/evidence-computed.js --trace",
     "trace:json": "node scripts/evidence-computed.js --trace-json",
-    "stories": "node scripts/stories.js"
+    "stories": "node scripts/stories.js",
+    "docs:dev": "cd docs && npx mintlify@latest dev",
+    "docs:build": "cd docs && npx mintlify@latest build"
   },
   "license": "Apache-2.0"
 }

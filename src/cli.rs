@@ -39,7 +39,13 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Status,
+    /// Show vault status and paths
+    Status {
+        /// Show full JSON detail
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Initialize the vault with a key provider
     Init {
         #[arg(long, value_enum, default_value_t = ProviderKind::MacosKeychain)]
         provider: ProviderKind,
@@ -54,53 +60,58 @@ pub enum Command {
         #[arg(long)]
         passphrase: Option<String>,
     },
+    /// Unlock a passphrase-protected vault
     Unlock {
         #[arg(long)]
         passphrase: String,
     },
+    /// Lock a passphrase-protected vault
     Lock,
+    /// Rotate the vault master encryption key
     RotateMaster {
         #[arg(long)]
         new_key: Option<String>,
         #[arg(long)]
         new_passphrase: Option<String>,
     },
+    /// View audit log events
     Audit {
         #[arg(long, default_value_t = 200)]
         limit: usize,
         #[arg(long)]
         before_ts_ms: Option<i64>,
     },
+    /// Manage encrypted secrets
     Secrets {
         #[command(subcommand)]
         command: SecretsCommand,
     },
-    Capabilities {
-        #[command(subcommand)]
-        command: CapabilitiesCommand,
-    },
+    /// OAuth2 setup helpers
     Oauth {
         #[command(subcommand)]
         command: OauthCommand,
     },
+    /// Manage provider credentials
     Credential {
         #[command(subcommand)]
         command: CredentialCommand,
     },
+    /// Manage capability definitions (list, describe, invoke)
     Capability {
         #[command(subcommand)]
         command: CapabilityCommand,
     },
+    /// Invoke a capability and print the raw upstream response
     Invoke {
         #[command(flatten)]
         args: InvokeArgs,
     },
-    /// Invoke a capability and print the upstream response parsed as JSON.
+    /// Invoke a capability and print the response as JSON
     Json {
         #[command(flatten)]
         args: InvokeArgs,
     },
-    /// Invoke a capability and print the upstream response converted to markdown.
+    /// Invoke a capability and print the response as markdown
     #[command(alias = "md")]
     Markdown {
         #[command(flatten)]
@@ -152,6 +163,7 @@ pub struct InvokeArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum SecretsCommand {
+    /// List secrets (metadata only, no values)
     List {
         #[arg(long, value_enum)]
         scope: Option<ScopeKind>,
@@ -159,7 +171,11 @@ pub enum SecretsCommand {
         workspace_id: Option<String>,
         #[arg(long)]
         group_id: Option<String>,
+        /// Show full JSON detail
+        #[arg(long, short)]
+        verbose: bool,
     },
+    /// Create a new encrypted secret
     Create {
         #[arg(long)]
         name: String,
@@ -174,6 +190,7 @@ pub enum SecretsCommand {
         #[arg(long)]
         alias: Vec<String>,
     },
+    /// Update secret name or aliases
     Update {
         #[arg(long)]
         id: String,
@@ -184,16 +201,19 @@ pub enum SecretsCommand {
         #[arg(long)]
         clear_aliases: bool,
     },
+    /// Rotate a secret's encrypted value
     Rotate {
         #[arg(long)]
         id: String,
         #[arg(long)]
         value: String,
     },
+    /// Revoke and delete a secret
     Delete {
         #[arg(long)]
         id: String,
     },
+    /// Attach a secret to a workspace group
     AttachGroup {
         #[arg(long)]
         id: String,
@@ -202,6 +222,7 @@ pub enum SecretsCommand {
         #[arg(long)]
         group_id: String,
     },
+    /// Detach a secret from a workspace group
     DetachGroup {
         #[arg(long)]
         id: String,
@@ -210,6 +231,7 @@ pub enum SecretsCommand {
         #[arg(long)]
         group_id: String,
     },
+    /// Bulk import secrets from KEY=VALUE pairs
     Import {
         #[arg(long)]
         entry: Vec<String>,
@@ -219,48 +241,6 @@ pub enum SecretsCommand {
         workspace_id: Option<String>,
         #[arg(long)]
         group_id: Option<String>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum CapabilitiesCommand {
-    List {
-        #[arg(long)]
-        capability: Option<String>,
-        #[arg(long, value_enum)]
-        scope: Option<ScopeKind>,
-        #[arg(long)]
-        workspace_id: Option<String>,
-        #[arg(long)]
-        group_id: Option<String>,
-        #[arg(long)]
-        consumer: Option<String>,
-    },
-    Bind {
-        #[arg(long)]
-        capability: String,
-        #[arg(long)]
-        secret_ref: String,
-        #[arg(long, value_enum, default_value_t = ScopeKind::Global)]
-        scope: ScopeKind,
-        #[arg(long)]
-        workspace_id: Option<String>,
-        #[arg(long)]
-        group_id: Option<String>,
-        #[arg(long)]
-        consumer: Option<String>,
-    },
-    Unbind {
-        #[arg(long)]
-        capability: String,
-        #[arg(long, value_enum, default_value_t = ScopeKind::Global)]
-        scope: ScopeKind,
-        #[arg(long)]
-        workspace_id: Option<String>,
-        #[arg(long)]
-        group_id: Option<String>,
-        #[arg(long)]
-        consumer: Option<String>,
     },
 }
 
@@ -316,6 +296,7 @@ pub enum OauthCommand {
 #[derive(Debug, Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum CredentialCommand {
+    /// Create a credential binding a provider to a secret
     Create {
         #[arg()]
         id: String,
@@ -358,7 +339,13 @@ pub enum CredentialCommand {
         #[arg(long)]
         auth_header: Vec<String>,
     },
-    List,
+    /// List configured credentials
+    List {
+        /// Show full JSON detail
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Delete a credential
     Delete {
         #[arg()]
         id: String,
@@ -368,6 +355,7 @@ pub enum CredentialCommand {
 #[derive(Debug, Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum CapabilityCommand {
+    /// Create a custom capability definition
     Create {
         #[arg()]
         id: String,
@@ -382,20 +370,29 @@ pub enum CapabilityCommand {
         #[arg(long)]
         host: Vec<String>,
     },
-    List,
+    /// List all available capabilities (registered + registry)
+    List {
+        /// Show full JSON detail for each capability
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Delete a capability definition
     Delete {
         #[arg()]
         id: String,
     },
+    /// Set advanced policy (rate limits, size limits, response filtering)
     Policy {
         #[command(subcommand)]
         command: CapabilityPolicyCommand,
     },
+    /// Show how to invoke a capability (allowed methods, paths, examples)
     #[command(alias = "args", alias = "shape", alias = "inspect")]
     Describe {
         #[arg()]
         id: String,
     },
+    /// Invoke a capability and print the raw upstream response
     #[command(alias = "call")]
     Invoke {
         #[command(flatten)]
@@ -417,6 +414,50 @@ pub enum CapabilityCommand {
         exclude_field: Vec<String>,
         #[arg(long)]
         wrap_field: Vec<String>,
+    },
+    /// Bind a capability to a vault secret reference
+    Bind {
+        #[arg(long)]
+        capability: String,
+        #[arg(long)]
+        secret_ref: String,
+        #[arg(long, value_enum, default_value_t = ScopeKind::Global)]
+        scope: ScopeKind,
+        #[arg(long)]
+        workspace_id: Option<String>,
+        #[arg(long)]
+        group_id: Option<String>,
+        #[arg(long)]
+        consumer: Option<String>,
+    },
+    /// Remove a capability-to-secret binding
+    Unbind {
+        #[arg(long)]
+        capability: String,
+        #[arg(long, value_enum, default_value_t = ScopeKind::Global)]
+        scope: ScopeKind,
+        #[arg(long)]
+        workspace_id: Option<String>,
+        #[arg(long)]
+        group_id: Option<String>,
+        #[arg(long)]
+        consumer: Option<String>,
+    },
+    /// List capability-to-secret bindings
+    Bindings {
+        #[arg(long)]
+        capability: Option<String>,
+        #[arg(long, value_enum)]
+        scope: Option<ScopeKind>,
+        #[arg(long)]
+        workspace_id: Option<String>,
+        #[arg(long)]
+        group_id: Option<String>,
+        #[arg(long)]
+        consumer: Option<String>,
+        /// Show full JSON detail
+        #[arg(long, short)]
+        verbose: bool,
     },
 }
 

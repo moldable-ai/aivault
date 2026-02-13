@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "postmark",
+  "vaultSecrets": {
+    "POSTMARK_SERVER_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "X-Postmark-Server-Token",

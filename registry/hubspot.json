@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "hubspot",
+  "vaultSecrets": {
+    "HUBSPOT_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

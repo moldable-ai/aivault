@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "google-places",
+  "vaultSecrets": {
+    "GOOGLE_PLACES_API_KEY": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "x-goog-api-key",

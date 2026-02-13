@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "spotify",
+  "vaultSecrets": {
+    "SPOTIFY_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

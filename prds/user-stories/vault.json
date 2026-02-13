@@ -60,6 +60,47 @@
       ]
     },
     {
+      "id": "ev-vault-registry-pinning-and-autoprovision-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "secrets_create_pins_registry_claim_and_autoprovisions_single_secret_credential",
+        "secrets_create_autoprovisions_multi_secret_registry_credential_via_composite_secret",
+        "credential_create_rejects_provider_mismatch_for_pinned_secret",
+        "runtime_credential_loading_skips_or_errors_on_pinned_secret_provider_mismatch",
+        "capabilities_bind_rejects_pinned_secret_provider_mismatch"
+      ]
+    },
+    {
+      "id": "ev-vault-sec-pinned-secret-aad-v2-tamper-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/mod.rs",
+      "tests": [
+        "pin_secret_to_provider_reencrypts_with_aad_v2_and_still_resolves",
+        "pinned_secret_record_tampering_breaks_resolution_fail_closed"
+      ]
+    },
+    {
+      "id": "ev-vault-status-display-code",
+      "kind": "code",
+      "automated": false,
+      "file": "src/display.rs",
+      "references": [
+        "print_status"
+      ]
+    },
+    {
+      "id": "ev-vault-cli-status-output-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local.rs",
+      "tests": [
+        "e2e_status_prints_kek_identifier_label"
+      ]
+    },
+    {
       "id": "ev-broker-vault-credential-provider-binding-test",
       "kind": "tests",
       "automated": true,
@@ -787,6 +828,44 @@
           }
         },
         {
+          "slug": "vault-cli-status-shows-kek-identifier",
+          "story": "As an operator, I want `aivault status` to show a KEK identifier (fingerprint) rather than the raw KEK, so status output can be shared for debugging without leaking key material.",
+          "evidenceLinks": [
+            "ev-vault-cli-code",
+            "ev-vault-status-display-code",
+            "ev-vault-cli-status-output-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_status"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::status"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/display.rs",
+                "symbol": "print_status"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-cli-status-output-test",
+                "test": "e2e_status_prints_kek_identifier_label"
+              }
+            ]
+          }
+        },
+        {
           "slug": "vault-foundation-secret-metadata-lifecycle",
           "story": "As an operator, I want create, update, rotate, and revoke operations to preserve secret metadata semantics and stable secret references, so downstream integrations stay durable.",
           "evidenceLinks": [
@@ -836,6 +915,114 @@
               {
                 "evidenceId": "ev-vault-runtime-tests",
                 "test": "env_provider_create_and_resolve_secret"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-registry-pinned-secrets",
+          "story": "As a security reviewer, I want registry-claimed secrets to be pinned to a provider and enforced at credential creation and request execution time, so secrets cannot be reused to exfiltrate to unauthorized providers/hosts even if broker state is tampered.",
+          "evidenceLinks": [
+            "ev-vault-registry-pinning-and-autoprovision-test",
+            "ev-vault-sec-pinned-secret-aad-v2-tamper-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_secrets"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::pin_secret_to_provider"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::pin_secret_to_provider"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
+                "test": "credential_create_rejects_provider_mismatch_for_pinned_secret"
+              },
+              {
+                "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
+                "test": "runtime_credential_loading_skips_or_errors_on_pinned_secret_provider_mismatch"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-secret-create-autoprovisions-registry-credential",
+          "story": "As an operator, I want creating registry-claimed secrets to auto-provision the matching registry credential when the required secret set is complete, so common providers activate without a separate credential command.",
+          "evidenceLinks": [
+            "ev-vault-registry-pinning-and-autoprovision-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_secrets"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "maybe_autoprovision_registry_credential"
+              },
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::upsert_credential"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::save"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
+                "test": "secrets_create_pins_registry_claim_and_autoprovisions_single_secret_credential"
+              },
+              {
+                "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
+                "test": "secrets_create_autoprovisions_multi_secret_registry_credential_via_composite_secret"
               }
             ]
           }

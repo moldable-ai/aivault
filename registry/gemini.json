@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "gemini",
+  "vaultSecrets": {
+    "GEMINI_API_KEY": "secret"
+  },
   "auth": {
     "query": {
       "param_name": "key"

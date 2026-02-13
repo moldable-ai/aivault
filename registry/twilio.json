@@ -1,6 +1,10 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "twilio",
+  "vaultSecrets": {
+    "TWILIO_ACCOUNT_SID": "username",
+    "TWILIO_AUTH_TOKEN": "password"
+  },
   "auth": "basic",
   "hosts": ["api.twilio.com"],
   "capabilities": [

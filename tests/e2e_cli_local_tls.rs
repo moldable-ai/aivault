@@ -594,7 +594,11 @@ fn e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache() {
         &envs,
     );
 
-    let response1 = run_ok_json(&dir, &["invoke", "oauth/test", "--path", "/v1/users"], &envs);
+    let response1 = run_ok_json(
+        &dir,
+        &["invoke", "oauth/test", "--path", "/v1/users"],
+        &envs,
+    );
     assert_eq!(response1["response"]["status"].as_u64(), Some(200));
     let upstream1 = &response1["response"]["json"];
     let auth1 = upstream1["headers"]["authorization"]
@@ -602,7 +606,11 @@ fn e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache() {
         .expect("upstream should receive authorization");
     assert_eq!(auth1, "Bearer at-1");
 
-    let response2 = run_ok_json(&dir, &["invoke", "oauth/test", "--path", "/v1/users"], &envs);
+    let response2 = run_ok_json(
+        &dir,
+        &["invoke", "oauth/test", "--path", "/v1/users"],
+        &envs,
+    );
     assert_eq!(response2["response"]["status"].as_u64(), Some(200));
     let upstream2 = &response2["response"]["json"];
     let auth2 = upstream2["headers"]["authorization"]

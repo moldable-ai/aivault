@@ -4,6 +4,21 @@ use super::helpers::*;
 use super::*;
 
 impl Broker {
+    fn resolve_capability(&self, capability_id: &str) -> BrokerResult<Capability> {
+        if let Some(capability) = self.capabilities.get(capability_id) {
+            return Ok(capability.clone());
+        }
+        if let Some(reg) = self.registry.as_ref() {
+            if let Some(capability) = reg.capability(capability_id) {
+                return Ok(capability);
+            }
+        }
+        Err(BrokerError::new(
+            ErrorCode::CapabilityNotFound,
+            "capability not found",
+        ))
+    }
+
     pub fn new(cfg: BrokerConfig, registry: Option<Registry>) -> Self {
         Self {
             cfg,
@@ -34,11 +49,7 @@ impl Broker {
         request_credential: Option<&str>,
         token_credential: Option<&str>,
     ) -> BrokerResult<Credential> {
-        let capability = self
-            .capabilities
-            .get(capability_id)
-            .ok_or_else(|| BrokerError::new(ErrorCode::CapabilityNotFound, "capability not found"))?
-            .clone();
+        let capability = self.resolve_capability(capability_id)?;
         self.resolve_credential_for_request(&capability, request_credential, token_credential)
     }
 
@@ -156,7 +167,11 @@ impl Broker {
             // Registry providers may allow per-tenant host binding, but bound hosts must match
             // the registry's allowed host patterns (fail-closed).
             for host in &hosts {
-                if !defaults.hosts.iter().any(|pattern| host_matches(pattern, host)) {
+                if !defaults
+                    .hosts
+                    .iter()
+                    .any(|pattern| host_matches(pattern, host))
+                {
                     return Err(BrokerError::new(
                         ErrorCode::PolicyViolation,
                         "credential host is not allowed by registry provider host policy",
@@ -209,12 +224,8 @@ impl Broker {
         policy: CapabilityAdvancedPolicy,
     ) -> BrokerResult<()> {
         self.ensure_operator(auth)?;
-        if !self.capabilities.contains_key(capability_id) {
-            return Err(BrokerError::new(
-                ErrorCode::CapabilityNotFound,
-                "capability not found",
-            ));
-        }
+        // Allow setting policy for registry-backed capabilities too.
+        let _ = self.resolve_capability(capability_id)?;
         self.advanced_policies
             .insert(capability_id.to_string(), policy);
         Ok(())
@@ -250,9 +261,7 @@ impl Broker {
                 BrokerError::new(ErrorCode::CredentialNotFound, "credential not found")
             })?;
             for capability_id in &request.capabilities {
-                let capability = self.capabilities.get(capability_id).ok_or_else(|| {
-                    BrokerError::new(ErrorCode::CapabilityNotFound, "capability not found")
-                })?;
+                let capability = self.resolve_capability(capability_id)?;
                 if capability.provider != credential.provider {
                     return Err(BrokerError::new(
                         ErrorCode::PolicyViolation,
@@ -294,11 +303,7 @@ impl Broker {
         self.ensure_client_allowed(client_ip)?;
         self.validate_envelope(&envelope)?;
 
-        let capability = self
-            .capabilities
-            .get(&envelope.capability)
-            .ok_or_else(|| BrokerError::new(ErrorCode::CapabilityNotFound, "capability not found"))?
-            .clone();
+        let capability = self.resolve_capability(&envelope.capability)?;
 
         self.ensure_capability_allowed_by_token(&proxy_token, &capability.id)?;
         self.enforce_capability_rate_limit(&capability.id)?;
@@ -324,6 +329,16 @@ impl Broker {
                     ErrorCode::PolicyViolation,
                     "query auth parameter is broker-managed",
                 ));
+            }
+        }
+        if let AuthStrategy::MultiQuery(templates) = &credential.auth {
+            for t in templates {
+                if query.iter().any(|(k, _)| k == &t.param_name) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-query auth parameter is broker-managed",
+                    ));
+                }
             }
         }
 
@@ -590,6 +605,7 @@ impl Broker {
                 param_name: "api_key".to_string(),
             }),
             "multi-header" | "multi_header" => Ok(AuthStrategy::MultiHeader(Vec::new())),
+            "multi-query" | "multi_query" => Ok(AuthStrategy::MultiQuery(Vec::new())),
             "basic" => Ok(AuthStrategy::Basic),
             "oauth2" => Ok(AuthStrategy::OAuth2 {
                 grant_type: "refresh_token".to_string(),
@@ -840,7 +856,11 @@ impl Broker {
         Ok(())
     }
 
-    fn validate_capability(&self, capability: &Capability, exact_hosts_only: bool) -> BrokerResult<()> {
+    fn validate_capability(
+        &self,
+        capability: &Capability,
+        exact_hosts_only: bool,
+    ) -> BrokerResult<()> {
         if capability.id.trim().is_empty() || capability.provider.trim().is_empty() {
             return Err(BrokerError::new(
                 ErrorCode::InvalidRequest,

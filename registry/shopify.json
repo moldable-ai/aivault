@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "shopify",
+  "vaultSecrets": {
+    "SHOPIFY_ACCESS_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "X-Shopify-Access-Token",

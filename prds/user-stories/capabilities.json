@@ -342,7 +342,7 @@
             "entrypoints": [
               {
                 "file": "src/app.rs",
-                "symbol": "run_capabilities"
+                "symbol": "run_capability"
               }
             ],
             "runtime": [
@@ -392,7 +392,7 @@
             "entrypoints": [
               {
                 "file": "src/app.rs",
-                "symbol": "run_capabilities"
+                "symbol": "run_capability"
               }
             ],
             "runtime": [
@@ -433,7 +433,7 @@
             "entrypoints": [
               {
                 "file": "src/app.rs",
-                "symbol": "run_capabilities"
+                "symbol": "run_capability"
               }
             ],
             "runtime": [

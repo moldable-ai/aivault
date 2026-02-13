@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "sendgrid",
+  "vaultSecrets": {
+    "SENDGRID_API_KEY": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

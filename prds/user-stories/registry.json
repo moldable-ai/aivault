@@ -49,6 +49,15 @@
       ]
     },
     {
+      "id": "ev-broker-reg-vault-secret-claims-unique-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "registry_rejects_duplicate_vault_secret_claims"
+      ]
+    },
+    {
       "id": "ev-broker-reg-no-secret-material-in-registry-test",
       "kind": "tests",
       "automated": true,
@@ -346,6 +355,42 @@
               {
                 "evidenceId": "ev-cli-reg-broker-store-canonicalization-test",
                 "test": "registry_policy_is_canonical_and_not_overridable_by_broker_store"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-vault-secrets-claims-unique",
+          "story": "As a security reviewer, I want canonical vault secret names claimed by the built-in registry to be unique per provider, so secret pinning cannot be ambiguous or overridden.",
+          "evidenceLinks": [
+            "ev-broker-reg-vault-secret-claims-unique-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/registry.rs",
+                "symbol": "builtin_registry"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "Registry::from_templates"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/registry.rs",
+                "symbol": "builtin_registry"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-vault-secret-claims-unique-test",
+                "test": "registry_rejects_duplicate_vault_secret_claims"
               }
             ]
           }

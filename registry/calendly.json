@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "calendly",
+  "vaultSecrets": {
+    "CALENDLY_API_KEY": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

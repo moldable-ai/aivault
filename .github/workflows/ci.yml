@@ -27,3 +27,9 @@ jobs:
 
       - name: Test
         run: cargo test --all-targets --all-features
+
+      - name: Test (release, unit)
+        run: cargo test --release --all-features --lib
+
+      - name: Test (release, supply-chain contract)
+        run: cargo test --release --all-features --test release_signing_contract

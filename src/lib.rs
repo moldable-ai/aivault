@@ -4,8 +4,10 @@ pub mod broker_store;
 pub mod capabilities;
 pub mod cli;
 pub mod daemon;
+pub mod display;
 pub mod log_retention;
 pub mod markdown;
+pub mod migrations;
 pub mod paths;
 pub mod registry;
 #[cfg(test)]

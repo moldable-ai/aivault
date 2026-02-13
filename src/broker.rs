@@ -61,6 +61,13 @@ pub struct AuthHeaderTemplate {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub struct AuthQueryTemplate {
+    pub param_name: String,
+    pub value_template: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AuthStrategy {
     Header {
         header_name: String,
@@ -81,6 +88,11 @@ pub enum AuthStrategy {
     ///
     /// Templates may reference fields using `{{fieldName}}` placeholders.
     MultiHeader(Vec<AuthHeaderTemplate>),
+    /// Inject multiple query parameters derived from a multi-field secret payload.
+    ///
+    /// Templates may reference fields using `{{fieldName}}` placeholders.
+    /// Example: Trello uses `?key={{key}}&token={{token}}`.
+    MultiQuery(Vec<AuthQueryTemplate>),
     Basic,
     OAuth2 {
         grant_type: String,
@@ -183,6 +195,11 @@ pub struct ProviderTemplate {
     pub auth: AuthStrategy,
     pub hosts: Vec<String>,
     pub capabilities: Vec<Capability>,
+    /// Maps canonical vault secret names (operator-facing) to placeholder keys (auth-facing).
+    ///
+    /// Example: { "OPENAI_API_KEY": "secret" } where auth templates reference `{{secret}}`.
+    #[serde(default, rename = "vaultSecrets")]
+    pub vault_secrets: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -193,6 +210,7 @@ pub struct Registry {
 impl Registry {
     pub fn from_templates(templates: Vec<ProviderTemplate>) -> BrokerResult<Self> {
         let mut providers = HashMap::new();
+        let mut claimed_secret_names: HashMap<String, String> = HashMap::new();
         for template in templates {
             if providers
                 .insert(template.provider.clone(), template)
@@ -204,6 +222,31 @@ impl Registry {
                 ));
             }
         }
+
+        // A canonical vault secret name may only be claimed by one provider template.
+        for template in providers.values() {
+            for secret_name in template.vault_secrets.keys() {
+                let name = secret_name.trim();
+                if name.is_empty() {
+                    return Err(BrokerError::new(
+                        ErrorCode::InvalidRequest,
+                        "registry vaultSecrets keys must be non-empty",
+                    ));
+                }
+                if let Some(existing) =
+                    claimed_secret_names.insert(name.to_string(), template.provider.clone())
+                {
+                    return Err(BrokerError::new(
+                        ErrorCode::InvalidRequest,
+                        format!(
+                            "duplicate vault secret name '{}' claimed by providers '{}' and '{}'",
+                            name, existing, template.provider
+                        ),
+                    ));
+                }
+            }
+        }
+
         Ok(Self { providers })
     }
 

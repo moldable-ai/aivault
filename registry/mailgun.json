@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "mailgun",
+  "vaultSecrets": {
+    "MAILGUN_API_KEY": "password"
+  },
   "auth": "basic",
   "hosts": ["api.mailgun.net"],
   "capabilities": [

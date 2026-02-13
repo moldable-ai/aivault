@@ -11,6 +11,16 @@ fn run_aivault(dir: &TempDir, args: &[&str]) -> Output {
         .expect("failed to run aivault binary")
 }
 
+fn run_aivault_with_extra_env(dir: &TempDir, args: &[&str], envs: &[(&str, &str)]) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_aivault"));
+    cmd.env("AIVAULT_DIR", dir.path())
+        .args(rewrite_invoke_to_json(args));
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    cmd.output().expect("failed to run aivault binary")
+}
+
 fn rewrite_invoke_to_json<'a>(args: &'a [&'a str]) -> Vec<&'a str> {
     if args.first() == Some(&"invoke") {
         let mut updated = Vec::with_capacity(args.len());
@@ -43,6 +53,18 @@ fn run_ok_json(dir: &TempDir, args: &[&str]) -> Value {
 
 fn run_err_text(dir: &TempDir, args: &[&str]) -> String {
     let output = run_aivault(dir, args);
+    assert!(
+        !output.status.success(),
+        "command unexpectedly succeeded: aivault {}\nstdout:\n{}\nstderr:\n{}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
+fn run_err_text_with_env(dir: &TempDir, args: &[&str], envs: &[(&str, &str)]) -> String {
+    let output = run_aivault_with_extra_env(dir, args, envs);
     assert!(
         !output.status.success(),
         "command unexpectedly succeeded: aivault {}\nstdout:\n{}\nstderr:\n{}",
@@ -137,6 +159,37 @@ fn create_capability(
 }
 
 #[test]
+fn e2e_status_prints_kek_identifier_label() {
+    let dir = TempDir::new().expect("temp dir");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aivault"))
+        .env("AIVAULT_DIR", dir.path())
+        .env("NO_COLOR", "1")
+        .args(["status"])
+        .output()
+        .expect("failed to run aivault binary");
+
+    assert!(
+        output.status.success(),
+        "command failed: aivault status\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("KEK identifier:"),
+        "expected KEK identifier label in output:\n{}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("\n  KEK:"),
+        "expected raw KEK label to be absent from output:\n{}",
+        stdout
+    );
+}
+
+#[test]
 fn e2e_describe_and_aliases_return_capability_shape() {
     let dir = TempDir::new().expect("temp dir");
     let secret_id = create_secret(&dir, "LOCAL_DESCRIBE_SECRET", "sk-local-describe");
@@ -169,6 +222,33 @@ fn e2e_describe_and_aliases_return_capability_shape() {
             "default method missing for alias {subcommand}"
         );
     }
+}
+
+#[test]
+fn e2e_invoke_can_use_registry_capability_without_persisted_capability_store_entry() {
+    let dir = TempDir::new().expect("temp dir");
+
+    // We did not create any secrets/credentials; the invoke should fail at credential resolution,
+    // not at "capability not found" (registry capabilities are embedded in the binary).
+    let err = run_err_text_with_env(
+        &dir,
+        &[
+            "invoke",
+            "openai/chat-completions",
+            "--method",
+            "POST",
+            "--path",
+            "/v1/chat/completions",
+            "--body",
+            "{\"model\":\"gpt-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+        ],
+        &[("AIVAULTD_DISABLE", "1")],
+    );
+    assert!(
+        err.contains("CredentialNotFound") || err.contains("credential not found"),
+        "unexpected error (wanted credential not found):\n{}",
+        err
+    );
 }
 
 #[test]
@@ -852,7 +932,7 @@ fn e2e_capability_delete_removes_policy_record() {
     assert_eq!(deleted["removedCapability"].as_bool(), Some(true));
     assert_eq!(deleted["removedPolicy"].as_bool(), Some(true));
 
-    let listed = run_ok_json(&dir, &["capability", "list"]);
+    let listed = run_ok_json(&dir, &["capability", "list", "--verbose"]);
     let policies = listed["policies"]
         .as_array()
         .expect("policies should be an array");

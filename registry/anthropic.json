@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "anthropic",
+  "vaultSecrets": {
+    "ANTHROPIC_API_KEY": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "x-api-key",

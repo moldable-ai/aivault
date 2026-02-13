@@ -24,6 +24,34 @@ pub use paths::VaultPaths;
 pub use refs::SecretRef;
 pub use store::{GroupAttachment, SecretMeta, SecretRecord, SecretScope};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MigrationOutcome {
+    pub updated: u64,
+    pub failed: u64,
+}
+
+fn aad_bytes_for_secret_record(rec: &SecretRecord) -> Result<Vec<u8>, VaultError> {
+    let scope = rec.scope.to_aad_string();
+    match rec.aad_version {
+        0 | 1 => Ok(format!("vault:secret:v1:{}:{}", rec.secret_id, scope).into_bytes()),
+        2 => {
+            let pinned = rec
+                .pinned_provider
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| {
+                    VaultError::Other("aad v2 requires pinnedProvider (missing)".to_string())
+                })?;
+            Ok(format!("vault:secret:v2:{}:{}:{}", rec.secret_id, scope, pinned).into_bytes())
+        }
+        other => Err(VaultError::Other(format!(
+            "unsupported secret aadVersion {}",
+            other
+        ))),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VaultProviderType {
@@ -636,35 +664,39 @@ impl VaultRuntime {
         let dek = random_key_32();
         let kek_id = cfg.kek_id.clone();
 
-        let aad_value = format!("vault:secret:v1:{}:{}", secret_id, scope.to_aad_string());
-        let aad_value = aad_value.as_bytes();
+        let record_aad = SecretRecord {
+            secret_id: secret_id.clone(),
+            name: name.to_string(),
+            aliases: aliases.clone(),
+            scope: scope.clone(),
+            system_managed,
+            pinned_provider: None,
+            aad_version: 1,
+            created_at_ms: now,
+            updated_at_ms: now,
+            last_used_at_ms: None,
+            revoked_at_ms: None,
+            value_version: 1,
+            ciphertext: None,
+            attached_groups: Vec::new(),
+        };
+        let aad_value = aad_bytes_for_secret_record(&record_aad)?;
+        let aad_value = aad_value.as_slice();
         let wrapped_dek =
             aead_encrypt_xchacha20poly1305(&kek, &dek, aad_value).map_err(VaultError::Provider)?;
 
         let value_blob =
             aead_encrypt_xchacha20poly1305(&dek, value, aad_value).map_err(VaultError::Provider)?;
 
-        let record = SecretRecord {
-            secret_id: secret_id.clone(),
-            name: name.to_string(),
-            aliases,
-            scope: scope.clone(),
-            system_managed,
-            created_at_ms: now,
-            updated_at_ms: now,
-            last_used_at_ms: None,
-            revoked_at_ms: None,
-            value_version: 1,
-            ciphertext: Some(store::SecretCiphertext {
-                alg: "xchacha20poly1305+envelope".to_string(),
-                dek_wrapped: store::WrappedDekRecord {
-                    kek_id,
-                    blob: wrapped_dek,
-                },
-                value: value_blob,
-            }),
-            attached_groups: Vec::new(),
-        };
+        let mut record = record_aad;
+        record.ciphertext = Some(store::SecretCiphertext {
+            alg: "xchacha20poly1305+envelope".to_string(),
+            dek_wrapped: store::WrappedDekRecord {
+                kek_id,
+                blob: wrapped_dek,
+            },
+            value: value_blob,
+        });
         self.write_secret(&record)?;
         self.audit_secret_event("secret.create", Some(&record), None);
         Ok(SecretMeta::from(&record))
@@ -679,6 +711,144 @@ impl VaultRuntime {
             .ok_or(VaultError::NotEnabled)?;
         let rec = self.read_secret(secret_id)?;
         Ok(SecretMeta::from(&rec))
+    }
+
+    /// Pin an existing secret to a specific provider (immutable once set).
+    ///
+    /// This is intended for registry-claimed secret names. Operators cannot override this.
+    pub fn pin_secret_to_provider(
+        &self,
+        secret_id: &str,
+        provider: &str,
+    ) -> Result<SecretMeta, VaultError> {
+        let _cfg = self
+            .cfg
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(VaultError::NotEnabled)?;
+        let provider = provider.trim();
+        if provider.is_empty() {
+            return Err(VaultError::Other("provider required".to_string()));
+        }
+
+        let cfg = self
+            .cfg
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(VaultError::NotEnabled)?;
+        let kek = self.get_kek(&cfg)?;
+
+        let mut rec = self.read_secret(secret_id)?;
+        match rec.pinned_provider.as_deref() {
+            Some(existing) if existing == provider => {
+                // Backwards-compat: older vaults may have pinnedProvider set but still use AAD v1.
+                // Upgrade to AAD v2 so pinning becomes tamper-evident at rest.
+                if rec.aad_version == 2 {
+                    return Ok(SecretMeta::from(&rec));
+                }
+            }
+            Some(existing) => {
+                return Err(VaultError::Other(format!(
+                    "secret pinnedProvider is immutable (already pinned to '{}')",
+                    existing
+                )));
+            }
+            None => {}
+        }
+
+        // Harden pinned secrets against on-disk tampering by re-encrypting with AAD v2 that binds
+        // to the pinned provider. This is fail-closed: editing pinnedProvider/aadVersion breaks
+        // decryption rather than allowing reuse.
+        //
+        // Backwards compat: older records may already have pinnedProvider set, but with ciphertext
+        // encrypted under AAD v1. Always decrypt using AAD v1, then re-encrypt under AAD v2.
+        let value = self.decrypt_secret_record_value_with_aad_v1(&rec, &kek)?;
+
+        rec.pinned_provider = Some(provider.to_string());
+        self.encrypt_secret_record_value_with_aad_v2(&mut rec, &kek, &cfg.kek_id, &value)?;
+
+        rec.updated_at_ms = chrono::Utc::now().timestamp_millis();
+        self.write_secret(&rec)?;
+        self.audit_secret_event("secret.pin_provider", Some(&rec), None);
+        Ok(SecretMeta::from(&rec))
+    }
+
+    pub(crate) fn migrate_harden_pinned_secrets_aad_v2(
+        &self,
+    ) -> Result<MigrationOutcome, VaultError> {
+        let cfg = self
+            .cfg
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(VaultError::NotEnabled)?;
+        let kek = self.get_kek(&cfg)?;
+
+        let dir = self.paths.secrets_dir();
+        if !dir.exists() {
+            return Ok(MigrationOutcome {
+                updated: 0,
+                failed: 0,
+            });
+        }
+
+        let mut updated = 0u64;
+        let mut failed = 0u64;
+        let entries = std::fs::read_dir(&dir)?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let raw = std::fs::read_to_string(&path).unwrap_or_default();
+            let Ok(mut rec) = serde_json::from_str::<SecretRecord>(&raw) else {
+                continue;
+            };
+            if rec.revoked_at_ms.is_some() || rec.ciphertext.is_none() {
+                continue;
+            }
+            if rec.aad_version == 2 {
+                continue;
+            }
+            let Some(pinned) = rec
+                .pinned_provider
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            else {
+                continue;
+            };
+
+            // Decrypt with AAD v1 (legacy) then re-encrypt with AAD v2 binding pinnedProvider.
+            let value = match self.decrypt_secret_record_value_with_aad_v1(&rec, &kek) {
+                Ok(v) => v,
+                Err(_) => {
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            // Normalize and harden.
+            rec.pinned_provider = Some(pinned.to_string());
+            if self
+                .encrypt_secret_record_value_with_aad_v2(&mut rec, &kek, &cfg.kek_id, &value)
+                .is_err()
+            {
+                failed += 1;
+                continue;
+            }
+            rec.updated_at_ms = chrono::Utc::now().timestamp_millis();
+            if self.write_secret(&rec).is_err() {
+                failed += 1;
+                continue;
+            }
+            updated += 1;
+            self.audit_secret_event("secret.migration.harden_aad_v2", Some(&rec), None);
+        }
+
+        Ok(MigrationOutcome { updated, failed })
     }
 
     pub fn set_secret_system_managed(
@@ -782,11 +952,10 @@ impl VaultRuntime {
         if rec.revoked_at_ms.is_some() {
             return Err(VaultError::Other("secret revoked".to_string()));
         }
-        let scope = rec.scope.clone();
         let dek = random_key_32();
         let kek_id = cfg.kek_id.clone();
-        let aad_value = format!("vault:secret:v1:{}:{}", secret_id, scope.to_aad_string());
-        let aad_value = aad_value.as_bytes();
+        let aad_value = aad_bytes_for_secret_record(&rec)?;
+        let aad_value = aad_value.as_slice();
         let wrapped_dek =
             aead_encrypt_xchacha20poly1305(&kek, &dek, aad_value).map_err(VaultError::Provider)?;
         let value_blob =
@@ -910,27 +1079,8 @@ impl VaultRuntime {
             return Err(VaultError::Other("secret revoked".to_string()));
         }
         let kek = self.get_kek(&cfg)?;
-        let Some(ciphertext) = rec.ciphertext.as_ref() else {
-            return Err(VaultError::Other("secret missing ciphertext".to_string()));
-        };
-        let aad_value = format!(
-            "vault:secret:v1:{}:{}",
-            rec.secret_id,
-            rec.scope.to_aad_string()
-        );
-        let aad_value = aad_value.as_bytes();
 
-        let dek_plain =
-            aead_decrypt_xchacha20poly1305(&kek, &ciphertext.dek_wrapped.blob, aad_value)
-                .map_err(VaultError::Provider)?;
-        if dek_plain.len() != 32 {
-            return Err(VaultError::Provider("invalid DEK".to_string()));
-        }
-        let mut dek = [0u8; 32];
-        dek.copy_from_slice(&dek_plain);
-        let value = aead_decrypt_xchacha20poly1305(&dek, &ciphertext.value, aad_value)
-            .map_err(VaultError::Provider)?;
-        dek.zeroize();
+        let value = self.decrypt_secret_record_value(&rec, &kek)?;
 
         rec.last_used_at_ms = Some(chrono::Utc::now().timestamp_millis());
         self.write_secret(&rec).ok();
@@ -1216,15 +1366,11 @@ impl VaultRuntime {
             if rec.revoked_at_ms.is_some() {
                 continue;
             }
+            let aad_value = aad_bytes_for_secret_record(&rec)?;
+            let aad_value = aad_value.as_slice();
             let Some(ciphertext) = rec.ciphertext.as_mut() else {
                 continue;
             };
-            let aad_value = format!(
-                "vault:secret:v1:{}:{}",
-                rec.secret_id,
-                rec.scope.to_aad_string()
-            );
-            let aad_value = aad_value.as_bytes();
             let dek_plain =
                 aead_decrypt_xchacha20poly1305(old_kek, &ciphertext.dek_wrapped.blob, aad_value)
                     .map_err(VaultError::Provider)?;
@@ -1370,6 +1516,85 @@ fn load_kek_keychain(service: &str, account: &str) -> Result<[u8; 32], String> {
 }
 
 impl VaultRuntime {
+    fn decrypt_secret_record_value(
+        &self,
+        rec: &SecretRecord,
+        kek: &[u8; 32],
+    ) -> Result<Vec<u8>, VaultError> {
+        let Some(ciphertext) = rec.ciphertext.as_ref() else {
+            return Err(VaultError::Other("secret missing ciphertext".to_string()));
+        };
+        let aad_value = aad_bytes_for_secret_record(rec)?;
+        let aad_value = aad_value.as_slice();
+
+        let dek_plain =
+            aead_decrypt_xchacha20poly1305(kek, &ciphertext.dek_wrapped.blob, aad_value)
+                .map_err(VaultError::Provider)?;
+        if dek_plain.len() != 32 {
+            return Err(VaultError::Provider("invalid DEK".to_string()));
+        }
+        let mut dek = [0u8; 32];
+        dek.copy_from_slice(&dek_plain);
+        let value = aead_decrypt_xchacha20poly1305(&dek, &ciphertext.value, aad_value)
+            .map_err(VaultError::Provider)?;
+        dek.zeroize();
+        Ok(value)
+    }
+
+    // Always decrypt with AAD v1, regardless of record metadata. This is only intended for
+    // backwards-compatible hardening and pinning upgrades.
+    fn decrypt_secret_record_value_with_aad_v1(
+        &self,
+        rec: &SecretRecord,
+        kek: &[u8; 32],
+    ) -> Result<Vec<u8>, VaultError> {
+        let Some(ciphertext) = rec.ciphertext.as_ref() else {
+            return Err(VaultError::Other("secret missing ciphertext".to_string()));
+        };
+        let mut tmp = rec.clone();
+        tmp.aad_version = 1;
+        let aad_value = aad_bytes_for_secret_record(&tmp)?;
+        let aad_value = aad_value.as_slice();
+
+        let dek_plain =
+            aead_decrypt_xchacha20poly1305(kek, &ciphertext.dek_wrapped.blob, aad_value)
+                .map_err(VaultError::Provider)?;
+        if dek_plain.len() != 32 {
+            return Err(VaultError::Provider("invalid DEK".to_string()));
+        }
+        let mut dek = [0u8; 32];
+        dek.copy_from_slice(&dek_plain);
+        let value = aead_decrypt_xchacha20poly1305(&dek, &ciphertext.value, aad_value)
+            .map_err(VaultError::Provider)?;
+        dek.zeroize();
+        Ok(value)
+    }
+
+    fn encrypt_secret_record_value_with_aad_v2(
+        &self,
+        rec: &mut SecretRecord,
+        kek: &[u8; 32],
+        kek_id: &str,
+        value: &[u8],
+    ) -> Result<(), VaultError> {
+        rec.aad_version = 2;
+        let aad_value = aad_bytes_for_secret_record(rec)?;
+        let dek = random_key_32();
+        let wrapped_dek =
+            aead_encrypt_xchacha20poly1305(kek, &dek, &aad_value).map_err(VaultError::Provider)?;
+        let value_blob = aead_encrypt_xchacha20poly1305(&dek, value, &aad_value)
+            .map_err(VaultError::Provider)?;
+        rec.ciphertext = Some(store::SecretCiphertext {
+            alg: "xchacha20poly1305+envelope".to_string(),
+            dek_wrapped: store::WrappedDekRecord {
+                kek_id: kek_id.to_string(),
+                blob: wrapped_dek,
+            },
+            value: value_blob,
+        });
+        Ok(())
+    }
+
     fn ensure_default_initialized(&self) -> Result<(), VaultError> {
         // Another thread/process may have initialized already.
         if self.paths.config_path().exists() {
@@ -1397,7 +1622,7 @@ impl VaultRuntime {
         // Default provider:
         // - macOS: Keychain (best UX)
         // - other: file-based key outside the vault dir (vault dir alone is not enough to decrypt)
-        let force_file_default = env_flag_true("AIVAULT_DEV_FORCE_DEFAULT_FILE_PROVIDER");
+        let force_file_default = dev_flag_true("AIVAULT_DEV_FORCE_DEFAULT_FILE_PROVIDER");
         let default_provider = if cfg!(target_os = "macos")
             && !force_file_default
             && !is_override_dir
@@ -1441,11 +1666,22 @@ impl VaultRuntime {
     }
 }
 
+#[cfg(debug_assertions)]
 fn env_flag_true(name: &str) -> bool {
     std::env::var(name)
         .ok()
         .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
         .unwrap_or(false)
+}
+
+#[cfg(debug_assertions)]
+fn dev_flag_true(name: &str) -> bool {
+    env_flag_true(name)
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_flag_true(_name: &str) -> bool {
+    false
 }
 
 #[cfg(test)]
@@ -2176,6 +2412,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     fn default_file_provider_keeps_kek_out_of_vault_dir_for_canonical_install_when_forced() {
         let _lock = ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
@@ -2208,5 +2445,105 @@ mod tests {
             "key file should exist at {}",
             key_path.display()
         );
+    }
+
+    #[test]
+    fn pin_secret_to_provider_reencrypts_with_aad_v2_and_still_resolves() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = random_key_32();
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+
+        let meta = vault
+            .create_secret("OPENAI_API_KEY", b"sk-v1", SecretScope::Global, vec![])
+            .unwrap();
+        let pinned = vault
+            .pin_secret_to_provider(&meta.secret_id, "openai")
+            .unwrap();
+        assert_eq!(pinned.pinned_provider.as_deref(), Some("openai"));
+
+        let raw = std::fs::read_to_string(vault.paths().secret_path(&meta.secret_id)).unwrap();
+        let rec: SecretRecord = serde_json::from_str(&raw).unwrap();
+        assert_eq!(rec.pinned_provider.as_deref(), Some("openai"));
+        assert_eq!(rec.aad_version, 2);
+
+        let sr = SecretRef {
+            secret_id: meta.secret_id,
+        }
+        .to_string();
+        let value = vault
+            .resolve_secret_ref(&sr, Some("test.pin_provider"), Some("unit"))
+            .unwrap();
+        assert_eq!(value, b"sk-v1".to_vec());
+    }
+
+    #[test]
+    fn pinned_secret_record_tampering_breaks_resolution_fail_closed() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = random_key_32();
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+
+        let meta = vault
+            .create_secret("OPENAI_API_KEY", b"sk-live", SecretScope::Global, vec![])
+            .unwrap();
+        vault
+            .pin_secret_to_provider(&meta.secret_id, "openai")
+            .unwrap();
+
+        let sr = SecretRef {
+            secret_id: meta.secret_id.clone(),
+        }
+        .to_string();
+        assert!(vault
+            .resolve_secret_ref(&sr, Some("test.pre_tamper"), Some("unit"))
+            .is_ok());
+
+        let secret_path = vault.paths().secret_path(&meta.secret_id);
+        let mut rec: SecretRecord =
+            serde_json::from_str(&std::fs::read_to_string(&secret_path).unwrap()).unwrap();
+        assert_eq!(rec.aad_version, 2);
+        assert_eq!(rec.pinned_provider.as_deref(), Some("openai"));
+
+        // Tamper 1: attempt to change pinnedProvider to a different provider.
+        rec.pinned_provider = Some("anthropic".to_string());
+        std::fs::write(&secret_path, serde_json::to_string_pretty(&rec).unwrap()).unwrap();
+        assert!(vault
+            .resolve_secret_ref(&sr, Some("test.tamper.provider"), Some("unit"))
+            .is_err());
+
+        // Tamper 2: attempt to "unpin" by removing pinnedProvider and downgrading AAD version.
+        let mut rec: SecretRecord =
+            serde_json::from_str(&std::fs::read_to_string(&secret_path).unwrap()).unwrap();
+        rec.pinned_provider = None;
+        rec.aad_version = 1;
+        std::fs::write(&secret_path, serde_json::to_string_pretty(&rec).unwrap()).unwrap();
+        assert!(vault
+            .resolve_secret_ref(&sr, Some("test.tamper.downgrade"), Some("unit"))
+            .is_err());
     }
 }

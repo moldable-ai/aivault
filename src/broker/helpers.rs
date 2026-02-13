@@ -570,8 +570,49 @@ pub(super) fn apply_auth(
                         "multi-header auth cannot inject duplicate header names",
                     ));
                 }
-                let value = render_multi_header_template(&template.value_template, fields)?;
+                let value = render_field_template(&template.value_template, fields)?;
                 headers.push(Header { name, value });
+            }
+        }
+        AuthStrategy::MultiQuery(templates) => {
+            let fields = match secret {
+                Some(SecretMaterial::Fields(fields)) => fields,
+                _ => {
+                    return Err(BrokerError::new(
+                        ErrorCode::VaultUnavailable,
+                        "missing multi-field secret for multi-query auth",
+                    ));
+                }
+            };
+
+            let mut seen = HashSet::new();
+            for template in templates {
+                let name = template.param_name.trim().to_string();
+                if name.is_empty() {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-query auth requires non-empty paramName",
+                    ));
+                }
+                if !seen.insert(name.clone()) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-query auth cannot inject duplicate param names",
+                    ));
+                }
+
+                if envelope_mode && query.iter().any(|(k, _)| k == &name) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-query auth parameter is broker-managed",
+                    ));
+                }
+                if !envelope_mode {
+                    query.retain(|(k, _)| k != &name);
+                }
+
+                let value = render_field_template(&template.value_template, fields)?;
+                query.push((name, value));
             }
         }
         AuthStrategy::Basic => {
@@ -616,7 +657,10 @@ pub(super) fn apply_auth(
                     } else {
                         return Err(BrokerError::new(
                             ErrorCode::OauthRefreshRequired,
-                            format!("oauth2 access token missing or expired for {}", token_endpoint),
+                            format!(
+                                "oauth2 access token missing or expired for {}",
+                                token_endpoint
+                            ),
                         ));
                     }
                 }
@@ -698,10 +742,7 @@ pub(super) fn apply_auth(
     Ok(())
 }
 
-fn render_multi_header_template(
-    template: &str,
-    fields: &HashMap<String, String>,
-) -> BrokerResult<String> {
+fn render_field_template(template: &str, fields: &HashMap<String, String>) -> BrokerResult<String> {
     // Minimal `{{field}}` template renderer, fail-closed on missing fields.
     let mut out = String::new();
     let mut rest = template;
@@ -711,20 +752,20 @@ fn render_multi_header_template(
         let Some(end) = after_start.find("}}") else {
             return Err(BrokerError::new(
                 ErrorCode::PolicyViolation,
-                "invalid multi-header template (missing '}}')",
+                "invalid template (missing '}}')",
             ));
         };
         let key = after_start[2..end].trim();
         if key.is_empty() {
             return Err(BrokerError::new(
                 ErrorCode::PolicyViolation,
-                "invalid multi-header template (empty placeholder)",
+                "invalid template (empty placeholder)",
             ));
         }
         let value = fields.get(key).ok_or_else(|| {
             BrokerError::new(
                 ErrorCode::VaultUnavailable,
-                format!("missing secret field '{}' for multi-header auth", key),
+                format!("missing secret field '{}' for auth", key),
             )
         })?;
         out.push_str(value);

@@ -20,6 +20,62 @@ pub fn default_socket_path() -> PathBuf {
         .join("aivaultd.sock")
 }
 
+#[cfg(unix)]
+fn parse_octal_mode(raw: &str) -> Option<u32> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // Accept "660" or "0660".
+    u32::from_str_radix(trimmed.trim_start_matches("0o"), 8).ok()
+}
+
+#[cfg(unix)]
+fn socket_mode_from_env() -> Option<u32> {
+    std::env::var("AIVAULTD_SOCKET_MODE")
+        .ok()
+        .and_then(|v| parse_octal_mode(&v))
+}
+
+#[cfg(unix)]
+fn socket_dir_mode_from_env() -> Option<u32> {
+    std::env::var("AIVAULTD_SOCKET_DIR_MODE")
+        .ok()
+        .and_then(|v| parse_octal_mode(&v))
+}
+
+#[cfg(unix)]
+fn is_managed_socket_parent(parent: &Path) -> bool {
+    // Canonical per-user run dir:
+    // ~/.aivault/run
+    if parent == crate::paths::aivault_root_dir().join("run") {
+        return true;
+    }
+    // When AIVAULT_DIR is set, we treat AIVAULT_DIR/run as managed too.
+    if let Ok(dir) = std::env::var("AIVAULT_DIR") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() && parent == PathBuf::from(trimmed).join("run") {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn parse_octal_mode_accepts_common_forms() {
+        assert_eq!(parse_octal_mode("600"), Some(0o600));
+        assert_eq!(parse_octal_mode("0660"), Some(0o660));
+        assert_eq!(parse_octal_mode("0o750"), Some(0o750));
+        assert_eq!(parse_octal_mode(""), None);
+        assert_eq!(parse_octal_mode("nope"), None);
+    }
+}
+
 pub fn socket_path_from_env() -> Option<PathBuf> {
     if let Ok(raw) = std::env::var("AIVAULTD_SOCKET") {
         let trimmed = raw.trim();
@@ -133,15 +189,31 @@ pub fn serve(socket_path: &Path, once: bool) -> Result<(), String> {
     use std::os::unix::net::UnixListener;
 
     if let Some(parent) = socket_path.parent() {
+        let parent_existed = parent.exists();
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+
+        // Only chmod directories we consider "managed" (our default locations), or ones we just
+        // created, or when explicitly configured. Avoid chmod'ing arbitrary existing directories
+        // (e.g. /tmp) when users override the socket path.
+        let effective_dir_mode = socket_dir_mode_from_env()
+            .or_else(|| {
+                if is_managed_socket_parent(parent) || !parent_existed {
+                    Some(0o700)
+                } else {
+                    None
+                }
+            });
+        if let Some(mode) = effective_dir_mode {
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(mode));
+        }
     }
     if socket_path.exists() {
         std::fs::remove_file(socket_path).map_err(|e| e.to_string())?;
     }
 
     let listener = UnixListener::bind(socket_path).map_err(|e| e.to_string())?;
-    let _ = std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600));
+    let socket_mode = socket_mode_from_env().unwrap_or(0o600);
+    let _ = std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(socket_mode));
 
     for stream in listener.incoming() {
         let mut stream = stream.map_err(|e| e.to_string())?;
@@ -186,6 +258,9 @@ fn handle_request(request: DaemonRequest) -> DaemonResponse {
             let vault = crate::vault::VaultRuntime::discover();
             if let Err(err) = vault.load() {
                 return DaemonResponse::err(err.to_string());
+            }
+            if let Err(err) = crate::migrations::run_on_cli_startup(&vault) {
+                return DaemonResponse::err(err);
             }
             let store = match crate::broker_store::BrokerStore::open_under(vault.paths().root_dir())
             {

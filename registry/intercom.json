@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "intercom",
+  "vaultSecrets": {
+    "INTERCOM_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

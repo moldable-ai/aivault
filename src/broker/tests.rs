@@ -31,8 +31,40 @@ fn openai_registry() -> Registry {
                 path_prefixes: vec!["/v1/audio/transcriptions".to_string()],
             },
         }],
+        vault_secrets: Default::default(),
     }])
     .unwrap()
+}
+
+#[test]
+fn registry_rejects_duplicate_vault_secret_claims() {
+    let t1 = ProviderTemplate {
+        provider: "p1".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "authorization".to_string(),
+            value_template: "Bearer {{secret}}".to_string(),
+        },
+        hosts: vec!["api.p1.test".to_string()],
+        capabilities: Vec::new(),
+        vault_secrets: [("DUPLICATE_SECRET".to_string(), "secret".to_string())]
+            .into_iter()
+            .collect(),
+    };
+    let t2 = ProviderTemplate {
+        provider: "p2".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "authorization".to_string(),
+            value_template: "Bearer {{secret}}".to_string(),
+        },
+        hosts: vec!["api.p2.test".to_string()],
+        capabilities: Vec::new(),
+        vault_secrets: [("DUPLICATE_SECRET".to_string(), "secret".to_string())]
+            .into_iter()
+            .collect(),
+    };
+
+    let err = Registry::from_templates(vec![t1, t2]).unwrap_err();
+    assert!(err.message.contains("duplicate vault secret name"));
 }
 
 fn base_broker() -> Broker {
@@ -172,6 +204,7 @@ fn story_vault_credential_provider_resolution_overrides() {
                 path_prefixes: vec!["/api/v2".to_string()],
             },
         }],
+        vault_secrets: Default::default(),
     }])
     .unwrap();
     let mut broker = Broker::default_with_registry(Some(registry));
@@ -255,6 +288,7 @@ fn story_vault_per_tenant_host_binding_with_registry() {
                 path_prefixes: vec!["/api/v2/tickets".to_string()],
             },
         }],
+        vault_secrets: Default::default(),
     }])
     .unwrap();
 
@@ -2145,6 +2179,7 @@ fn story_reg_host_pattern_matching() {
                 path_prefixes: vec!["/api/v2/tickets".to_string()],
             },
         }],
+        vault_secrets: Default::default(),
     }])
     .unwrap();
 
@@ -2162,7 +2197,12 @@ fn story_reg_host_pattern_matching() {
         )
         .unwrap();
 
-    let token = mint_token(&mut broker, vec!["zendesk/tickets"], Some("zd-acme"), 60_000);
+    let token = mint_token(
+        &mut broker,
+        vec!["zendesk/tickets"],
+        Some("zd-acme"),
+        60_000,
+    );
     let planned = broker
         .execute_envelope(
             &RequestAuth::Proxy(token.token),
@@ -2204,6 +2244,7 @@ fn story_reg_per_tenant_host_binding() {
                 path_prefixes: vec!["/admin/api".to_string()],
             },
         }],
+        vault_secrets: Default::default(),
     }])
     .unwrap();
 

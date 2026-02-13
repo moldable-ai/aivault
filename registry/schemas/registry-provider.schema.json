@@ -84,6 +84,26 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["multi_query"],
+          "properties": {
+            "multi_query": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["param_name", "value_template"],
+                "properties": {
+                  "param_name": { "type": "string", "minLength": 1 },
+                  "value_template": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["o_auth2"],
           "properties": {
             "o_auth2": {
@@ -147,6 +167,11 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "vaultSecrets": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "description": "Maps canonical vault secret names to auth template placeholders. Keys are the --name values operators use with 'secrets create'. Values are the {{placeholder}} names in the auth template."
     },
     "capabilities": {
       "type": "array",

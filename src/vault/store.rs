@@ -60,6 +60,15 @@ pub struct SecretRecord {
     /// and should not be edited via operator UX.
     #[serde(default)]
     pub system_managed: bool,
+    /// If set, this secret may only be used with the pinned provider (derived from compiled-in
+    /// registry policy). This is immutable once set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_provider: Option<String>,
+    /// AEAD associated data version used for encryption/decryption.
+    /// v1: binds to (secret_id, scope)
+    /// v2: binds to (secret_id, scope, pinned_provider)
+    #[serde(default)]
+    pub aad_version: u32,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,6 +98,8 @@ pub struct SecretMeta {
     pub aliases: Vec<String>,
     pub scope: SecretScope,
     pub system_managed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_provider: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     pub last_used_at_ms: Option<i64>,
@@ -105,6 +116,7 @@ impl From<&SecretRecord> for SecretMeta {
             aliases: r.aliases.clone(),
             scope: r.scope.clone(),
             system_managed: r.system_managed,
+            pinned_provider: r.pinned_provider.clone(),
             created_at_ms: r.created_at_ms,
             updated_at_ms: r.updated_at_ms,
             last_used_at_ms: r.last_used_at_ms,

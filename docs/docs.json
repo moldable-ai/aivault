@@ -1,0 +1,77 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "aivault",
+  "theme": "maple",
+  "favicon": "/assets/favicon.ico",
+  "colors": {
+    "primary": "#0d9488",
+    "light": "#14b8a6",
+    "dark": "#0f766e"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Start",
+        "pages": [
+          "index",
+          "install",
+          "getting-started",
+          "macos",
+          "linux-servers"
+        ]
+      },
+      {
+        "group": "Core",
+        "pages": [
+          "core/index",
+          "core/architecture",
+          "core/security-model",
+          "core/vault",
+          "core/broker",
+          "core/registry",
+          "core/auth-strategies",
+          "core/scopes-and-isolation"
+        ]
+      },
+      {
+        "group": "CLI",
+        "pages": [
+          "cli/index",
+          "cli/vault-lifecycle",
+          "cli/secrets",
+          "cli/credentials",
+          "cli/capabilities",
+          "cli/invoke",
+          "cli/oauth"
+        ]
+      },
+      {
+        "group": "Security",
+        "pages": [
+          "security/index",
+          "security/threat-model",
+          "security/encryption",
+          "security/audit-log"
+        ]
+      },
+      {
+        "group": "Registry",
+        "pages": [
+          "registry/index",
+          "registry/custom-providers",
+          "registry/schema"
+        ]
+      },
+      {
+        "group": "Ops",
+        "pages": [
+          "ops/index",
+          "ops/daemon",
+          "ops/environment",
+          "ops/storage",
+          "ops/testing"
+        ]
+      }
+    ]
+  }
+}

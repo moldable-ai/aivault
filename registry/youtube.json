@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "youtube",
+  "vaultSecrets": {
+    "YOUTUBE_API_KEY": "secret"
+  },
   "auth": {
     "query": {
       "param_name": "key"

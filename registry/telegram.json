@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "telegram",
+  "vaultSecrets": {
+    "TELEGRAM_BOT_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",

@@ -184,6 +184,56 @@
       ]
     },
     {
+      "id": "ev-cli-sec-planned-output-redacts-broker-managed-url-secrets-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "planned_url_redacts_query_auth_secret_values",
+        "planned_url_redacts_path_auth_secret_values"
+      ]
+    },
+    {
+      "id": "ev-sec-release-dev-overrides-disabled-release-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "release_rejects_dev_http_client_overrides",
+        "release_rejects_dev_broker_escape_hatches"
+      ]
+    },
+    {
+      "id": "ev-sec-release-dev-overrides-disabled-app-code",
+      "kind": "code",
+      "automated": false,
+      "file": "src/app.rs",
+      "references": [
+        "dev_flag_true",
+        "load_runtime_broker_for_context",
+        "build_http_client_with_dev_overrides"
+      ]
+    },
+    {
+      "id": "ev-sec-release-dev-overrides-disabled-vault-code",
+      "kind": "code",
+      "automated": false,
+      "file": "src/vault/mod.rs",
+      "references": [
+        "VaultRuntime::ensure_default_initialized",
+        "dev_flag_true"
+      ]
+    },
+    {
+      "id": "ev-sec-supply-chain-release-signing-contract-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/release_signing_contract.rs",
+      "tests": [
+        "release_workflow_and_readme_expose_verifiable_artifact_signing"
+      ]
+    },
+    {
       "id": "ev-daemon-e2e-invoke-via-unix-socket-test",
       "kind": "tests",
       "automated": true,
@@ -356,6 +406,49 @@
               {
                 "evidenceId": "ev-broker-sec-scheme-port-ssrf-guards-test",
                 "test": "story_sec_scheme_port_ssrf_guards"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-release-dev-overrides-disabled",
+          "story": "As a security reviewer, I want dev-only environment-variable escape hatches disabled in release builds, so production binaries cannot bypass SSRF, scheme, port, and host constraints via env configuration.",
+          "evidenceLinks": [
+            "ev-sec-release-dev-overrides-disabled-release-tests",
+            "ev-sec-release-dev-overrides-disabled-app-code",
+            "ev-sec-release-dev-overrides-disabled-vault-code"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "build_http_client_with_dev_overrides"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "dev_flag_true"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-sec-release-dev-overrides-disabled-release-tests",
+                "test": "release_rejects_dev_broker_escape_hatches"
               }
             ]
           }
@@ -1036,6 +1129,51 @@
             ]
           }
         }
+        ,
+        {
+          "slug": "sec-cli-planned-output-redacts-broker-managed-url-secrets",
+          "story": "As a security reviewer, I want CLI planned output to redact broker-managed auth secrets that would otherwise appear in URLs (query auth, token-in-path), so output modes like `json` and `markdown` do not leak vault secret material.",
+          "evidenceLinks": [
+            "ev-cli-sec-planned-output-redacts-broker-managed-url-secrets-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "invoke_json_with_store"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-cli-sec-planned-output-redacts-broker-managed-url-secrets-test",
+                "test": "planned_url_redacts_query_auth_secret_values"
+              },
+              {
+                "evidenceId": "ev-cli-sec-planned-output-redacts-broker-managed-url-secrets-test",
+                "test": "planned_url_redacts_path_auth_secret_values"
+              }
+            ]
+          }
+        }
       ]
     },
     {
@@ -1094,12 +1232,40 @@
         {
           "slug": "sec-supply-chain-signed-release-artifacts",
           "story": "As an operator, I want signed and verifiable release artifacts (and platform-appropriate notarization where applicable), so users can detect modified binaries before trusting them with local vault access.",
-          "partial": true,
-          "gapReason": "Release workflow and verification docs exist, but signing/notarization is only proven once CI secrets are configured and a real tagged release is executed.",
           "evidenceLinks": [
+            "ev-sec-supply-chain-release-signing-contract-test",
             "ev-ci-release-signing-workflow-code",
             "ev-doc-release-verification-code"
-          ]
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": ".github/workflows/release.yml",
+                "symbol": "Sign binaries (macOS)"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "README.md",
+                "symbol": "Release verification"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "README.md",
+                "symbol": "cosign verify-blob"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-sec-supply-chain-release-signing-contract-test",
+                "test": "release_workflow_and_readme_expose_verifiable_artifact_signing"
+              }
+            ]
+          }
         }
       ]
     },

@@ -1,6 +1,9 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
   "provider": "x",
+  "vaultSecrets": {
+    "X_BEARER_TOKEN": "secret"
+  },
   "auth": {
     "header": {
       "header_name": "authorization",
