@@ -73,6 +73,26 @@ fn create_header_credential(
     );
 }
 
+fn create_registry_credential(
+    dir: &TempDir,
+    credential_id: &str,
+    provider: &str,
+    secret_ref: &str,
+) {
+    run_ok_json(
+        dir,
+        &[
+            "credential",
+            "create",
+            credential_id,
+            "--provider",
+            provider,
+            "--secret-ref",
+            secret_ref,
+        ],
+    );
+}
+
 fn create_capability(
     dir: &TempDir,
     capability_id: &str,
@@ -131,6 +151,68 @@ fn e2e_describe_and_aliases_return_capability_shape() {
             "default method missing for alias {subcommand}"
         );
     }
+}
+
+#[test]
+fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_REGISTRY_SECRET", "sk-local-registry");
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    create_registry_credential(&dir, "openai-default", "openai", &secret_ref);
+    create_registry_credential(&dir, "deepgram-default", "deepgram", &secret_ref);
+    create_registry_credential(&dir, "elevenlabs-default", "elevenlabs", &secret_ref);
+
+    let capability_expectations = [
+        (
+            "openai/transcription",
+            "openai",
+            "POST",
+            "/v1/audio/transcriptions",
+        ),
+        ("deepgram/transcription", "deepgram", "POST", "/v1/listen"),
+        (
+            "elevenlabs/transcription",
+            "elevenlabs",
+            "POST",
+            "/v1/speech-to-text",
+        ),
+    ];
+
+    for (capability, provider, method, path) in capability_expectations {
+        let described = run_ok_json(&dir, &["capability", "describe", capability]);
+        assert_eq!(described["provider"].as_str(), Some(provider));
+        assert_eq!(
+            described["call"]["defaults"]["method"].as_str(),
+            Some(method)
+        );
+        assert_eq!(described["call"]["defaults"]["path"].as_str(), Some(path));
+    }
+}
+
+#[test]
+fn e2e_credential_create_requires_explicit_auth_and_host_for_unknown_provider() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_UNKNOWN_PROVIDER_SECRET", "sk-local-custom");
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "custom-cred",
+            "--provider",
+            "custom-provider",
+            "--secret-ref",
+            &secret_ref,
+        ],
+    );
+    assert!(
+        err.contains("--auth is required when provider is not in built-in registry"),
+        "unexpected error output: {}",
+        err
+    );
 }
 
 #[test]

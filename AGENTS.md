@@ -1,8 +1,8 @@
-# AIVault Development Guidelines
+# aivault Development Guidelines
 
 ## Project Overview
 
-AIVault is a local encrypted vault runtime and CLI for secret lifecycle and capability-to-secret binding workflows.
+aivault is a local encrypted vault runtime and CLI for secret lifecycle and capability-to-secret binding workflows.
 
 See `README.md` for CLI usage and quality checks.
 

@@ -293,7 +293,7 @@ pub enum CredentialCommand {
         #[arg(long)]
         secret_ref: String,
         #[arg(long, value_enum)]
-        auth: AuthKind,
+        auth: Option<AuthKind>,
         #[arg(long)]
         host: Vec<String>,
         #[arg(long)]

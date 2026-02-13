@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "elevenlabs",
+  "auth": {
+    "header": {
+      "header_name": "xi-api-key",
+      "value_template": "{{secret}}"
+    }
+  },
+  "hosts": ["api.elevenlabs.io"],
+  "capabilities": [
+    {
+      "id": "elevenlabs/transcription",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/speech-to-text"]
+      }
+    }
+  ]
+}

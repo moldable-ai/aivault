@@ -1,4 +1,4 @@
-# AIVault — Zero-Trust Credentials For Any Code
+# aivault — Zero-Trust Credentials For Any Code
 
 ## What it looks like
 

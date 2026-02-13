@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "openai",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.openai.com"],
+  "capabilities": [
+    {
+      "id": "openai/transcription",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/audio/transcriptions"]
+      }
+    }
+  ]
+}

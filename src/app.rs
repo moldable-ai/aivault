@@ -440,6 +440,7 @@ fn run_oauth(command: OauthCommand) -> Result<(), String> {
 
 fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<(), String> {
     let mut store = BrokerStore::open_under(vault.paths().root_dir())?;
+    let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
 
     match command {
         CredentialCommand::Create {
@@ -470,27 +471,45 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 return Err(format!("credential '{}' already exists", id));
             }
 
-            let auth = build_auth_strategy(
-                auth,
-                AuthBuildOptions {
-                    header_name,
-                    value_template,
-                    query_param,
-                    grant_type,
-                    token_endpoint,
-                    scope,
-                    aws_service,
-                    aws_region,
-                    hmac_algorithm,
-                },
-            );
-            if host.is_empty() {
-                return Err("at least one --host is required".to_string());
-            }
             let provider = provider.trim().to_string();
             if provider.is_empty() {
                 return Err("credential provider is required".to_string());
             }
+            let provider_defaults = registry.provider(&provider).cloned();
+
+            let auth = match auth {
+                Some(auth_kind) => build_auth_strategy(
+                    auth_kind,
+                    AuthBuildOptions {
+                        header_name,
+                        value_template,
+                        query_param,
+                        grant_type,
+                        token_endpoint,
+                        scope,
+                        aws_service,
+                        aws_region,
+                        hmac_algorithm,
+                    },
+                ),
+                None => provider_defaults
+                    .as_ref()
+                    .map(|template| template.auth.clone())
+                    .ok_or_else(|| {
+                        "--auth is required when provider is not in built-in registry".to_string()
+                    })?,
+            };
+            let hosts = if host.is_empty() {
+                provider_defaults
+                    .as_ref()
+                    .map(|template| template.hosts.clone())
+                    .ok_or_else(|| {
+                        "at least one --host is required when provider is not in built-in registry"
+                            .to_string()
+                    })?
+            } else {
+                host
+            };
             let parsed = SecretRef::parse(&secret_ref)?;
             vault
                 .get_secret_meta(&parsed.secret_id)
@@ -500,10 +519,15 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 id,
                 provider,
                 auth,
-                hosts: host,
+                hosts,
                 secret_ref,
             };
             store.upsert_credential(credential.clone());
+            if let Some(template) = provider_defaults {
+                for capability in template.capabilities {
+                    store.upsert_capability(capability);
+                }
+            }
             store.save()?;
             print_json(&credential)
         }
@@ -1041,7 +1065,8 @@ fn load_runtime_broker(vault: &VaultRuntime, store: &BrokerStore) -> Result<Brok
         cfg.allow_remote_clients = true;
     }
 
-    let mut broker = Broker::new(cfg, None);
+    let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
+    let mut broker = Broker::new(cfg, Some(registry));
     let operator = RequestAuth::Operator("operator-cli".to_string());
 
     for stored in store.credentials() {

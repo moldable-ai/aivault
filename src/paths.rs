@@ -22,7 +22,7 @@ pub fn aivault_root_dir() -> PathBuf {
     }
 }
 
-/// Return the canonical AIVault data directory.
+/// Return the canonical aivault data directory.
 pub fn aivault_data_dir() -> PathBuf {
     aivault_root_dir().join("data")
 }

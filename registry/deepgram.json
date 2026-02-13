@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "deepgram",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Token {{secret}}"
+    }
+  },
+  "hosts": ["api.deepgram.com"],
+  "capabilities": [
+    {
+      "id": "deepgram/transcription",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": ["api.deepgram.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/listen"]
+      }
+    }
+  ]
+}
