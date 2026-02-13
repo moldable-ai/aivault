@@ -43,62 +43,54 @@ The simplest hardening step is to run agents under a different macOS user accoun
 What this gets you:
 - An agent running under the agent account cannot trivially read your operator account’s Keychain items or home directory files.
 
-Tradeoff:
-- Cross-user invocation can be made to "just work", but you have to deliberately share only the **daemon socket** (not your Keychain or API keys).
+### Letting agents invoke without exposing keys (shared daemon, “just works”)
 
-### Letting agents invoke without exposing keys (shared socket pattern)
+This is the primary “same machine” setup:
+- Your human/operator account owns the vault + Keychain entry and runs `aivaultd`.
+- Your agent account runs untrusted tools and only connects to the operator daemon over a shared unix socket.
+- The agent never sees provider API keys.
 
-One workable pattern on the same Mac is:
-- Keep the vault + Keychain entry under your human/operator account
-- Run `aivaultd` under that operator account
-- Put the daemon unix socket in a shared directory and allow group access to that socket
-- Have the agent account point `AIVAULTD_SOCKET` at that socket (and set `AIVAULTD_AUTOSTART=0`)
+**Goal:** on the agent account, `aivault invoke ...` should work with **zero flags** and **no environment variables**.
 
-This is intentionally more work than “just share env vars”, but it avoids giving the agent account your provider API keys.
+#### Step-by-step (recommended)
 
-#### Step-by-step (example)
+0. Ensure `aivault` and `aivaultd` are installed somewhere both accounts can execute (for example `/usr/local/bin`).
 
-This is one concrete way to do it using a shared socket directory and a shared group.
-
-1. Ensure `aivault` and `aivaultd` are installed somewhere both accounts can execute (for example `/usr/local/bin`).
-2. Create a shared group (example name: `aivault`) and add both users to it:
+1. One-time: configure cross-user socket access (run as your operator account):
 
 ```bash
-sudo dseditgroup -o create aivault || true
-sudo dseditgroup -o edit -a "$USER" -t user aivault
-sudo dseditgroup -o edit -a agent -t user aivault
+sudo aivault setup agent-access --agent-user agent
 ```
 
-3. Create a shared socket directory:
+This creates/updates a shared group (`aivault`), adds both users, and creates the shared socket directory with restrictive permissions.
+
+2. Start the shared daemon (operator side):
 
 ```bash
-sudo mkdir -p /Users/Shared/aivault/run
-sudo chown "$USER":aivault /Users/Shared/aivault/run
-sudo chmod 0750 /Users/Shared/aivault/run
+aivaultd --shared
 ```
 
-4. Run the daemon as your operator account, using a group-readable socket:
+Or install a LaunchAgent so it starts automatically at login:
 
 ```bash
-env \\
-  AIVAULTD_SOCKET=/Users/Shared/aivault/run/aivaultd.sock \\
-  AIVAULTD_SOCKET_DIR_MODE=0750 \\
-  AIVAULTD_SOCKET_MODE=0660 \\
-  aivaultd
+aivault setup launchd
 ```
 
-5. In the agent account, point `aivault` at that socket and disable autostart:
+3. Agent usage (agent account):
 
 ```bash
-export AIVAULTD_SOCKET=/Users/Shared/aivault/run/aivaultd.sock
-export AIVAULTD_AUTOSTART=0
+aivault invoke openai/chat-completions --method POST --path /v1/chat/completions --body '...'
 ```
 
-Now the agent can run `aivault invoke ...` without ever being given the provider API keys.
+No `--shared`, no `AIVAULTD_SOCKET`, no `AIVAULTD_AUTOSTART=0`.
+
+How it works:
+- The `aivault` CLI auto-discovers a shared daemon socket at `/Users/Shared/aivault/run/aivaultd.sock`.
+- When invoking via the shared socket, autostart is suppressed (the agent account cannot and should not try to start its own daemon).
 
 Important:
-- The agent account does not need access to your operator account's vault directory or Keychain.
-- Socket access effectively grants "ability to invoke" whatever capabilities are configured, so treat the socket permissions as sensitive.
+- Socket access grants “ability to invoke configured capabilities”, so treat membership in the `aivault` group as sensitive.
+- This does not make an untrusted agent “safe” if it can become root or otherwise escape OS boundaries.
 
 ## Recommended baseline (developer laptop)
 

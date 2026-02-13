@@ -20,6 +20,32 @@ pub fn default_socket_path() -> PathBuf {
         .join("aivaultd.sock")
 }
 
+pub fn shared_socket_path() -> PathBuf {
+    if let Ok(raw) = std::env::var("AIVAULTD_SHARED_SOCKET") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
+    // Well-known shared socket location for cross-user invocation.
+    // This is intentionally stable so agent accounts can auto-discover it.
+    #[cfg(target_os = "macos")]
+    {
+        PathBuf::from("/Users/Shared/aivault/run/aivaultd.sock")
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        PathBuf::from("/var/run/aivault/aivaultd.sock")
+    }
+    #[cfg(not(unix))]
+    {
+        // Non-unix targets don't support unix sockets; keep a deterministic path for callers that
+        // compile but should never attempt to use it.
+        default_socket_path()
+    }
+}
+
 #[cfg(unix)]
 fn parse_octal_mode(raw: &str) -> Option<u32> {
     let trimmed = raw.trim();

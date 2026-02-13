@@ -18,7 +18,7 @@ description: All environment variables aivault respects.
 | `AIVAULTD_DISABLE` | `0` | Set to `1` to run broker in-process (skip daemon) |
 | `AIVAULTD_AUTOSTART` | `1` | Set to `0` to require daemon already running |
 | `AIVAULTD_AUTOSTART_ONCE` | `0` | Set to `1` to auto-start `aivaultd` with `--once` (serve one request then exit). Enabled automatically when `AIVAULT_DIR` is set. |
-| `AIVAULTD_SOCKET` | `~/.aivault/run/aivaultd.sock` | Override the daemon unix socket path (default is `$AIVAULT_DIR/run/aivaultd.sock` when `AIVAULT_DIR` is set) |
+| `AIVAULTD_SOCKET` | `~/.aivault/run/aivaultd.sock` | Override the daemon unix socket path. When unset, the CLI tries the per-user socket first and then a well-known shared socket (macOS: `/Users/Shared/aivault/run/aivaultd.sock`, Linux: `/var/run/aivault/aivaultd.sock`). Default is `$AIVAULT_DIR/run/aivaultd.sock` when `AIVAULT_DIR` is set. |
 | `AIVAULTD_SOCKET_MODE` | `0600` | Override the daemon unix socket file mode (octal), e.g. `0660` to allow group access |
 | `AIVAULTD_SOCKET_DIR_MODE` | `0700` | Override the daemon unix socket directory mode (octal), e.g. `0750` to allow group traversal |
 

@@ -410,3 +410,105 @@ fn e2e_invoke_via_aivaultd_unix_socket() {
     let status = child.wait().expect("wait daemon");
     assert!(status.success(), "aivaultd did not exit cleanly");
 }
+
+#[test]
+fn e2e_invoke_falls_back_to_shared_socket_when_autostart_disabled() {
+    let dir = TempDir::new().expect("temp dir");
+    let server = LocalTlsServer::start("daemon.shared");
+    let mut envs = server.env_pairs();
+
+    // Setup vault + broker state via CLI.
+    let created = run_ok_json(
+        &dir,
+        &[
+            "secrets",
+            "create",
+            "--name",
+            "DAEMON_SHARED_TOKEN",
+            "--value",
+            "sk-daemon-shared",
+            "--scope",
+            "global",
+        ],
+        &envs,
+    );
+    let secret_id = created["secretId"].as_str().unwrap().to_string();
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "shared-cred",
+            "--provider",
+            "shared-provider",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "header",
+            "--host",
+            "daemon.shared",
+        ],
+        &envs,
+    );
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "shared/echo",
+            "--credential",
+            "shared-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/echo",
+        ],
+        &envs,
+    );
+
+    let shared_sock_dir = dir.path().join("shared").join("run");
+    std::fs::create_dir_all(&shared_sock_dir).expect("create shared sock dir");
+    let shared_sock_path = shared_sock_dir.join("aivaultd.sock");
+
+    // Start daemon on the "shared" socket override, serve one request.
+    let mut daemon_cmd = Command::new(env!("CARGO_BIN_EXE_aivaultd"));
+    daemon_cmd.env("AIVAULT_DIR", dir.path());
+    for (key, value) in &envs {
+        daemon_cmd.env(key, value);
+    }
+    daemon_cmd.env(
+        "AIVAULTD_SHARED_SOCKET",
+        shared_sock_path.display().to_string(),
+    );
+    daemon_cmd
+        .arg("--shared")
+        .arg("--socket")
+        .arg(shared_sock_path.to_string_lossy().to_string())
+        .arg("--once");
+    let mut child = daemon_cmd.spawn().expect("spawn aivaultd");
+
+    // Wait for socket creation.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline && !shared_sock_path.exists() {
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        shared_sock_path.exists(),
+        "shared daemon socket was not created"
+    );
+
+    // Autostart disabled: should still succeed by falling back to shared socket.
+    envs.push((
+        "AIVAULTD_SHARED_SOCKET".to_string(),
+        shared_sock_path.display().to_string(),
+    ));
+    envs.push(("AIVAULTD_AUTOSTART".to_string(), "0".to_string()));
+    let out = run_ok_json(&dir, &["invoke", "shared/echo", "--path", "/v1/echo"], &envs);
+    assert_eq!(out["response"]["status"].as_u64(), Some(200));
+    assert_eq!(out["planned"]["capability"].as_str(), Some("shared/echo"));
+
+    let status = child.wait().expect("wait daemon");
+    assert!(status.success(), "aivaultd did not exit cleanly");
+}

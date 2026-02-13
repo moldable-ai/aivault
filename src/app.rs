@@ -22,7 +22,7 @@ use crate::broker_store::{BrokerStore, StoredCapabilityPolicy, StoredCredential}
 use crate::capabilities::{CapabilityScope, CapabilityStore};
 use crate::cli::{
     AuthKind, CapabilityCommand, CapabilityPolicyCommand, Cli, Command, CredentialCommand,
-    InvokeArgs, OauthCommand, ProviderKind, ScopeKind, SecretsCommand,
+    InvokeArgs, OauthCommand, ProviderKind, ScopeKind, SecretsCommand, SetupCommand,
 };
 use crate::daemon::{self, DaemonRequest};
 use crate::markdown::{to_markdown, ToMarkdownOptions};
@@ -48,6 +48,7 @@ pub fn run(cli: Cli) -> Result<(), String> {
                 wrap_field,
             },
         ),
+        Command::Setup { command } => run_setup(command),
         // Everything else is "operator mode" and requires local vault access.
         other => {
             let vault = VaultRuntime::discover();
@@ -109,7 +110,408 @@ pub fn run(cli: Cli) -> Result<(), String> {
                 Command::Invoke { .. } | Command::Json { .. } | Command::Markdown { .. } => {
                     unreachable!("invoke handled earlier")
                 }
+                Command::Setup { .. } => unreachable!("setup handled earlier"),
             }
+        }
+    }
+}
+
+fn run_setup(command: SetupCommand) -> Result<(), String> {
+    match command {
+        SetupCommand::AgentAccess {
+            agent_user,
+            daemon_user,
+            dry_run,
+        } => run_setup_agent_access(&agent_user, daemon_user.as_deref(), dry_run),
+        SetupCommand::Launchd { dry_run } => run_setup_launchd(dry_run),
+        SetupCommand::Systemd {
+            daemon_user,
+            dry_run,
+        } => run_setup_systemd(&daemon_user, dry_run),
+    }
+}
+
+fn read_trimmed_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+#[cfg(unix)]
+fn require_root() -> Result<(), String> {
+    let out = std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .map_err(|e| format!("failed to run id: {}", e))?;
+    if !out.status.success() {
+        return Err("id -u failed".to_string());
+    }
+    let uid = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if uid != "0" {
+        return Err("this command requires sudo/root".to_string());
+    }
+    Ok(())
+}
+
+fn resolve_aivaultd_exe_path() -> Result<std::path::PathBuf, String> {
+    // Prefer aivaultd alongside the current `aivault` executable.
+    if let Ok(mut exe) = std::env::current_exe() {
+        #[cfg(target_os = "windows")]
+        {
+            exe.set_file_name("aivaultd.exe");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            exe.set_file_name("aivaultd");
+        }
+        if exe.exists() {
+            return Ok(exe);
+        }
+    }
+
+    // Fall back to PATH lookup.
+    let out = std::process::Command::new("which")
+        .arg("aivaultd")
+        .output()
+        .map_err(|e| format!("failed to run which: {}", e))?;
+    if !out.status.success() {
+        return Err("could not locate aivaultd (not found in PATH)".to_string());
+    }
+    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if p.is_empty() {
+        return Err("could not locate aivaultd (which returned empty output)".to_string());
+    }
+    Ok(std::path::PathBuf::from(p))
+}
+
+fn run_cmd(dry_run: bool, program: &str, args: &[String]) -> Result<(), String> {
+    if dry_run {
+        println!("$ {} {}", program, args.join(" "));
+        return Ok(());
+    }
+    let status = std::process::Command::new(program)
+        .args(args)
+        .status()
+        .map_err(|e| format!("failed to run {}: {}", program, e))?;
+    if !status.success() {
+        return Err(format!("command failed: {} (exit {})", program, status));
+    }
+    Ok(())
+}
+
+fn run_setup_agent_access(
+    agent_user: &str,
+    daemon_user: Option<&str>,
+    dry_run: bool,
+) -> Result<(), String> {
+    #[cfg(not(unix))]
+    {
+        let _ = (agent_user, daemon_user, dry_run);
+        return Err("agent-access setup requires a unix-like OS".to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        require_root()?;
+
+        let agent_user = agent_user.trim();
+        if agent_user.is_empty() {
+            return Err("--agent-user is required".to_string());
+        }
+
+        let daemon_user = daemon_user
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .or_else(|| read_trimmed_env("SUDO_USER"))
+            .ok_or_else(|| "missing --daemon-user (and $SUDO_USER is not set)".to_string())?;
+
+        let group = "aivault";
+        let shared_socket = daemon::shared_socket_path();
+        let shared_dir = shared_socket
+            .parent()
+            .ok_or_else(|| "shared socket path has no parent directory".to_string())?
+            .to_path_buf();
+
+        #[cfg(target_os = "macos")]
+        {
+            // Ensure group exists.
+            let read_status = std::process::Command::new("dseditgroup")
+                .args(["-o", "read", group])
+                .status()
+                .map_err(|e| format!("failed to run dseditgroup: {}", e))?;
+            if !read_status.success() {
+                let args = vec!["-o".to_string(), "create".to_string(), group.to_string()];
+                run_cmd(
+                    dry_run,
+                    "dseditgroup",
+                    &args,
+                )?;
+            }
+
+            // Add daemon and agent users to group (idempotent).
+            for user in [&daemon_user, agent_user].iter() {
+                let args = vec![
+                    "-o".to_string(),
+                    "edit".to_string(),
+                    "-a".to_string(),
+                    user.to_string(),
+                    "-t".to_string(),
+                    "user".to_string(),
+                    group.to_string(),
+                ];
+                run_cmd(
+                    dry_run,
+                    "dseditgroup",
+                    &args,
+                )?;
+            }
+
+            // Create socket directory with setgid so the socket inherits group ownership.
+            let args = vec![
+                "-d".to_string(),
+                "-m".to_string(),
+                "2750".to_string(),
+                "-o".to_string(),
+                daemon_user.clone(),
+                "-g".to_string(),
+                group.to_string(),
+                shared_dir.to_string_lossy().to_string(),
+            ];
+            run_cmd(
+                dry_run,
+                "install",
+                &args,
+            )?;
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            // Ensure group exists (idempotent).
+            let group_exists = std::process::Command::new("getent")
+                .args(["group", group])
+                .status()
+                .map_err(|e| format!("failed to run getent: {}", e))?
+                .success();
+            if !group_exists {
+                let args = vec![group.to_string()];
+                run_cmd(dry_run, "groupadd", &args)?;
+            }
+
+            // Add daemon and agent users to group.
+            for user in [&daemon_user, agent_user].iter() {
+                let args = vec!["-aG".to_string(), group.to_string(), user.to_string()];
+                run_cmd(
+                    dry_run,
+                    "usermod",
+                    &args,
+                )?;
+            }
+
+            let args = vec![
+                "-d".to_string(),
+                "-m".to_string(),
+                "2750".to_string(),
+                "-o".to_string(),
+                daemon_user.clone(),
+                "-g".to_string(),
+                group.to_string(),
+                shared_dir.to_string_lossy().to_string(),
+            ];
+            run_cmd(
+                dry_run,
+                "install",
+                &args,
+            )?;
+        }
+
+        println!("Configured shared socket directory: {}", shared_dir.display());
+        println!("Added users to group '{}': {}, {}", group, daemon_user, agent_user);
+        println!();
+        println!("Next steps:");
+        println!("  1. Start the shared daemon:  aivaultd --shared");
+        println!("  2. On the agent account, run: aivault invoke <capability> ... (no env vars needed)");
+
+        Ok(())
+    }
+}
+
+fn run_setup_launchd(dry_run: bool) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = dry_run;
+        return Err("launchd setup is only available on macOS".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
+        let agents_dir = home.join("Library").join("LaunchAgents");
+        let logs_dir = home.join(".aivault").join("logs");
+        let label = "com.aivault.aivaultd.shared";
+        let plist_path = agents_dir.join(format!("{}.plist", label));
+
+        let uid_out = std::process::Command::new("id")
+            .arg("-u")
+            .output()
+            .map_err(|e| format!("failed to run id -u: {}", e))?;
+        if !uid_out.status.success() {
+            return Err("id -u failed".to_string());
+        }
+        let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
+        if uid.is_empty() {
+            return Err("id -u returned empty output".to_string());
+        }
+
+        let aivaultd = resolve_aivaultd_exe_path()?;
+
+        if dry_run {
+            println!("Would write: {}", plist_path.display());
+        } else {
+            std::fs::create_dir_all(&agents_dir).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+        }
+
+        let plist = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>{exe}</string>
+      <string>--shared</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{stdout}</string>
+    <key>StandardErrorPath</key>
+    <string>{stderr}</string>
+  </dict>
+</plist>
+"#,
+            label = label,
+            exe = aivaultd.to_string_lossy(),
+            stdout = logs_dir.join("aivaultd.log").to_string_lossy(),
+            stderr = logs_dir.join("aivaultd.err.log").to_string_lossy()
+        );
+
+        if dry_run {
+            println!("{}", plist);
+        } else {
+            std::fs::write(&plist_path, plist.as_bytes()).map_err(|e| e.to_string())?;
+        }
+
+        let domain = format!("gui/{}", uid);
+        let service = format!("{}/{}", domain, label);
+
+        // Prefer modern launchctl flow; fall back to legacy load/unload for older systems.
+        let bootout = vec![
+            "bootout".into(),
+            domain.clone(),
+            plist_path.to_string_lossy().to_string(),
+        ];
+        let bootstrap = vec![
+            "bootstrap".into(),
+            domain.clone(),
+            plist_path.to_string_lossy().to_string(),
+        ];
+        let enable = vec!["enable".into(), service.clone()];
+        let kickstart = vec!["kickstart".into(), "-k".into(), service.clone()];
+
+        // bootout may fail if not loaded; ignore in non-dry mode by not erroring on non-zero.
+        if dry_run {
+            run_cmd(dry_run, "launchctl", &bootout)?;
+        } else {
+            let _ = std::process::Command::new("launchctl").args(&bootout).status();
+        }
+        if let Err(e) = run_cmd(dry_run, "launchctl", &bootstrap) {
+            // Legacy fallback.
+            let load = vec!["load".into(), "-w".into(), plist_path.to_string_lossy().to_string()];
+            run_cmd(dry_run, "launchctl", &load).map_err(|_| e)?;
+        }
+        let _ = run_cmd(dry_run, "launchctl", &enable);
+        let _ = run_cmd(dry_run, "launchctl", &kickstart);
+
+        println!("Installed launchd LaunchAgent: {}", plist_path.display());
+        println!("Daemon should be running on shared socket: {}", daemon::shared_socket_path().display());
+        Ok(())
+    }
+}
+
+fn run_setup_systemd(daemon_user: &str, dry_run: bool) -> Result<(), String> {
+    #[cfg(not(unix))]
+    {
+        let _ = (daemon_user, dry_run);
+        return Err("systemd setup requires a unix-like OS".to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        // systemd is a linux concept; return a clear error on macOS.
+        #[cfg(target_os = "macos")]
+        {
+            let _ = (daemon_user, dry_run);
+            Err("systemd setup is only available on Linux".to_string())
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            require_root()?;
+            let daemon_user = daemon_user.trim();
+            if daemon_user.is_empty() {
+                return Err("--daemon-user is required".to_string());
+            }
+
+            let unit_name = "aivaultd-shared.service";
+            let unit_path = std::path::PathBuf::from("/etc/systemd/system").join(unit_name);
+            let aivaultd = resolve_aivaultd_exe_path()?;
+
+            let unit = format!(
+                r#"[Unit]
+Description=aivault shared daemon (aivaultd --shared)
+After=network.target
+
+[Service]
+Type=simple
+User={daemon_user}
+Group=aivault
+ExecStart={exe} --shared
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+"#,
+                daemon_user = daemon_user,
+                exe = aivaultd.to_string_lossy()
+            );
+
+            if dry_run {
+                println!("Would write: {}", unit_path.display());
+                println!("{}", unit);
+            } else {
+                std::fs::write(&unit_path, unit.as_bytes()).map_err(|e| e.to_string())?;
+            }
+
+            run_cmd(dry_run, "systemctl", &vec!["daemon-reload".into()])?;
+            run_cmd(
+                dry_run,
+                "systemctl",
+                &vec!["enable".into(), "--now".into(), unit_name.into()],
+            )?;
+
+            println!("Installed systemd unit: {}", unit_path.display());
+            println!(
+                "Daemon should be running on shared socket: {}",
+                daemon::shared_socket_path().display()
+            );
+            Ok(())
         }
     }
 }
@@ -1319,8 +1721,6 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
 
-    let socket_path = daemon::socket_path_from_env().unwrap_or_else(daemon::default_socket_path);
-
     let request = DaemonRequest::ExecuteEnvelope {
         envelope,
         client_ip: client_ip.to_string(),
@@ -1328,8 +1728,45 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
         group_id: group_id.map(|s| s.to_string()),
     };
 
-    let value = daemon::client_execute_envelope(&socket_path, request)?;
-    Ok(value)
+    // Thin invoke: try connecting without autostart (this path is meant to work even when the
+    // caller cannot read local vault state).
+    let env_socket = daemon::socket_path_from_env();
+    if let Some(p) = env_socket {
+        return daemon::client_execute_envelope(&p, request);
+    }
+
+    let user_socket = daemon::default_socket_path();
+    let shared_socket = daemon::shared_socket_path();
+
+    let attempt = daemon::client_execute_envelope_typed(&user_socket, request.clone());
+    match attempt {
+        Ok(v) => return Ok(v),
+        Err(crate::daemon::DaemonClientError::Connect(_)) => { /* fall through */ }
+        Err(crate::daemon::DaemonClientError::Protocol(e)) => {
+            return Err(format!(
+                "invalid response from aivaultd at '{}': {}",
+                user_socket.display(),
+                e
+            ));
+        }
+        Err(crate::daemon::DaemonClientError::Remote(e)) => return Err(e),
+    }
+
+    let attempt = daemon::client_execute_envelope_typed(&shared_socket, request);
+    attempt.map_err(|e| match e {
+        crate::daemon::DaemonClientError::Connect(err) => format!(
+            "failed connecting to aivaultd (tried '{}' and '{}'): {}",
+            user_socket.display(),
+            shared_socket.display(),
+            err
+        ),
+        crate::daemon::DaemonClientError::Protocol(err) => format!(
+            "invalid response from aivaultd at '{}': {}",
+            shared_socket.display(),
+            err
+        ),
+        crate::daemon::DaemonClientError::Remote(err) => err,
+    })
 }
 
 fn print_invoke_body(envelope_response: &Value) -> Result<(), String> {
@@ -2217,7 +2654,12 @@ fn maybe_run_capability_envelope(
 
     // Default to daemon-backed execution on unix platforms. This keeps CLI UX as `aivault <cmd>`
     // while ensuring secret use happens in the daemon boundary when available.
-    let socket_path = daemon::socket_path_from_env().unwrap_or_else(daemon::default_socket_path);
+    #[cfg(unix)]
+    let env_socket = daemon::socket_path_from_env();
+    #[cfg(unix)]
+    let user_socket = daemon::default_socket_path();
+    #[cfg(unix)]
+    let shared_socket = daemon::shared_socket_path();
 
     #[cfg(unix)]
     {
@@ -2231,24 +2673,24 @@ fn maybe_run_capability_envelope(
             group_id: group_id.map(|s| s.to_string()),
         };
 
-        let attempt = daemon::client_execute_envelope_typed(&socket_path, request.clone());
-        if let Err(crate::daemon::DaemonClientError::Connect(_)) = attempt {
-            let autostart_enabled = std::env::var("AIVAULTD_AUTOSTART")
-                .ok()
-                .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
-                .unwrap_or(true);
+        let autostart_enabled = std::env::var("AIVAULTD_AUTOSTART")
+            .ok()
+            .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(true);
+
+        let aivault_dir_set = std::env::var("AIVAULT_DIR")
+            .ok()
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        let autostart_once = env_flag_true("AIVAULTD_AUTOSTART_ONCE") || aivault_dir_set;
+
+        let autostart_and_retry = |socket_path: &std::path::Path| -> Result<Value, String> {
             if !autostart_enabled {
                 return Err(format!(
                     "aivaultd not running at '{}' (autostart disabled)",
                     socket_path.display()
                 ));
             }
-
-            let aivault_dir_set = std::env::var("AIVAULT_DIR")
-                .ok()
-                .map(|v| !v.trim().is_empty())
-                .unwrap_or(false);
-            let autostart_once = env_flag_true("AIVAULTD_AUTOSTART_ONCE") || aivault_dir_set;
 
             // Try to locate aivaultd alongside the current executable first.
             let mut daemon_exe = std::env::current_exe()
@@ -2282,7 +2724,7 @@ fn maybe_run_capability_envelope(
             // Wait for the daemon to become connectable, then retry the request.
             let deadline = Instant::now() + Duration::from_secs(2);
             loop {
-                match daemon::client_execute_envelope_typed(&socket_path, request.clone()) {
+                match daemon::client_execute_envelope_typed(socket_path, request.clone()) {
                     Ok(value) => {
                         if autostart_once {
                             let _ = child.wait();
@@ -2319,21 +2761,89 @@ fn maybe_run_capability_envelope(
                     }
                 }
             }
+        };
+
+        // Socket auto-discovery order (PRD):
+        // 1) AIVAULTD_SOCKET
+        // 2) per-user default
+        // 3) shared socket path
+        //
+        // Autostart is only attempted for the per-user socket after we've failed to connect to both
+        // per-user and shared sockets. This ensures agents don't autostart their own daemon when a
+        // shared operator daemon is available.
+        if let Some(p) = env_socket {
+            let attempt = daemon::client_execute_envelope_typed(&p, request.clone());
+            return match attempt {
+                Ok(v) => Ok(v),
+                Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                    if p == shared_socket {
+                        Err(format!(
+                            "failed connecting to aivaultd at '{}' (shared socket; autostart suppressed)",
+                            p.display()
+                        ))
+                    } else {
+                        autostart_and_retry(&p)
+                    }
+                }
+                Err(crate::daemon::DaemonClientError::Protocol(err)) => Err(format!(
+                    "invalid response from aivaultd at '{}': {}",
+                    p.display(),
+                    err
+                )),
+                Err(crate::daemon::DaemonClientError::Remote(err)) => Err(err),
+            };
         }
 
-        attempt.map_err(|e| match e {
-            crate::daemon::DaemonClientError::Connect(err) => format!(
-                "failed connecting to aivaultd at '{}': {}",
-                socket_path.display(),
-                err
-            ),
-            crate::daemon::DaemonClientError::Protocol(err) => format!(
+        // Try per-user socket first.
+        let attempt = daemon::client_execute_envelope_typed(&user_socket, request.clone());
+        match attempt {
+            Ok(v) => Ok(v),
+            Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                // Then try shared socket (no autostart here).
+                let shared_attempt =
+                    daemon::client_execute_envelope_typed(&shared_socket, request.clone());
+                match shared_attempt {
+                    Ok(v) => Ok(v),
+                    Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                        // Neither socket is connectable.
+                        //
+                        // If the shared socket directory exists, assume this machine is configured
+                        // for shared-daemon cross-user access and fail closed (do not autostart a
+                        // per-user daemon under the caller).
+                        if shared_socket
+                            .parent()
+                            .map(|p| p.exists())
+                            .unwrap_or(false)
+                        {
+                            return Err(format!(
+                                "aivaultd not running at shared socket '{}' (start it as the operator with `aivaultd --shared`)",
+                                shared_socket.display()
+                            ));
+                        }
+
+                        // Otherwise, autostart per-user daemon if allowed.
+                        autostart_and_retry(&user_socket).map_err(|e| {
+                            format!(
+                                "{e}\n(also tried shared socket '{}')",
+                                shared_socket.display()
+                            )
+                        })
+                    }
+                    Err(crate::daemon::DaemonClientError::Protocol(err)) => Err(format!(
+                        "invalid response from aivaultd at '{}': {}",
+                        shared_socket.display(),
+                        err
+                    )),
+                    Err(crate::daemon::DaemonClientError::Remote(err)) => Err(err),
+                }
+            }
+            Err(crate::daemon::DaemonClientError::Protocol(err)) => Err(format!(
                 "invalid response from aivaultd at '{}': {}",
-                socket_path.display(),
+                user_socket.display(),
                 err
-            ),
-            crate::daemon::DaemonClientError::Remote(err) => err,
-        })
+            )),
+            Err(crate::daemon::DaemonClientError::Remote(err)) => Err(err),
+        }
     }
 
     #[cfg(not(unix))]

@@ -98,42 +98,41 @@ The usual goal is:
 - agents can invoke capabilities by connecting to `aivaultd`
 - agents still cannot read the KEK source or decrypt secrets
 
-To do that on the same machine, expose only the **unix socket** to the agent user (not the vault key). This requires group-based permissions on the socket directory and socket file.
+To do that on the same machine, expose only the **unix socket** to the agent user (not the vault key). This uses group-based permissions on a shared socket directory.
 
-1. Create an `aivault` group and add both users:
+**Goal:** on the agent account, `aivault invoke ...` should work with **zero flags** and **no environment variables**.
 
-```bash
-sudo groupadd aivault || true
-sudo usermod -aG aivault aivault
-sudo usermod -aG aivault agent
-```
+#### Step-by-step (recommended)
 
-2. Create a shared runtime directory for the socket (example: `/var/run/aivault`):
+1. One-time: configure cross-user socket access (run as root):
 
 ```bash
-sudo mkdir -p /var/run/aivault
-sudo chown aivault:aivault /var/run/aivault
-sudo chmod 0750 /var/run/aivault
+sudo aivault setup agent-access --agent-user agent --daemon-user aivault
 ```
 
-3. Run `aivaultd` as the `aivault` user with a group-readable socket:
+2. Start the shared daemon (operator side):
 
 ```bash
-sudo -u aivault -H env \\
-  AIVAULTD_SOCKET=/var/run/aivault/aivaultd.sock \\
-  AIVAULTD_SOCKET_DIR_MODE=0750 \\
-  AIVAULTD_SOCKET_MODE=0660 \\
-  aivaultd
+sudo -u aivault -H aivaultd --shared
 ```
 
-4. Configure the agent runtime to use that socket and avoid autostarting its own daemon:
+Or install a systemd service (recommended when available):
 
 ```bash
-export AIVAULTD_SOCKET=/var/run/aivault/aivaultd.sock
-export AIVAULTD_AUTOSTART=0
+sudo aivault setup systemd --daemon-user aivault
 ```
 
-Now the agent can run `aivault invoke ...` against capabilities that the daemon knows about, without ever seeing the provider API keys.
+3. Agent usage (agent user):
+
+```bash
+sudo -u agent -H aivault invoke openai/chat-completions --method POST --path /v1/chat/completions --body '...'
+```
+
+No `--shared`, no `AIVAULTD_SOCKET`, no `AIVAULTD_AUTOSTART=0`.
+
+How it works:
+- The `aivault` CLI auto-discovers a shared daemon socket at `/var/run/aivault/aivaultd.sock`.
+- When invoking via the shared socket, autostart is suppressed (the agent user cannot and should not try to start its own daemon).
 
 Notes:
 - This works best with registry-backed capabilities. For custom capabilities, prefer invoking via `--request` / `--request-file` and include `--method` + `--path` explicitly.
@@ -180,13 +179,17 @@ aivault audit --limit 200
 
 ## Running with `aivaultd`
 
-On Linux, `aivault invoke` uses `aivaultd` by default (unix socket). For server deployments, you’ll typically want the daemon to already be running:
+On Linux, `aivault invoke` uses `aivaultd` by default (unix socket).
+
+If you used `aivaultd --shared` or `aivault setup systemd` (the recommended cross-user pattern above), autostart is automatically suppressed on the agent account — no env vars needed.
+
+For **single-user** server deployments where you run the daemon under a process supervisor but _not_ via the shared socket, disable autostart so the CLI doesn’t start a redundant daemon:
 
 ```bash
 export AIVAULTD_AUTOSTART=0
 ```
 
-Then run `aivaultd` under your process supervisor and point the CLI at its socket (optional):
+Then run `aivaultd` under your process supervisor and point the CLI at its socket:
 
 ```bash
 aivaultd --socket ~/.aivault/run/aivaultd.sock
@@ -204,7 +207,37 @@ This is a practical pattern when you have an app that may run “agent-like” c
 - `aivaultd` can decrypt and inject auth (it has access to the KEK).
 - Your app/agent process can invoke capabilities, but does not have the KEK in its environment.
 
-### Pattern: env-provider KEK only for the daemon process
+### Pattern A (preferred): separate users + shared daemon socket
+
+If your Fly Machine image allows multiple unix users, this is the strongest “same machine” pattern:
+- `aivault` user owns the vault + KEK.
+- `agent` user runs the app/agent runtime.
+- The app/agent calls `aivault invoke ...` and the CLI auto-discovers the shared daemon socket.
+
+High-level steps:
+1. Create users `aivault` and `agent` in your image.
+2. Install `aivault` + `aivaultd` into a root-owned path (e.g. `/usr/local/bin`).
+3. As root at boot, run:
+
+```bash
+aivault setup agent-access --agent-user agent --daemon-user aivault
+```
+
+4. Start the daemon under the `aivault` user:
+
+```bash
+sudo -u aivault -H aivaultd --shared
+```
+
+5. Run your app/agent runtime as the `agent` user; it can now call:
+
+```bash
+aivault invoke openai/chat-completions --method POST --path /v1/chat/completions --body '...'
+```
+
+If your base image doesn’t include `sudo`, use the equivalent user-switching tool it does provide (for example `su`, `runuser`, `setpriv`, or an init supervisor that can run services as a specified user).
+
+### Pattern B (fallback): env-provider KEK only for the daemon process
 
 1. Store a random KEK as a Fly secret (do this as a human, not via an agent):
 

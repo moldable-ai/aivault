@@ -126,6 +126,42 @@ pub enum Command {
         #[arg(long)]
         wrap_field: Vec<String>,
     },
+    /// System setup helpers (cross-user agent access, service installation)
+    Setup {
+        #[command(subcommand)]
+        command: SetupCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SetupCommand {
+    /// Configure OS group membership and shared socket directory for cross-user invocation
+    AgentAccess {
+        /// The OS user your untrusted agent runs as
+        #[arg(long)]
+        agent_user: String,
+        /// The OS user that will run aivaultd (defaults to $SUDO_USER)
+        #[arg(long)]
+        daemon_user: Option<String>,
+        /// Print what would change without applying it
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Install/enable a launchd LaunchAgent to run `aivaultd --shared` (macOS)
+    Launchd {
+        /// Print what would change without applying it
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Install/enable a systemd service to run `aivaultd --shared` (Linux)
+    Systemd {
+        /// The OS user that will run aivaultd (commonly: aivault)
+        #[arg(long)]
+        daemon_user: String,
+        /// Print what would change without applying it
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Clone, Args)]

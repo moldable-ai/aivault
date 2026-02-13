@@ -41,6 +41,24 @@ By default, `aivault invoke` auto-starts the daemon if it's not already running.
 - If `AIVAULT_DIR` is set: `$AIVAULT_DIR/run/aivaultd.sock`
 - Override: `$AIVAULTD_SOCKET`
 
+## Shared daemon mode (cross-user invocation)
+
+If you run untrusted agents under a separate OS user on the same machine, you can run a single daemon under your operator account and expose only its unix socket to the agent user.
+
+Start the daemon in shared mode:
+
+```bash
+aivaultd --shared
+```
+
+In shared mode:
+- The daemon listens on a well-known shared socket path:
+  - macOS: `/Users/Shared/aivault/run/aivaultd.sock`
+  - Linux: `/var/run/aivault/aivaultd.sock`
+- Socket permissions are relaxed for group access (`0660`) and the socket directory is set to `0750`.
+- The `aivault` CLI auto-discovers the shared socket, so the agent user can run `aivault invoke ...` with no extra flags or env vars.
+- When invoking via the shared socket, auto-start is suppressed (the agent account cannot and should not try to start its own daemon).
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -62,6 +80,9 @@ aivaultd
 
 # Or specify a socket explicitly
 aivaultd --socket ~/.aivault/run/aivaultd.sock
+
+# Use the shared socket path + group-friendly permissions
+aivaultd --shared
 
 # Serve a single request and exit (useful for tests)
 aivaultd --once

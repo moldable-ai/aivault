@@ -28,58 +28,58 @@ The exact set of registry-backed providers and capabilities is compiled from `re
 Providers currently in the built-in registry include:
 
 ### AI / ML
-- OpenAI
-- Anthropic
-- Gemini
-- Replicate
-- OpenRouter
-- ElevenLabs
-- Deepgram
+- **OpenAI** — chat completions, transcription, translation, embeddings, images, TTS, fine-tuning, files, assistants, vector stores, batches, moderations, models, responses
+- **Anthropic** — messages, models
+- **Gemini** — generate content, models
+- **Replicate** — predictions, deployments, models
+- **OpenRouter** — chat completions, models
+- **ElevenLabs** — text-to-speech, voices, models, sound effects
+- **Deepgram** — transcription, models
 
 ### Communication
-- Slack
-- Discord
-- Twilio
-- Telegram
+- **Slack** — messages, channels, users, files, reactions, conversations, views, reminders, bookmarks, pins, search, team info, bots, auth test, user groups
+- **Discord** — channels, messages, guilds, users, interactions, webhooks
+- **Twilio** — messages, calls, accounts
+- **Telegram** — messages, updates, webhooks, chat management, stickers, files, bot info
 
 ### Productivity
-- Notion
-- Airtable
-- Linear
-- Todoist
-- Calendly
-- Trello
+- **Notion** — pages, databases, blocks, search, users, comments
+- **Airtable** — records, tables, bases
+- **Linear** — GraphQL API
+- **Todoist** — tasks, projects, sections, comments, labels
+- **Calendly** — events, event types, users, invitees, webhooks
+- **Trello** — boards, lists, cards, members, checklists, labels, actions, search, organizations, custom fields, plugins, tokens, notifications, webhooks, batch, types, enterprise
 
 ### CRM
-- HubSpot
-- Intercom
+- **HubSpot** — contacts, companies, deals, engagements, pipelines
+- **Intercom** — contacts, conversations, admins, tags, segments, events
 
 ### Email
-- Resend
-- SendGrid
-- Postmark
-- Mailgun
+- **Resend** — send email, domains, API keys, audiences, contacts, broadcasts
+- **SendGrid** — send mail, contacts, lists, templates
+- **Postmark** — send email, templates, servers, message streams, domains, webhooks
+- **Mailgun** — send messages, domains, routes, events, webhooks
 
 ### E-commerce / Payments
-- Shopify
-- Stripe
-- Square
+- **Shopify** — products, orders, customers, inventory
+- **Stripe** — charges, customers, subscriptions, payment intents
+- **Square** — payments, orders, customers, catalog
 
 ### Accounting
-- QuickBooks
-- Xero
+- **QuickBooks** — query, invoices, customers, accounts
+- **Xero** — invoices, contacts, accounts, bank transactions
 
 ### Social / Media
-- X
-- Reddit
-- Spotify
-- YouTube Data
+- **X** — tweets, users, search, lists, spaces
+- **Reddit** — subreddits, posts, comments, user info, search, me
+- **Spotify** — playlists, tracks, search, albums, artists, player
+- **YouTube Data** — search, videos, channels, playlists, subscriptions
 
 ### Dev tools
-- GitHub
+- **GitHub** — repos, issues, pull requests, actions, users, search, gists, orgs, git
 
 ### Maps / Places
-- Google Places
+- **Google Places** — place search, details, photos, autocomplete
 
 ## Browsing the registry
 
