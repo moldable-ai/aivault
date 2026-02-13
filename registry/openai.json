@@ -10,12 +10,156 @@
   "hosts": ["api.openai.com"],
   "capabilities": [
     {
+      "id": "openai/chat-completions",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/chat/completions"]
+      }
+    },
+    {
+      "id": "openai/responses",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/responses"]
+      }
+    },
+    {
+      "id": "openai/embeddings",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/embeddings"]
+      }
+    },
+    {
       "id": "openai/transcription",
       "provider": "openai",
       "allow": {
         "hosts": ["api.openai.com"],
         "methods": ["POST"],
         "pathPrefixes": ["/v1/audio/transcriptions"]
+      }
+    },
+    {
+      "id": "openai/translation",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/audio/translations"]
+      }
+    },
+    {
+      "id": "openai/speech",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/audio/speech"]
+      }
+    },
+    {
+      "id": "openai/image-generation",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/images"]
+      }
+    },
+    {
+      "id": "openai/moderation",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/moderations"]
+      }
+    },
+    {
+      "id": "openai/models",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["GET", "DELETE"],
+        "pathPrefixes": ["/v1/models"]
+      }
+    },
+    {
+      "id": "openai/files",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/files"]
+      }
+    },
+    {
+      "id": "openai/fine-tuning",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/fine_tuning"]
+      }
+    },
+    {
+      "id": "openai/batch",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/batches"]
+      }
+    },
+    {
+      "id": "openai/vector-stores",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/vector_stores"]
+      }
+    },
+    {
+      "id": "openai/assistants",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/assistants", "/v1/threads"]
+      }
+    },
+    {
+      "id": "openai/uploads",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/uploads"]
+      }
+    },
+    {
+      "id": "openai/realtime",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/realtime"]
+      }
+    },
+    {
+      "id": "openai/videos",
+      "provider": "openai",
+      "allow": {
+        "hosts": ["api.openai.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/videos"]
       }
     }
   ]

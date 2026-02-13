@@ -17,7 +17,7 @@ use crate::broker::{
     UpstreamResponse,
 };
 use crate::broker_store::{BrokerStore, StoredCapabilityPolicy, StoredCredential};
-use crate::capabilities::{CapabilityBinding, CapabilityScope, CapabilityStore};
+use crate::capabilities::{CapabilityScope, CapabilityStore};
 use crate::cli::{
     AuthKind, CapabilitiesCommand, CapabilityCommand, CapabilityPolicyCommand, Cli, Command,
     CredentialCommand, InvokeArgs, OauthCommand, ProviderKind, ScopeKind, SecretsCommand,
@@ -91,29 +91,6 @@ pub fn run(cli: Cli) -> Result<(), String> {
             exclude_field,
             wrap_field,
         } => run_invoke_markdown(&vault, args, namespace, exclude_field, wrap_field),
-        Command::Resolve { secret_ref, raw } => {
-            let value = vault
-                .resolve_secret_ref(&secret_ref, Some("vault.resolve"), Some("aivault-cli"))
-                .map_err(|e| e.to_string())?;
-            print_resolved_value(&secret_ref, value, raw)
-        }
-        Command::ResolveTeam {
-            secret_ref,
-            workspace_id,
-            team,
-            raw,
-        } => {
-            let value = vault
-                .resolve_secret_ref_for_team(
-                    &secret_ref,
-                    &workspace_id,
-                    &team,
-                    Some("vault.resolve_team"),
-                    Some("aivault-cli"),
-                )
-                .map_err(|e| e.to_string())?;
-            print_resolved_value(&secret_ref, value, raw)
-        }
     }
 }
 
@@ -175,7 +152,7 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
         SecretsCommand::List {
             scope,
             workspace_id,
-            team,
+            group_id,
         } => {
             let mut list = vault.list_secrets().map_err(|e| e.to_string())?;
             if let Some(scope_kind) = scope {
@@ -184,7 +161,7 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
                         &meta.scope,
                         &scope_kind,
                         workspace_id.as_deref(),
-                        team.as_deref(),
+                        group_id.as_deref(),
                     )
                 });
             }
@@ -195,10 +172,10 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
             value,
             scope,
             workspace_id,
-            team,
+            group_id,
             alias,
         } => {
-            let scope = parse_secret_scope(scope, workspace_id.as_deref(), team.as_deref())?;
+            let scope = parse_secret_scope(scope, workspace_id.as_deref(), group_id.as_deref())?;
             let meta = vault
                 .create_secret(&name, value.as_bytes(), scope, alias)
                 .map_err(|e| e.to_string())?;
@@ -232,23 +209,23 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
             let meta = vault.revoke_secret(&id).map_err(|e| e.to_string())?;
             print_json(&meta)
         }
-        SecretsCommand::AttachTeam {
+        SecretsCommand::AttachGroup {
             id,
             workspace_id,
-            team,
+            group_id,
         } => {
             let meta = vault
-                .attach_secret_to_team(&id, &workspace_id, &team)
+                .attach_secret_to_group(&id, &workspace_id, &group_id)
                 .map_err(|e| e.to_string())?;
             print_json(&meta)
         }
-        SecretsCommand::DetachTeam {
+        SecretsCommand::DetachGroup {
             id,
             workspace_id,
-            team,
+            group_id,
         } => {
             let meta = vault
-                .detach_secret_from_team(&id, &workspace_id, &team)
+                .detach_secret_from_group(&id, &workspace_id, &group_id)
                 .map_err(|e| e.to_string())?;
             print_json(&meta)
         }
@@ -256,9 +233,9 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
             entry,
             scope,
             workspace_id,
-            team,
+            group_id,
         } => {
-            let scope = parse_secret_scope(scope, workspace_id.as_deref(), team.as_deref())?;
+            let scope = parse_secret_scope(scope, workspace_id.as_deref(), group_id.as_deref())?;
             let mut entries = BTreeMap::new();
             for raw in entry {
                 let Some((key, value)) = raw.split_once('=') else {
@@ -328,14 +305,14 @@ fn run_capabilities(vault: &VaultRuntime, command: CapabilitiesCommand) -> Resul
             capability,
             scope,
             workspace_id,
-            team,
+            group_id,
             consumer,
         } => {
             let scope_filter = if let Some(scope) = scope {
                 Some(parse_capability_scope(
                     scope,
                     workspace_id.as_deref(),
-                    team.as_deref(),
+                    group_id.as_deref(),
                 )?)
             } else {
                 None
@@ -360,7 +337,7 @@ fn run_capabilities(vault: &VaultRuntime, command: CapabilitiesCommand) -> Resul
             secret_ref,
             scope,
             workspace_id,
-            team,
+            group_id,
             consumer,
         } => {
             let parsed = SecretRef::parse(&secret_ref)?;
@@ -368,7 +345,8 @@ fn run_capabilities(vault: &VaultRuntime, command: CapabilitiesCommand) -> Resul
                 .get_secret_meta(&parsed.secret_id)
                 .map_err(|e| format!("secret does not exist: {}", e))?;
 
-            let scope = parse_capability_scope(scope, workspace_id.as_deref(), team.as_deref())?;
+            let scope =
+                parse_capability_scope(scope, workspace_id.as_deref(), group_id.as_deref())?;
             let binding = store.upsert(&capability, &secret_ref, scope, consumer)?;
             store.save()?;
             print_json(&binding)
@@ -377,10 +355,11 @@ fn run_capabilities(vault: &VaultRuntime, command: CapabilitiesCommand) -> Resul
             capability,
             scope,
             workspace_id,
-            team,
+            group_id,
             consumer,
         } => {
-            let scope = parse_capability_scope(scope, workspace_id.as_deref(), team.as_deref())?;
+            let scope =
+                parse_capability_scope(scope, workspace_id.as_deref(), group_id.as_deref())?;
             let removed = store.remove(&capability, &scope, consumer.as_deref());
             if removed {
                 store.save()?;
@@ -388,37 +367,6 @@ fn run_capabilities(vault: &VaultRuntime, command: CapabilitiesCommand) -> Resul
             print_json(&serde_json::json!({
                 "removed": removed,
                 "path": store.path().display().to_string()
-            }))
-        }
-        CapabilitiesCommand::Resolve {
-            capability,
-            workspace_id,
-            team,
-            consumer,
-            raw,
-        } => {
-            let binding = store
-                .resolve(
-                    &capability,
-                    workspace_id.as_deref(),
-                    team.as_deref(),
-                    consumer.as_deref(),
-                )
-                .ok_or_else(|| format!("no binding found for capability '{}'", capability))?;
-
-            let value =
-                resolve_binding_value(vault, &binding, workspace_id.as_deref(), team.as_deref())?;
-
-            if raw {
-                let text = String::from_utf8(value)
-                    .map_err(|_| "secret is not valid UTF-8; use non-raw mode".to_string())?;
-                println!("{}", text);
-                return Ok(());
-            }
-
-            print_json(&serde_json::json!({
-                "binding": binding,
-                "valueB64": base64::engine::general_purpose::STANDARD.encode(value)
             }))
         }
     }
@@ -456,6 +404,8 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             id,
             provider,
             secret_ref,
+            workspace_id,
+            group_id,
             auth,
             host,
             header_name,
@@ -485,6 +435,20 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 return Err("credential provider is required".to_string());
             }
             let provider_defaults = registry.provider(&provider).cloned();
+
+            let workspace_id = workspace_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(|v| v.to_string());
+            let group_id = group_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(|v| v.to_string());
+            if group_id.is_some() && workspace_id.is_none() {
+                return Err("--workspace-id is required when --group-id is provided".to_string());
+            }
 
             let auth = match auth {
                 Some(auth_kind) => build_auth_strategy(
@@ -527,6 +491,8 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             let credential = StoredCredential {
                 id,
                 provider,
+                workspace_id,
+                group_id,
                 auth,
                 hosts,
                 secret_ref,
@@ -731,6 +697,8 @@ fn invoke_with_store(
     store: &BrokerStore,
     args: InvokeArgs,
 ) -> Result<(), String> {
+    let (workspace_id, group_id) =
+        normalize_invoke_context(args.workspace_id.as_deref(), args.group_id.as_deref())?;
     let capability = store
         .find_capability(args.id.trim())
         .ok_or_else(|| format!("capability '{}' not found", args.id.trim()))?;
@@ -739,7 +707,8 @@ fn invoke_with_store(
         .client_ip
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
-    let response = run_capability_envelope(vault, store, envelope, client_ip)?;
+    let response =
+        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
     print_invoke_body(&response)
 }
 
@@ -748,6 +717,8 @@ fn invoke_json_with_store(
     store: &BrokerStore,
     args: InvokeArgs,
 ) -> Result<(), String> {
+    let (workspace_id, group_id) =
+        normalize_invoke_context(args.workspace_id.as_deref(), args.group_id.as_deref())?;
     let capability = store
         .find_capability(args.id.trim())
         .ok_or_else(|| format!("capability '{}' not found", args.id.trim()))?;
@@ -756,7 +727,8 @@ fn invoke_json_with_store(
         .client_ip
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
-    let response = run_capability_envelope(vault, store, envelope, client_ip)?;
+    let response =
+        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
 
     let planned = response
         .get("planned")
@@ -794,6 +766,8 @@ fn invoke_markdown_with_store(
     exclude_field: Vec<String>,
     wrap_field: Vec<String>,
 ) -> Result<(), String> {
+    let (workspace_id, group_id) =
+        normalize_invoke_context(args.workspace_id.as_deref(), args.group_id.as_deref())?;
     let capability = store
         .find_capability(args.id.trim())
         .ok_or_else(|| format!("capability '{}' not found", args.id.trim()))?;
@@ -802,7 +776,8 @@ fn invoke_markdown_with_store(
         .client_ip
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
-    let response = run_capability_envelope(vault, store, envelope, client_ip)?;
+    let response =
+        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
 
     let bytes = extract_invoke_body_bytes(&response)?;
     let value = if let Ok(json) = serde_json::from_slice::<Value>(&bytes) {
@@ -851,6 +826,9 @@ fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), Strin
         .find_capability(id)
         .ok_or_else(|| format!("capability '{}' not found", id))?;
 
+    // `describe` is primarily a "how do I call this?" UX. Defaults must only be set when the
+    // capability shape is unambiguous, but we still include structured guidance so users can learn
+    // how to invoke multi-method / multi-path capabilities without reading the source.
     let default_method = if capability.allow.methods.len() == 1 {
         Some(capability.allow.methods[0].clone())
     } else {
@@ -869,6 +847,113 @@ fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), Strin
     if default_path.is_none() {
         required.push("--path");
     }
+
+    let mut notes: Vec<String> = Vec::new();
+    if default_method.is_none() {
+        notes.push(format!(
+            "Multiple methods allowed; pass --method (one of: {}).",
+            capability.allow.methods.join(", ")
+        ));
+    } else if let Some(m) = &default_method {
+        notes.push(format!("Default method is {} (only allowed method).", m));
+    }
+    if default_path.is_none() {
+        notes.push(format!(
+            "Multiple path prefixes allowed; pass --path (must start with one of: {}).",
+            capability.allow.path_prefixes.join(", ")
+        ));
+    } else if let Some(p) = &default_path {
+        notes.push(format!(
+            "Default path prefix is {} (only allowed path prefix).",
+            p
+        ));
+    }
+    notes.push(
+        "Use --request / --request-file to supply a full request object (method/path/headers/body) in one go."
+            .to_string(),
+    );
+    notes.push(
+        "If you have multiple credentials for the same provider, pin one with --credential <id>."
+            .to_string(),
+    );
+
+    let method_hint = capability
+        .allow
+        .methods
+        .iter()
+        .find(|m| m.as_str() == "POST")
+        .cloned()
+        .or_else(|| capability.allow.methods.first().cloned())
+        .unwrap_or_else(|| "GET".to_string());
+    let path_hint = capability
+        .allow
+        .path_prefixes
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "/".to_string());
+
+    let mut examples: Vec<Value> = Vec::new();
+    let mut minimal = format!("aivault invoke {}", capability.id);
+    if default_method.is_none() {
+        minimal.push_str(&format!(" --method {}", method_hint));
+    }
+    if default_path.is_none() {
+        minimal.push_str(&format!(" --path {}", path_hint));
+    }
+    examples.push(serde_json::json!({
+        "title": "Minimal invocation (add required flags)",
+        "command": minimal
+    }));
+
+    // For capabilities that are commonly JSON POSTs, show a "body" example without pretending to
+    // know the upstream schema.
+    if capability.allow.methods.iter().any(|m| m == "POST") {
+        let mut json_post = format!("aivault invoke {}", capability.id);
+        if default_method.is_none() {
+            json_post.push_str(" --method POST");
+        }
+        if default_path.is_none() {
+            json_post.push_str(&format!(" --path {}", path_hint));
+        }
+        json_post.push_str(" --header content-type=application/json --body '{\"todo\":\"fill\"}'");
+        examples.push(serde_json::json!({
+            "title": "JSON body example (when upstream expects JSON)",
+            "command": json_post
+        }));
+    }
+
+    // Template objects for `--request` / `--request-file`.
+    let request_template = serde_json::json!({
+        "method": default_method.clone().unwrap_or_else(|| method_hint.clone()),
+        "path": default_path.clone().unwrap_or_else(|| path_hint.clone()),
+        "headers": []
+    });
+    let envelope_template = serde_json::json!({
+        "capability": capability.id,
+        "request": request_template
+    });
+    let request_inline_payload = serde_json::json!({
+        "method": default_method.clone().unwrap_or_else(|| method_hint.clone()),
+        "path": default_path.clone().unwrap_or_else(|| path_hint.clone()),
+        "headers": []
+    });
+    let request_inline = format!(
+        "aivault invoke {} --request '{}'",
+        capability.id, request_inline_payload
+    );
+    examples.push(serde_json::json!({
+        "title": "Inline request payload example",
+        "command": request_inline
+    }));
+
+    let how_to = serde_json::json!({
+        "notes": notes,
+        "examples": examples,
+        "templates": {
+            "request": request_template,
+            "envelope": envelope_template
+        }
+    });
 
     let payload = serde_json::json!({
         "capability": capability.id,
@@ -891,15 +976,33 @@ fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), Strin
                 "--body-file-path PATH",
                 "--multipart-field KEY=VALUE",
                 "--multipart-file FIELD=PATH",
+                "--workspace-id ID",
+                "--group-id ID",
                 "--client-ip IP"
             ],
             "payloadModes": [
                 "--request '<json request or envelope>'",
                 "--request-file <path>"
-            ]
+            ],
+            "howTo": how_to
         }
     });
     print_json(&payload)
+}
+
+fn normalize_invoke_context<'a>(
+    workspace_id: Option<&'a str>,
+    group_id: Option<&'a str>,
+) -> Result<(Option<&'a str>, Option<&'a str>), String> {
+    let ws = workspace_id.map(str::trim).filter(|v| !v.is_empty());
+    let group_id = group_id.map(str::trim).filter(|v| !v.is_empty());
+    if group_id.is_some() && ws.is_none() {
+        return Err("--workspace-id is required when --group-id is provided".to_string());
+    }
+    if ws.is_some() && group_id.is_none() {
+        return Err("--group-id is required when --workspace-id is provided".to_string());
+    }
+    Ok((ws, group_id))
 }
 
 fn build_capability_call_envelope(
@@ -918,6 +1021,8 @@ fn build_capability_call_envelope(
         multipart_field,
         multipart_file,
         credential,
+        workspace_id: _,
+        group_id: _,
         client_ip: _,
     } = args;
     let has_payload = request.is_some() || request_file.is_some();
@@ -1111,8 +1216,16 @@ fn run_capability_envelope(
     store: &BrokerStore,
     envelope: ProxyEnvelope,
     client_ip: IpAddr,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
 ) -> Result<Value, String> {
-    let mut broker = load_runtime_broker(vault, store)?;
+    let mut broker = load_runtime_broker_for_context(
+        vault,
+        store,
+        envelope.credential.as_deref(),
+        workspace_id,
+        group_id,
+    )?;
     let token = broker
         .mint_proxy_token(
             &RequestAuth::Operator("operator-cli".to_string()),
@@ -1120,7 +1233,18 @@ fn run_capability_envelope(
                 capabilities: vec![envelope.capability.clone()],
                 credential: envelope.credential.clone(),
                 ttl_ms: 60_000,
-                context: HashMap::from([("source".to_string(), "aivault-cli".to_string())]),
+                context: {
+                    let mut ctx =
+                        HashMap::from([("source".to_string(), "aivault-cli".to_string())]);
+                    if let (Some(ws), Some(group_id)) = (
+                        workspace_id.map(str::trim).filter(|v| !v.is_empty()),
+                        group_id.map(str::trim).filter(|v| !v.is_empty()),
+                    ) {
+                        ctx.insert("workspaceId".to_string(), ws.to_string());
+                        ctx.insert("groupId".to_string(), group_id.to_string());
+                    }
+                    ctx
+                },
             },
         )
         .map_err(|e| e.to_string())?;
@@ -1187,7 +1311,13 @@ fn build_auth_strategy(auth: AuthKind, options: AuthBuildOptions) -> AuthStrateg
     }
 }
 
-fn load_runtime_broker(vault: &VaultRuntime, store: &BrokerStore) -> Result<Broker, String> {
+fn load_runtime_broker_for_context(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    requested_credential_id: Option<&str>,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> Result<Broker, String> {
     let mut cfg = BrokerConfig::default();
     if env_flag_true("AIVAULT_DEV_ALLOW_HTTP_LOCAL") {
         cfg.allow_http_local_extension = true;
@@ -1200,33 +1330,73 @@ fn load_runtime_broker(vault: &VaultRuntime, store: &BrokerStore) -> Result<Brok
     }
 
     let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
+    // Keep a copy to canonicalize any persisted (and thus potentially tamperable) broker store
+    // entries back to the compiled-in registry policy.
+    let registry_lookup = registry.clone();
     let mut broker = Broker::new(cfg, Some(registry));
     let operator = RequestAuth::Operator("operator-cli".to_string());
 
     for stored in store.credentials() {
-        let secret = vault
-            .resolve_secret_ref(
-                &stored.secret_ref,
-                Some("broker.credential.load"),
-                Some("aivault-cli"),
-            )
-            .map_err(|e| e.to_string())?;
+        if !credential_matches_context(stored, workspace_id, group_id) {
+            continue;
+        }
+
+        // A context-aware invoke should not fail closed just because an unrelated credential
+        // isn't available in this context (e.g. global secret not attached to group).
+        let is_requested = requested_credential_id
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty())
+            .is_some_and(|id| id == stored.id);
+
+        let secret = resolve_secret_ref_for_context(
+            vault,
+            &stored.secret_ref,
+            workspace_id,
+            group_id,
+            Some("broker.credential.load"),
+            Some("aivault-cli"),
+        );
+        let secret = match secret {
+            Ok(secret) => secret,
+            Err(err) => {
+                if is_requested {
+                    return Err(err);
+                }
+                continue;
+            }
+        };
         let secret = secret_material_from_bytes(&stored.auth, secret)?;
+
+        let is_registry_provider = registry_lookup.provider(&stored.provider).is_some();
+        // For registry-backed providers, ignore persisted auth/hosts overrides and re-derive from
+        // compiled-in registry templates to prevent policy tampering via broker.json edits.
+        let input = CredentialInput {
+            id: stored.id.clone(),
+            provider: stored.provider.clone(),
+            auth: if is_registry_provider {
+                None
+            } else {
+                Some(stored.auth.clone())
+            },
+            hosts: if is_registry_provider {
+                None
+            } else {
+                Some(stored.hosts.clone())
+            },
+        };
+
         broker
-            .create_credential(
-                &operator,
-                CredentialInput {
-                    id: stored.id.clone(),
-                    provider: stored.provider.clone(),
-                    auth: Some(stored.auth.clone()),
-                    hosts: Some(stored.hosts.clone()),
-                },
-                secret,
-            )
+            .create_credential(&operator, input, secret)
             .map_err(|e| e.to_string())?;
     }
 
     for capability in store.capabilities() {
+        if let Some(canonical) = registry_lookup.capability(&capability.id) {
+            broker
+                .upsert_capability(&operator, canonical)
+                .map_err(|e| e.to_string())?;
+            continue;
+        }
         broker
             .upsert_capability(&operator, capability.clone())
             .map_err(|e| e.to_string())?;
@@ -1238,6 +1408,75 @@ fn load_runtime_broker(vault: &VaultRuntime, store: &BrokerStore) -> Result<Brok
     }
 
     Ok(broker)
+}
+
+fn resolve_secret_ref_for_context(
+    vault: &VaultRuntime,
+    secret_ref: &str,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+    capability: Option<&str>,
+    consumer: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    let ws = workspace_id.map(str::trim).filter(|v| !v.is_empty());
+    let group_id = group_id.map(str::trim).filter(|v| !v.is_empty());
+    if group_id.is_some() && ws.is_none() {
+        return Err("--workspace-id is required when --group-id is provided".to_string());
+    }
+    if let Some(ws) = ws {
+        let group_id = group_id
+            .ok_or_else(|| "--group-id is required when --workspace-id is provided".to_string())?;
+        return vault
+            .resolve_secret_ref_for_group(secret_ref, ws, group_id, capability, consumer)
+            .map_err(|e| e.to_string());
+    }
+    vault
+        .resolve_secret_ref(secret_ref, capability, consumer)
+        .map_err(|e| e.to_string())
+}
+
+fn credential_matches_context(
+    credential: &StoredCredential,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> bool {
+    let ws = workspace_id.map(str::trim).filter(|v| !v.is_empty());
+    let group_id = group_id.map(str::trim).filter(|v| !v.is_empty());
+
+    if group_id.is_some() && ws.is_none() {
+        return false;
+    }
+
+    // When no context is provided, only global credentials are eligible.
+    let cred_ws = credential
+        .workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    let cred_group_id = credential
+        .group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+
+    if ws.is_none() && group_id.is_none() {
+        return cred_ws.is_none() && cred_group_id.is_none();
+    }
+
+    // Workspace-scoped credential: allow any group in the workspace.
+    if let Some(cred_ws) = cred_ws {
+        if ws != Some(cred_ws) {
+            return false;
+        }
+        // Group-scoped credential: require exact match.
+        if let Some(cred_group_id) = cred_group_id {
+            return group_id == Some(cred_group_id);
+        }
+        return true;
+    }
+
+    // Global credential: eligible in any context (secret resolution will enforce attachments).
+    true
 }
 
 fn env_flag_true(name: &str) -> bool {
@@ -1558,37 +1797,10 @@ fn pct_encode(value: &str) -> String {
     out
 }
 
-fn resolve_binding_value(
-    vault: &VaultRuntime,
-    binding: &CapabilityBinding,
-    workspace_id: Option<&str>,
-    team: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    if let (Some(workspace_id), Some(team)) = (workspace_id, team) {
-        return vault
-            .resolve_secret_ref_for_team(
-                &binding.secret_ref,
-                workspace_id,
-                team,
-                Some(&binding.capability),
-                binding.consumer.as_deref().or(Some("aivault-cli")),
-            )
-            .map_err(|e| e.to_string());
-    }
-
-    vault
-        .resolve_secret_ref(
-            &binding.secret_ref,
-            Some(&binding.capability),
-            binding.consumer.as_deref().or(Some("aivault-cli")),
-        )
-        .map_err(|e| e.to_string())
-}
-
 fn parse_secret_scope(
     scope: ScopeKind,
     workspace_id: Option<&str>,
-    team: Option<&str>,
+    group_id: Option<&str>,
 ) -> Result<SecretScope, String> {
     match scope {
         ScopeKind::Global => Ok(SecretScope::Global),
@@ -1598,12 +1810,12 @@ fn parse_secret_scope(
                 workspace_id: workspace_id.to_string(),
             })
         }
-        ScopeKind::Team => {
+        ScopeKind::Group => {
             let workspace_id = required_arg("workspace-id", workspace_id)?;
-            let team = required_arg("team", team)?;
-            Ok(SecretScope::Team {
+            let group_id = required_arg("group-id", group_id)?;
+            Ok(SecretScope::Group {
                 workspace_id: workspace_id.to_string(),
-                team: team.to_string(),
+                group_id: group_id.to_string(),
             })
         }
     }
@@ -1612,7 +1824,7 @@ fn parse_secret_scope(
 fn parse_capability_scope(
     scope: ScopeKind,
     workspace_id: Option<&str>,
-    team: Option<&str>,
+    group_id: Option<&str>,
 ) -> Result<CapabilityScope, String> {
     match scope {
         ScopeKind::Global => Ok(CapabilityScope::Global),
@@ -1622,12 +1834,12 @@ fn parse_capability_scope(
                 workspace_id: workspace_id.to_string(),
             })
         }
-        ScopeKind::Team => {
+        ScopeKind::Group => {
             let workspace_id = required_arg("workspace-id", workspace_id)?;
-            let team = required_arg("team", team)?;
-            Ok(CapabilityScope::Team {
+            let group_id = required_arg("group-id", group_id)?;
+            Ok(CapabilityScope::Group {
                 workspace_id: workspace_id.to_string(),
-                team: team.to_string(),
+                group_id: group_id.to_string(),
             })
         }
     }
@@ -1645,7 +1857,7 @@ fn scope_matches_secret(
     scope: &SecretScope,
     requested: &ScopeKind,
     workspace_id: Option<&str>,
-    team: Option<&str>,
+    group_id: Option<&str>,
 ) -> bool {
     match requested {
         ScopeKind::Global => matches!(scope, SecretScope::Global),
@@ -1655,29 +1867,15 @@ fn scope_matches_secret(
                 workspace_id: ws
             } if Some(ws.as_str()) == workspace_id.map(str::trim)
         ),
-        ScopeKind::Team => matches!(
+        ScopeKind::Group => matches!(
             scope,
-            SecretScope::Team {
+            SecretScope::Group {
                 workspace_id: ws,
-                team: t
+                group_id: g
             } if Some(ws.as_str()) == workspace_id.map(str::trim)
-                && Some(t.as_str()) == team.map(str::trim)
+                && Some(g.as_str()) == group_id.map(str::trim)
         ),
     }
-}
-
-fn print_resolved_value(secret_ref: &str, value: Vec<u8>, raw: bool) -> Result<(), String> {
-    if raw {
-        let text = String::from_utf8(value)
-            .map_err(|_| "secret is not valid UTF-8; use non-raw mode".to_string())?;
-        println!("{}", text);
-        return Ok(());
-    }
-
-    print_json(&serde_json::json!({
-        "secretRef": secret_ref,
-        "valueB64": base64::engine::general_purpose::STANDARD.encode(value)
-    }))
 }
 
 fn print_json<T: Serialize>(value: &T) -> Result<(), String> {
@@ -1688,7 +1886,14 @@ fn print_json<T: Serialize>(value: &T) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::build_oauth_setup_plan;
+    use super::{build_oauth_setup_plan, load_runtime_broker_for_context};
+    use crate::broker::{AuthStrategy, ProxyEnvelope, ProxyEnvelopeRequest, ProxyTokenMintRequest};
+    use crate::broker_store::{BrokerStore, StoredCredential};
+    use crate::test_support::{ScopedEnvVar, ENV_LOCK};
+    use crate::vault::{SecretRef, SecretScope, VaultProviderConfig, VaultRuntime};
+    use base64::Engine;
+    use std::collections::HashMap;
+    use std::net::IpAddr;
 
     #[test]
     fn oauth_setup_plan_builds_external_consent_url() {
@@ -1715,5 +1920,237 @@ mod tests {
             .get("exchangeOutsideBroker")
             .and_then(|v| v.as_bool())
             .unwrap());
+    }
+
+    #[test]
+    fn invoke_context_skips_unattached_global_credentials_unless_requested() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = [7u8; 32];
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+
+        let meta = vault
+            .create_secret("GLOBAL_TOKEN", b"t-1", SecretScope::Global, vec![])
+            .unwrap();
+        let secret_ref = SecretRef {
+            secret_id: meta.secret_id.clone(),
+        }
+        .to_string();
+
+        let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        store.upsert_credential(StoredCredential {
+            id: "openai".to_string(),
+            provider: "openai".to_string(),
+            workspace_id: None,
+            group_id: None,
+            auth: AuthStrategy::Header {
+                header_name: "authorization".to_string(),
+                value_template: "Bearer {{secret}}".to_string(),
+            },
+            hosts: vec!["api.openai.com".to_string()],
+            secret_ref,
+        });
+
+        let broker =
+            load_runtime_broker_for_context(&vault, &store, None, Some("default"), Some("dev"))
+                .unwrap();
+        assert!(broker.credentials().is_empty());
+
+        assert!(load_runtime_broker_for_context(
+            &vault,
+            &store,
+            Some("openai"),
+            Some("default"),
+            Some("dev")
+        )
+        .is_err());
+
+        vault
+            .attach_secret_to_group(&meta.secret_id, "default", "dev")
+            .unwrap();
+        let broker =
+            load_runtime_broker_for_context(&vault, &store, None, Some("default"), Some("dev"))
+                .unwrap();
+        assert_eq!(broker.credentials().len(), 1);
+    }
+
+    #[test]
+    fn workspace_scoped_credentials_require_matching_workspace_and_group_context() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = [7u8; 32];
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+
+        let meta = vault
+            .create_secret(
+                "WORKSPACE_TOKEN",
+                b"w-1",
+                SecretScope::Workspace {
+                    workspace_id: "default".to_string(),
+                },
+                vec![],
+            )
+            .unwrap();
+        let secret_ref = SecretRef {
+            secret_id: meta.secret_id,
+        }
+        .to_string();
+
+        let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        store.upsert_credential(StoredCredential {
+            id: "ws-cred".to_string(),
+            provider: "openai".to_string(),
+            workspace_id: Some("default".to_string()),
+            group_id: None,
+            auth: AuthStrategy::Header {
+                header_name: "authorization".to_string(),
+                value_template: "Bearer {{secret}}".to_string(),
+            },
+            hosts: vec!["api.openai.com".to_string()],
+            secret_ref,
+        });
+
+        let broker = load_runtime_broker_for_context(&vault, &store, None, None, None).unwrap();
+        assert!(broker.credentials().is_empty());
+
+        let broker =
+            load_runtime_broker_for_context(&vault, &store, None, Some("other"), Some("dev"))
+                .unwrap();
+        assert!(broker.credentials().is_empty());
+
+        let broker =
+            load_runtime_broker_for_context(&vault, &store, None, Some("default"), Some("support"))
+                .unwrap();
+        assert_eq!(broker.credentials().len(), 1);
+    }
+
+    #[test]
+    fn registry_policy_is_canonical_and_not_overridable_by_broker_store() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = [7u8; 32];
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+
+        let meta = vault
+            .create_secret("OPENAI_TOKEN", b"t-1", SecretScope::Global, vec![])
+            .unwrap();
+        let secret_ref = SecretRef {
+            secret_id: meta.secret_id.clone(),
+        }
+        .to_string();
+
+        let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        // Persisted broker state is treated as untrusted input at runtime: registry-backed
+        // credentials and capabilities must be canonicalized back to compiled-in policy.
+        store.upsert_credential(StoredCredential {
+            id: "openai".to_string(),
+            provider: "openai".to_string(),
+            workspace_id: None,
+            group_id: None,
+            // Tampered auth/hosts (should be ignored for registry providers).
+            auth: AuthStrategy::Query {
+                param_name: "api_key".to_string(),
+            },
+            hosts: vec!["evil.example".to_string()],
+            secret_ref,
+        });
+        store.upsert_capability(crate::broker::Capability {
+            id: "openai/transcription".to_string(),
+            provider: "openai".to_string(),
+            allow: crate::broker::AllowPolicy {
+                hosts: vec!["evil.example".to_string()],
+                methods: vec!["POST".to_string()],
+                path_prefixes: vec!["/evil".to_string()],
+            },
+        });
+
+        let mut broker = load_runtime_broker_for_context(&vault, &store, None, None, None).unwrap();
+
+        let cap = broker
+            .capabilities()
+            .into_iter()
+            .find(|c| c.id == "openai/transcription")
+            .unwrap();
+        assert_eq!(cap.allow.hosts, vec!["api.openai.com"]);
+        assert_eq!(cap.allow.path_prefixes, vec!["/v1/audio/transcriptions"]);
+
+        let cred = broker
+            .credentials()
+            .into_iter()
+            .find(|c| c.id == "openai")
+            .unwrap();
+        assert_eq!(cred.hosts, vec!["api.openai.com"]);
+
+        let token = broker
+            .mint_proxy_token(
+                &crate::broker::RequestAuth::Operator("test".to_string()),
+                ProxyTokenMintRequest {
+                    capabilities: vec!["openai/transcription".to_string()],
+                    credential: Some("openai".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .unwrap();
+
+        let envelope = ProxyEnvelope {
+            capability: "openai/transcription".to_string(),
+            credential: Some("openai".to_string()),
+            request: ProxyEnvelopeRequest {
+                method: "POST".to_string(),
+                path: "/v1/audio/transcriptions".to_string(),
+                headers: Vec::new(),
+                body: None,
+                multipart: None,
+                multipart_files: Vec::new(),
+                body_file_path: None,
+                url: None,
+            },
+        };
+
+        let planned = broker
+            .execute_envelope(
+                &crate::broker::RequestAuth::Proxy(token.token),
+                envelope,
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(planned.host, "api.openai.com");
     }
 }

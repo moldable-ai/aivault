@@ -51,7 +51,7 @@ function collectStoryFiles(targets, errors) {
     if (!filePath) {
       addError(
         errors,
-        `Target "${target}" not found. Pass domain (e.g. "teams") or path to a domain JSON file.`,
+        `Target "${target}" not found. Pass domain (e.g. "groups") or path to a domain JSON file.`,
       );
       continue;
     }

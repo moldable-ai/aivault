@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 2,
+  "domain": "groups",
+  "title": "Workspace And Group Execution Context",
+  "evidence": [
+    {
+      "id": "ev-e2e-cli-group-context-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local.rs",
+      "tests": [
+        "e2e_invoke_workspace_group_context_enforces_secret_attachments",
+        "e2e_invoke_workspace_scoped_secret_isolated_by_workspace_id"
+      ]
+    },
+    {
+      "id": "ev-app-context-broker-load-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "invoke_context_skips_unattached_global_credentials_unless_requested",
+        "workspace_scoped_credentials_require_matching_workspace_and_group_context"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "groups-context",
+      "group": "Runtime Context",
+      "title": "Workspace/Group Isolation",
+      "stories": [
+        {
+          "slug": "group-context-enforces-secret-attachments",
+          "story": "As an operator, I want workspace/group-context invocations to enforce vault attachment rules for global secrets, so groups cannot use shared credentials unless explicitly granted.",
+          "evidenceLinks": [
+            "ev-e2e-cli-group-context-tests",
+            "ev-app-context-broker-load-tests"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "invoke_with_store"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "resolve_secret_ref_for_context"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_for_group"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_for_group"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::attach_secret_to_group"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-cli-group-context-tests",
+                "test": "e2e_invoke_workspace_group_context_enforces_secret_attachments"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "ws-context-isolates-workspace-scoped-secrets",
+          "story": "As an operator, I want workspace-scoped secrets to be accessible only when the invocation workspaceId matches, so separate workspaces stay isolated even when they share a vault directory.",
+          "evidenceLinks": [
+            "ev-e2e-cli-group-context-tests",
+            "ev-app-context-broker-load-tests"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "normalize_invoke_context"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_for_group"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "normalize_invoke_context"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_for_group"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-cli-group-context-tests",
+                "test": "e2e_invoke_workspace_scoped_secret_isolated_by_workspace_id"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

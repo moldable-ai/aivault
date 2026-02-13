@@ -148,6 +148,15 @@
       ]
     },
     {
+      "id": "ev-broker-store-sec-restrictive-permissions-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker_store.rs",
+      "tests": [
+        "broker_store_save_uses_restrictive_permissions"
+      ]
+    },
+    {
       "id": "ev-broker-adv-capability-rate-and-size-limits-test",
       "kind": "tests",
       "automated": true,
@@ -163,6 +172,15 @@
       "file": "src/broker/tests.rs",
       "tests": [
         "story_adv_response_body_filtering"
+      ]
+    },
+    {
+      "id": "ev-cli-sec-no-plaintext-secret-resolution-commands-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/cli.rs",
+      "tests": [
+        "cli_rejects_plaintext_secret_resolution_commands"
       ]
     }
   ],
@@ -812,6 +830,47 @@
           }
         },
         {
+          "slug": "sec-broker-store-restrictive-permissions",
+          "story": "As a security reviewer, I want broker state (broker.json) stored with restrictive filesystem permissions, so local policy and host binding cannot be modified or read by other OS users.",
+          "evidenceLinks": [
+            "ev-broker-store-sec-restrictive-permissions-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::save"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::load"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::save"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::open_under"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-store-sec-restrictive-permissions-test",
+                "test": "broker_store_save_uses_restrictive_permissions"
+              }
+            ]
+          }
+        },
+        {
           "slug": "adv-capability-rate-and-size-limits",
           "story": "As an operator, I want per-capability rate and request size limits enforced by the broker, so abusive or oversized traffic is constrained before reaching upstream providers.",
           "evidenceLinks": [
@@ -898,6 +957,49 @@
               {
                 "evidenceId": "ev-broker-adv-response-body-filtering-test",
                 "test": "story_adv_response_body_filtering"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sec-cli-surface",
+      "group": "Security",
+      "title": "No Plaintext Secret Surfaces",
+      "stories": [
+        {
+          "slug": "sec-cli-no-plaintext-secret-resolution-commands",
+          "story": "As a security reviewer, I want the CLI to omit any command that prints stored secret values, so local automation can only use secrets through capability/proxy flows.",
+          "evidenceLinks": [
+            "ev-cli-sec-no-plaintext-secret-resolution-commands-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/cli.rs",
+                "symbol": "Cli"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/cli.rs",
+                "symbol": "Cli::try_parse_from"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/cli.rs",
+                "symbol": "Command"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-cli-sec-no-plaintext-secret-resolution-commands-test",
+                "test": "cli_rejects_plaintext_secret_resolution_commands"
               }
             ]
           }

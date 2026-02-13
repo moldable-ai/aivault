@@ -2,12 +2,24 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(unix)]
+fn chmod_best_effort(path: &Path, mode: u32) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let perm = std::fs::Permissions::from_mode(mode);
+    std::fs::set_permissions(path, perm).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CapabilityScope {
     Global,
-    Workspace { workspace_id: String },
-    Team { workspace_id: String, team: String },
+    Workspace {
+        workspace_id: String,
+    },
+    Group {
+        workspace_id: String,
+        group_id: String,
+    },
 }
 
 impl CapabilityScope {
@@ -23,21 +35,28 @@ impl CapabilityScope {
                     workspace_id: workspace_id.to_string(),
                 })
             }
-            Self::Team { workspace_id, team } => {
+            Self::Group {
+                workspace_id,
+                group_id,
+            } => {
                 let workspace_id = workspace_id.trim();
-                let team = team.trim();
-                if workspace_id.is_empty() || team.is_empty() {
-                    return Err("workspace_id and team required for team scope".to_string());
+                let group_id = group_id.trim();
+                if workspace_id.is_empty() || group_id.is_empty() {
+                    return Err("workspace_id and group_id required for group scope".to_string());
                 }
-                Ok(Self::Team {
+                Ok(Self::Group {
                     workspace_id: workspace_id.to_string(),
-                    team: team.to_string(),
+                    group_id: group_id.to_string(),
                 })
             }
         }
     }
 
-    fn precedence_for_context(&self, workspace_id: Option<&str>, team: Option<&str>) -> Option<u8> {
+    fn precedence_for_context(
+        &self,
+        workspace_id: Option<&str>,
+        group_id: Option<&str>,
+    ) -> Option<u8> {
         match self {
             Self::Global => Some(1),
             Self::Workspace { workspace_id: ws } => {
@@ -50,15 +69,15 @@ impl CapabilityScope {
                     None
                 }
             }
-            Self::Team {
+            Self::Group {
                 workspace_id: ws,
-                team: bound_team,
+                group_id: bound_group_id,
             } => {
                 let requested_ws = workspace_id.map(str::trim).unwrap_or_default();
-                let requested_team = team.map(str::trim).unwrap_or_default();
-                if requested_ws.is_empty() || requested_team.is_empty() {
+                let requested_group_id = group_id.map(str::trim).unwrap_or_default();
+                if requested_ws.is_empty() || requested_group_id.is_empty() {
                     None
-                } else if ws == requested_ws && bound_team == requested_team {
+                } else if ws == requested_ws && bound_group_id == requested_group_id {
                     Some(3)
                 } else {
                     None
@@ -71,7 +90,10 @@ impl CapabilityScope {
         match self {
             Self::Global => "global".to_string(),
             Self::Workspace { workspace_id } => format!("workspace:{}", workspace_id),
-            Self::Team { workspace_id, team } => format!("team:{}:{}", workspace_id, team),
+            Self::Group {
+                workspace_id,
+                group_id,
+            } => format!("group:{}:{}", workspace_id, group_id),
         }
     }
 }
@@ -123,6 +145,14 @@ impl CapabilityStore {
             });
         }
 
+        #[cfg(unix)]
+        {
+            if let Some(parent) = path.parent() {
+                let _ = chmod_best_effort(parent, 0o700);
+            }
+            let _ = chmod_best_effort(path, 0o600);
+        }
+
         let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
         let data: CapabilityStoreData = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
         Ok(Self {
@@ -138,9 +168,18 @@ impl CapabilityStore {
     pub fn save(&self) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            #[cfg(unix)]
+            {
+                chmod_best_effort(parent, 0o700)?;
+            }
         }
         let raw = serde_json::to_string_pretty(&self.data).map_err(|e| e.to_string())?;
-        std::fs::write(&self.path, raw).map_err(|e| e.to_string())
+        std::fs::write(&self.path, raw).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            chmod_best_effort(&self.path, 0o600)?;
+        }
+        Ok(())
     }
 
     pub fn list(&self) -> Vec<CapabilityBinding> {
@@ -215,7 +254,7 @@ impl CapabilityStore {
         &self,
         capability: &str,
         workspace_id: Option<&str>,
-        team: Option<&str>,
+        group_id: Option<&str>,
         consumer: Option<&str>,
     ) -> Option<CapabilityBinding> {
         let capability = capability.trim();
@@ -230,7 +269,9 @@ impl CapabilityStore {
             .iter()
             .filter(|binding| binding.capability == capability)
             .filter_map(|binding| {
-                let scope_precedence = binding.scope.precedence_for_context(workspace_id, team)?;
+                let scope_precedence = binding
+                    .scope
+                    .precedence_for_context(workspace_id, group_id)?;
                 let consumer_precedence = match (requested_consumer, binding.consumer.as_deref()) {
                     (Some(wanted), Some(actual)) if wanted == actual => 2,
                     (Some(_), None) => 1,
@@ -308,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_prefers_team_then_workspace_then_global() {
+    fn resolve_prefers_group_then_workspace_then_global() {
         let dir = tempfile::tempdir().unwrap();
         let mut store = CapabilityStore::open_under(dir.path()).unwrap();
 
@@ -333,19 +374,19 @@ mod tests {
         store
             .upsert(
                 "openai/transcription",
-                "vault:secret:team",
-                CapabilityScope::Team {
+                "vault:secret:group",
+                CapabilityScope::Group {
                     workspace_id: "default".to_string(),
-                    team: "ops".to_string(),
+                    group_id: "ops".to_string(),
                 },
                 None,
             )
             .unwrap();
 
-        let team = store
+        let group = store
             .resolve("openai/transcription", Some("default"), Some("ops"), None)
             .unwrap();
-        assert_eq!(team.secret_ref, "vault:secret:team");
+        assert_eq!(group.secret_ref, "vault:secret:group");
 
         let workspace = store
             .resolve(

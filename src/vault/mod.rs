@@ -22,7 +22,7 @@ use crate::vault::crypto::{
 pub use audit::{append_audit_event, read_audit_events, read_audit_events_before, VaultAuditEvent};
 pub use paths::VaultPaths;
 pub use refs::SecretRef;
-pub use store::{SecretMeta, SecretRecord, SecretScope, TeamAttachment};
+pub use store::{GroupAttachment, SecretMeta, SecretRecord, SecretScope};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -644,7 +644,7 @@ impl VaultRuntime {
                 },
                 value: value_blob,
             }),
-            attached_teams: Vec::new(),
+            attached_groups: Vec::new(),
         };
         self.write_secret(&record)?;
         self.audit_secret_event("secret.create", Some(&record), None);
@@ -803,11 +803,11 @@ impl VaultRuntime {
         Ok(SecretMeta::from(&rec))
     }
 
-    pub fn attach_secret_to_team(
+    pub fn attach_secret_to_group(
         &self,
         secret_id: &str,
         workspace_id: &str,
-        team: &str,
+        group_id: &str,
     ) -> Result<SecretMeta, VaultError> {
         let _cfg = self
             .cfg
@@ -817,18 +817,20 @@ impl VaultRuntime {
             .ok_or(VaultError::NotEnabled)?;
         let mut rec = self.read_secret(secret_id)?;
         let ws = workspace_id.trim();
-        let team = team.trim();
-        if ws.is_empty() || team.is_empty() {
-            return Err(VaultError::Other("workspace and team required".to_string()));
+        let group_id = group_id.trim();
+        if ws.is_empty() || group_id.is_empty() {
+            return Err(VaultError::Other(
+                "workspace and group_id required".to_string(),
+            ));
         }
         if !rec
-            .attached_teams
+            .attached_groups
             .iter()
-            .any(|t| t.workspace_id == ws && t.team == team)
+            .any(|g| g.workspace_id == ws && g.group_id == group_id)
         {
-            rec.attached_teams.push(TeamAttachment {
+            rec.attached_groups.push(GroupAttachment {
                 workspace_id: ws.to_string(),
-                team: team.to_string(),
+                group_id: group_id.to_string(),
             });
         }
         rec.updated_at_ms = chrono::Utc::now().timestamp_millis();
@@ -836,16 +838,16 @@ impl VaultRuntime {
         self.audit_secret_event(
             "secret.attach",
             Some(&rec),
-            Some(&format!("team:{}:{}", ws, team)),
+            Some(&format!("group:{}:{}", ws, group_id)),
         );
         Ok(SecretMeta::from(&rec))
     }
 
-    pub fn detach_secret_from_team(
+    pub fn detach_secret_from_group(
         &self,
         secret_id: &str,
         workspace_id: &str,
-        team: &str,
+        group_id: &str,
     ) -> Result<SecretMeta, VaultError> {
         let _cfg = self
             .cfg
@@ -854,20 +856,24 @@ impl VaultRuntime {
             .clone()
             .ok_or(VaultError::NotEnabled)?;
         let mut rec = self.read_secret(secret_id)?;
-        rec.attached_teams
-            .retain(|t| !(t.workspace_id == workspace_id.trim() && t.team == team.trim()));
+        rec.attached_groups
+            .retain(|g| !(g.workspace_id == workspace_id.trim() && g.group_id == group_id.trim()));
         rec.updated_at_ms = chrono::Utc::now().timestamp_millis();
         self.write_secret(&rec)?;
         self.audit_secret_event(
             "secret.detach",
             Some(&rec),
-            Some(&format!("team:{}:{}", workspace_id.trim(), team.trim())),
+            Some(&format!(
+                "group:{}:{}",
+                workspace_id.trim(),
+                group_id.trim()
+            )),
         );
         Ok(SecretMeta::from(&rec))
     }
 
     /// Resolve a secret ref to plaintext bytes. This is a privileged internal API.
-    pub fn resolve_secret_ref(
+    pub(crate) fn resolve_secret_ref(
         &self,
         secret_ref: &str,
         capability: Option<&str>,
@@ -922,18 +928,18 @@ impl VaultRuntime {
         Ok(value)
     }
 
-    /// Resolve a secret ref for a specific team context (workspace + team).
+    /// Resolve a secret ref for a specific group context (workspace + group_id).
     ///
     /// This enforces a minimal access policy:
-    /// - `team` scope: only that team can use it
-    /// - `workspace` scope: any team in the workspace can use it
-    /// - `global` scope: only teams explicitly attached can use it
-    /// - Any scope can be explicitly shared to a team via `attached_teams`
-    pub fn resolve_secret_ref_for_team(
+    /// - `group` scope: only that group can use it
+    /// - `workspace` scope: any group in the workspace can use it
+    /// - `global` scope: only groups explicitly attached can use it
+    /// - Any scope can be explicitly shared to a group via `attached_groups`
+    pub(crate) fn resolve_secret_ref_for_group(
         &self,
         secret_ref: &str,
         workspace_id: &str,
-        team: &str,
+        group_id: &str,
         capability: Option<&str>,
         consumer: Option<&str>,
     ) -> Result<Vec<u8>, VaultError> {
@@ -945,10 +951,10 @@ impl VaultRuntime {
             .ok_or(VaultError::NotEnabled)?;
 
         let ws = workspace_id.trim();
-        let team = team.trim();
-        if ws.is_empty() || team.is_empty() {
+        let group_id = group_id.trim();
+        if ws.is_empty() || group_id.is_empty() {
             return Err(VaultError::Other(
-                "workspace_id and team are required".to_string(),
+                "workspace_id and group_id are required".to_string(),
             ));
         }
 
@@ -956,9 +962,9 @@ impl VaultRuntime {
         let rec = self.read_secret(&sr.secret_id)?;
 
         let attached = rec
-            .attached_teams
+            .attached_groups
             .iter()
-            .any(|t| t.workspace_id == ws && t.team == team);
+            .any(|g| g.workspace_id == ws && g.group_id == group_id);
 
         let allowed = if attached {
             true
@@ -966,10 +972,10 @@ impl VaultRuntime {
             match &rec.scope {
                 SecretScope::Global => false,
                 SecretScope::Workspace { workspace_id } => workspace_id == ws,
-                SecretScope::Team {
+                SecretScope::Group {
                     workspace_id,
-                    team: t,
-                } => workspace_id == ws && t == team,
+                    group_id: g,
+                } => workspace_id == ws && g == group_id,
             }
         };
 
@@ -977,7 +983,7 @@ impl VaultRuntime {
             self.audit_secret_event(
                 "secret.access.denied",
                 Some(&rec),
-                Some(&format!("team:{}:{}", ws, team)),
+                Some(&format!("group:{}:{}", ws, group_id)),
             );
             return Err(VaultError::Other("secret not accessible".to_string()));
         }
@@ -1310,25 +1316,6 @@ fn store_kek_file(path: &str, kek: &[u8; 32]) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn keychain_entry_missing(service: &str, account: &str) -> Result<bool, VaultError> {
-    let out = std::process::Command::new("security")
-        .args(["find-generic-password", "-a", account, "-s", service, "-w"])
-        .output()
-        .map_err(|e| VaultError::Provider(e.to_string()))?;
-    // security(1) uses exit code 44 for "item not found".
-    if out.status.code() == Some(44) {
-        return Ok(true);
-    }
-    if out.status.success() {
-        return Ok(false);
-    }
-    Err(VaultError::Provider(
-        String::from_utf8_lossy(&out.stderr).trim().to_string(),
-    ))
-}
-
-#[cfg(not(target_os = "macos"))]
 fn keychain_entry_missing(service: &str, account: &str) -> Result<bool, VaultError> {
     match load_kek_keychain_password(service, account) {
         Ok(_) => Ok(false),
@@ -1337,31 +1324,6 @@ fn keychain_entry_missing(service: &str, account: &str) -> Result<bool, VaultErr
     }
 }
 
-#[cfg(target_os = "macos")]
-fn store_kek_keychain(service: &str, account: &str, kek: &[u8; 32]) -> Result<(), VaultError> {
-    let b64 = base64::engine::general_purpose::STANDARD.encode(kek);
-    let out = std::process::Command::new("security")
-        .args([
-            "add-generic-password",
-            "-a",
-            account,
-            "-s",
-            service,
-            "-w",
-            &b64,
-            "-U",
-        ])
-        .output()
-        .map_err(|e| VaultError::Provider(e.to_string()))?;
-    if !out.status.success() {
-        return Err(VaultError::Provider(
-            String::from_utf8_lossy(&out.stderr).trim().to_string(),
-        ));
-    }
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
 fn store_kek_keychain(service: &str, account: &str, kek: &[u8; 32]) -> Result<(), VaultError> {
     let entry =
         keyring::Entry::new(service, account).map_err(|e| VaultError::Provider(e.to_string()))?;
@@ -1372,29 +1334,11 @@ fn store_kek_keychain(service: &str, account: &str, kek: &[u8; 32]) -> Result<()
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
 fn load_kek_keychain_password(service: &str, account: &str) -> Result<String, keyring::Error> {
     let entry = keyring::Entry::new(service, account)?;
     entry.get_password()
 }
 
-#[cfg(target_os = "macos")]
-fn load_kek_keychain(service: &str, account: &str) -> Result<[u8; 32], String> {
-    let out = std::process::Command::new("security")
-        .args(["find-generic-password", "-a", account, "-s", service, "-w"])
-        .output()
-        .map_err(|e| e.to_string())?;
-    if out.status.code() == Some(44) {
-        return Err("No matching entry found in secure storage".to_string());
-    }
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    let b64 = String::from_utf8(out.stdout).map_err(|e| e.to_string())?;
-    parse_key_32(&b64)
-}
-
-#[cfg(not(target_os = "macos"))]
 fn load_kek_keychain(service: &str, account: &str) -> Result<[u8; 32], String> {
     let b64 = load_kek_keychain_password(service, account).map_err(|e| e.to_string())?;
     parse_key_32(&b64)
@@ -1521,7 +1465,7 @@ mod tests {
     }
 
     #[test]
-    fn team_scoped_resolution_enforces_attachments_for_global() {
+    fn group_scoped_resolution_enforces_attachments_for_global() {
         let _lock = ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
@@ -1547,16 +1491,16 @@ mod tests {
         }
         .to_string();
 
-        // Global secrets are not available to teams unless explicitly attached.
+        // Global secrets are not available to groups unless explicitly attached.
         assert!(vault
-            .resolve_secret_ref_for_team(&sr, "default", "support", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(&sr, "default", "support", Some("cap"), Some("group"))
             .is_err());
 
         vault
-            .attach_secret_to_team(&meta.secret_id, "default", "support")
+            .attach_secret_to_group(&meta.secret_id, "default", "support")
             .unwrap();
         let value = vault
-            .resolve_secret_ref_for_team(&sr, "default", "support", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(&sr, "default", "support", Some("cap"), Some("group"))
             .unwrap();
         assert_eq!(value, b"t-1".to_vec());
     }
@@ -1723,7 +1667,7 @@ mod tests {
     }
 
     #[test]
-    fn team_and_workspace_scope_resolution_matrix_and_detach() {
+    fn group_and_workspace_scope_resolution_matrix_and_detach() {
         let _lock = ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
@@ -1751,13 +1695,13 @@ mod tests {
                 vec![],
             )
             .unwrap();
-        let team = vault
+        let group = vault
             .create_secret(
-                "TEAM_TOKEN",
+                "GROUP_TOKEN",
                 b"t-1",
-                SecretScope::Team {
+                SecretScope::Group {
                     workspace_id: "default".to_string(),
-                    team: "support".to_string(),
+                    group_id: "support".to_string(),
                 },
                 vec![],
             )
@@ -1770,8 +1714,8 @@ mod tests {
             secret_id: ws.secret_id,
         }
         .to_string();
-        let team_ref = SecretRef {
-            secret_id: team.secret_id,
+        let group_ref = SecretRef {
+            secret_id: group.secret_id,
         }
         .to_string();
         let global_ref = SecretRef {
@@ -1780,60 +1724,78 @@ mod tests {
         .to_string();
 
         let ws_support = vault
-            .resolve_secret_ref_for_team(&ws_ref, "default", "support", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(&ws_ref, "default", "support", Some("cap"), Some("group"))
             .unwrap();
         assert_eq!(ws_support, b"w-1".to_vec());
         let ws_sales = vault
-            .resolve_secret_ref_for_team(&ws_ref, "default", "sales", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(&ws_ref, "default", "sales", Some("cap"), Some("group"))
             .unwrap();
         assert_eq!(ws_sales, b"w-1".to_vec());
         assert!(vault
-            .resolve_secret_ref_for_team(&ws_ref, "other", "support", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(&ws_ref, "other", "support", Some("cap"), Some("group"))
             .is_err());
 
-        let team_support = vault
-            .resolve_secret_ref_for_team(&team_ref, "default", "support", Some("cap"), Some("team"))
+        let group_support = vault
+            .resolve_secret_ref_for_group(
+                &group_ref,
+                "default",
+                "support",
+                Some("cap"),
+                Some("group"),
+            )
             .unwrap();
-        assert_eq!(team_support, b"t-1".to_vec());
+        assert_eq!(group_support, b"t-1".to_vec());
         assert!(vault
-            .resolve_secret_ref_for_team(&team_ref, "default", "sales", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(
+                &group_ref,
+                "default",
+                "sales",
+                Some("cap"),
+                Some("group")
+            )
             .is_err());
         assert!(vault
-            .resolve_secret_ref_for_team(&team_ref, "other", "support", Some("cap"), Some("team"))
+            .resolve_secret_ref_for_group(
+                &group_ref,
+                "other",
+                "support",
+                Some("cap"),
+                Some("group")
+            )
             .is_err());
 
         assert!(vault
-            .resolve_secret_ref_for_team(
+            .resolve_secret_ref_for_group(
                 &global_ref,
                 "default",
                 "support",
                 Some("cap"),
-                Some("team"),
+                Some("group"),
             )
             .is_err());
         vault
-            .attach_secret_to_team(&global.secret_id, "default", "support")
+            .attach_secret_to_group(&global.secret_id, "default", "support")
             .unwrap();
         let global_support = vault
-            .resolve_secret_ref_for_team(
+            .resolve_secret_ref_for_group(
                 &global_ref,
                 "default",
                 "support",
                 Some("cap"),
-                Some("team"),
+                Some("group"),
             )
             .unwrap();
         assert_eq!(global_support, b"g-1".to_vec());
         vault
-            .detach_secret_from_team(&global.secret_id, "default", "support")
+            .detach_secret_from_group(&global.secret_id, "default", "support")
             .unwrap();
         assert!(vault
-            .resolve_secret_ref_for_team(
+            .resolve_secret_ref_for_group(
                 &global_ref,
                 "default",
                 "support",
                 Some("cap"),
-                Some("team"),
+                Some("group"),
             )
             .is_err());
     }

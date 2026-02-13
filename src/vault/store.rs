@@ -6,8 +6,13 @@ use super::crypto::AeadBlob;
 #[serde(rename_all = "snake_case")]
 pub enum SecretScope {
     Global,
-    Workspace { workspace_id: String },
-    Team { workspace_id: String, team: String },
+    Workspace {
+        workspace_id: String,
+    },
+    Group {
+        workspace_id: String,
+        group_id: String,
+    },
 }
 
 impl SecretScope {
@@ -15,7 +20,10 @@ impl SecretScope {
         match self {
             SecretScope::Global => "global".to_string(),
             SecretScope::Workspace { workspace_id } => format!("workspace:{}", workspace_id),
-            SecretScope::Team { workspace_id, team } => format!("team:{}:{}", workspace_id, team),
+            SecretScope::Group {
+                workspace_id,
+                group_id,
+            } => format!("group:{}:{}", workspace_id, group_id),
         }
     }
 
@@ -63,14 +71,14 @@ pub struct SecretRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ciphertext: Option<SecretCiphertext>,
     #[serde(default)]
-    pub attached_teams: Vec<TeamAttachment>,
+    pub attached_groups: Vec<GroupAttachment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TeamAttachment {
+pub struct GroupAttachment {
     pub workspace_id: String,
-    pub team: String,
+    pub group_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +94,7 @@ pub struct SecretMeta {
     pub last_used_at_ms: Option<i64>,
     pub revoked_at_ms: Option<i64>,
     pub value_version: u64,
-    pub attached_teams: Vec<TeamAttachment>,
+    pub attached_groups: Vec<GroupAttachment>,
 }
 
 impl From<&SecretRecord> for SecretMeta {
@@ -102,7 +110,7 @@ impl From<&SecretRecord> for SecretMeta {
             last_used_at_ms: r.last_used_at_ms,
             revoked_at_ms: r.revoked_at_ms,
             value_version: r.value_version,
-            attached_teams: r.attached_teams.clone(),
+            attached_groups: r.attached_groups.clone(),
         }
     }
 }

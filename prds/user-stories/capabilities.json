@@ -383,7 +383,7 @@
         },
         {
           "slug": "cap-foundation-resolution-precedence",
-          "story": "As a runtime integrator, I want capability resolution to prefer team over workspace over global scope and consumer-specific over generic bindings, so the most specific valid credential is selected consistently.",
+          "story": "As a runtime integrator, I want capability resolution to prefer group over workspace over global scope and consumer-specific over generic bindings, so the most specific valid credential is selected consistently.",
           "evidenceLinks": [
             "ev-capability-store-tests"
           ],

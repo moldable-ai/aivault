@@ -12,7 +12,7 @@ pub enum ProviderKind {
 pub enum ScopeKind {
     Global,
     Workspace,
-    Team,
+    Group,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -112,22 +112,6 @@ pub enum Command {
         #[arg(long)]
         wrap_field: Vec<String>,
     },
-    Resolve {
-        #[arg(long)]
-        secret_ref: String,
-        #[arg(long)]
-        raw: bool,
-    },
-    ResolveTeam {
-        #[arg(long)]
-        secret_ref: String,
-        #[arg(long)]
-        workspace_id: String,
-        #[arg(long)]
-        team: String,
-        #[arg(long)]
-        raw: bool,
-    },
 }
 
 #[derive(Debug, Clone, Args)]
@@ -154,6 +138,11 @@ pub struct InvokeArgs {
     pub multipart_file: Vec<String>,
     #[arg(long)]
     pub credential: Option<String>,
+    /// Optional workspace/group execution context for credential resolution and audit context.
+    #[arg(long)]
+    pub workspace_id: Option<String>,
+    #[arg(long)]
+    pub group_id: Option<String>,
     #[arg(long, default_value = "127.0.0.1")]
     pub client_ip: String,
 }
@@ -166,7 +155,7 @@ pub enum SecretsCommand {
         #[arg(long)]
         workspace_id: Option<String>,
         #[arg(long)]
-        team: Option<String>,
+        group_id: Option<String>,
     },
     Create {
         #[arg(long)]
@@ -178,7 +167,7 @@ pub enum SecretsCommand {
         #[arg(long)]
         workspace_id: Option<String>,
         #[arg(long)]
-        team: Option<String>,
+        group_id: Option<String>,
         #[arg(long)]
         alias: Vec<String>,
     },
@@ -202,21 +191,21 @@ pub enum SecretsCommand {
         #[arg(long)]
         id: String,
     },
-    AttachTeam {
+    AttachGroup {
         #[arg(long)]
         id: String,
         #[arg(long)]
         workspace_id: String,
         #[arg(long)]
-        team: String,
+        group_id: String,
     },
-    DetachTeam {
+    DetachGroup {
         #[arg(long)]
         id: String,
         #[arg(long)]
         workspace_id: String,
         #[arg(long)]
-        team: String,
+        group_id: String,
     },
     Import {
         #[arg(long)]
@@ -226,7 +215,7 @@ pub enum SecretsCommand {
         #[arg(long)]
         workspace_id: Option<String>,
         #[arg(long)]
-        team: Option<String>,
+        group_id: Option<String>,
     },
 }
 
@@ -240,7 +229,7 @@ pub enum CapabilitiesCommand {
         #[arg(long)]
         workspace_id: Option<String>,
         #[arg(long)]
-        team: Option<String>,
+        group_id: Option<String>,
         #[arg(long)]
         consumer: Option<String>,
     },
@@ -254,7 +243,7 @@ pub enum CapabilitiesCommand {
         #[arg(long)]
         workspace_id: Option<String>,
         #[arg(long)]
-        team: Option<String>,
+        group_id: Option<String>,
         #[arg(long)]
         consumer: Option<String>,
     },
@@ -266,22 +255,41 @@ pub enum CapabilitiesCommand {
         #[arg(long)]
         workspace_id: Option<String>,
         #[arg(long)]
-        team: Option<String>,
+        group_id: Option<String>,
         #[arg(long)]
         consumer: Option<String>,
     },
-    Resolve {
-        #[arg(long)]
-        capability: String,
-        #[arg(long)]
-        workspace_id: Option<String>,
-        #[arg(long)]
-        team: Option<String>,
-        #[arg(long)]
-        consumer: Option<String>,
-        #[arg(long)]
-        raw: bool,
-    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use clap::error::ErrorKind;
+    use clap::Parser;
+
+    #[test]
+    fn cli_rejects_plaintext_secret_resolution_commands() {
+        let err =
+            Cli::try_parse_from(["aivault", "resolve", "--secret-ref", "secret:abc"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+
+        let err = Cli::try_parse_from([
+            "aivault",
+            "resolve-group",
+            "--secret-ref",
+            "secret:abc",
+            "--workspace-id",
+            "ws",
+            "--group-id",
+            "group",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+
+        let err = Cli::try_parse_from(["aivault", "capabilities", "resolve", "--capability", "x"])
+            .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -312,6 +320,12 @@ pub enum CredentialCommand {
         provider: String,
         #[arg(long)]
         secret_ref: String,
+        /// Optional workspace/group execution context this credential is intended for.
+        /// If provided, invoke paths must supply matching `--workspace-id/--group-id`.
+        #[arg(long)]
+        workspace_id: Option<String>,
+        #[arg(long)]
+        group_id: Option<String>,
         #[arg(long, value_enum)]
         auth: Option<AuthKind>,
         #[arg(long)]

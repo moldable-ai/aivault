@@ -79,7 +79,7 @@ Use `knownCoverageGaps[]` for this:
   "knownCoverageGaps": [
     {
       "description": "What is not definitively proven yet",
-      "storySlugs": ["team-example-story"],
+      "storySlugs": ["group-example-story"],
       "references": ["src/path/file.rs", "test_name_or_symbol"]
     }
   ]
@@ -107,7 +107,7 @@ Evidence links and test names are not sufficient on their own. For each story ma
 Minimum trace checklist per story:
 
 1. Identify the user entry points (HTTP route, websocket event, channel message, CLI/runtime trigger, or UI action).
-2. Trace the exact code path through orchestrator/team/tool/runtime layers to the final side effect.
+2. Trace the exact code path through orchestrator/group/tool/runtime layers to the final side effect.
 3. Verify guards and approvals along that path (auth, permission checks, routing constraints, gating logic).
 4. Confirm persistence and state transitions (write path, read path, and follow-up behavior).
 5. Confirm the response/notification path back to the user-facing surface.
@@ -117,11 +117,11 @@ If any step in the end-to-end chain is inferred but not proven by code or tests,
 
 ## Authoring Rules
 
-- `domain` must match filename (`teams` -> `teams.json`).
+- `domain` must match filename (`groups` -> `groups.json`).
 - Every story slug must be unique across all domain JSON files.
 - Every `evidenceLinks` entry must point to an existing `evidence[].id`.
 - Every evidence item must include `id`, `automated`, and either `file` or `files`.
-- Use stable slug prefixes (for example `appr-`, `team-`, `ws-`).
+- Use stable slug prefixes (for example `appr-`, `group-`, `ws-`).
 
 ## Validation
 
@@ -134,19 +134,19 @@ pnpm evidence
 Validate a single domain:
 
 ```bash
-pnpm evidence -- teams
+pnpm evidence -- groups
 ```
 
 Validate a single file path:
 
 ```bash
-pnpm evidence -- prds/user-stories/teams.json
+pnpm evidence -- prds/user-stories/groups.json
 ```
 
 Show story-level and known gap details:
 
 ```bash
-pnpm evidence -- teams --gaps
+pnpm evidence -- groups --gaps
 ```
 
 This validates:

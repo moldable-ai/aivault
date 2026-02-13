@@ -194,6 +194,23 @@ impl Registry {
         self.providers.values().cloned().collect()
     }
 
+    /// Lookup a capability by id across all registry providers.
+    ///
+    /// This is used to canonicalize policy derived from compiled-in registry templates when
+    /// loading potentially untrusted persisted config.
+    pub fn capability(&self, capability_id: &str) -> Option<Capability> {
+        let capability_id = capability_id.trim();
+        if capability_id.is_empty() {
+            return None;
+        }
+        for template in self.providers.values() {
+            if let Some(cap) = template.capabilities.iter().find(|c| c.id == capability_id) {
+                return Some(cap.clone());
+            }
+        }
+        None
+    }
+
     pub fn from_json_str(raw: &str) -> BrokerResult<Self> {
         #[derive(Deserialize)]
         #[serde(untagged)]

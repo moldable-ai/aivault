@@ -80,8 +80,15 @@ impl VaultPaths {
     }
 
     pub fn ensure_dirs(&self) -> std::io::Result<()> {
+        std::fs::create_dir_all(&self.root_dir)?;
         std::fs::create_dir_all(self.secrets_dir())?;
         std::fs::create_dir_all(self.audit_dir())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_perm = std::fs::Permissions::from_mode(0o700);
+            let _ = std::fs::set_permissions(&self.root_dir, dir_perm);
+        }
         Ok(())
     }
 

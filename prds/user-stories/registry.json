@@ -40,6 +40,15 @@
       ]
     },
     {
+      "id": "ev-cli-reg-broker-store-canonicalization-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "registry_policy_is_canonical_and_not_overridable_by_broker_store"
+      ]
+    },
+    {
       "id": "ev-broker-reg-no-secret-material-in-registry-test",
       "kind": "tests",
       "automated": true,
@@ -269,6 +278,56 @@
               {
                 "evidenceId": "ev-broker-reg-runtime-immutability-test",
                 "test": "story_reg_runtime_immutability"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-broker-store-canonicalization",
+          "story": "As a security reviewer, I want registry-backed provider and capability policy derived from compiled-in registry templates when loading persisted broker state, so disk edits to broker.json cannot redirect upstream hosts or widen policy.",
+          "evidenceLinks": [
+            "ev-cli-reg-broker-store-canonicalization-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "Registry::capability"
+              },
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::select_effective_host"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-cli-reg-broker-store-canonicalization-test",
+                "test": "registry_policy_is_canonical_and_not_overridable_by_broker_store"
               }
             ]
           }

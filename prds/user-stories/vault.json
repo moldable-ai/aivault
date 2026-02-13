@@ -11,13 +11,13 @@
       "tests": [
         "env_provider_create_and_resolve_secret",
         "system_secrets_are_persisted_as_system_managed",
-        "team_scoped_resolution_enforces_attachments_for_global",
+        "group_scoped_resolution_enforces_attachments_for_global",
         "passphrase_unlocks_and_locks",
         "load_auto_initializes_default_file_provider_in_override_dir",
         "update_secret_meta_changes_name_and_aliases",
         "rotate_secret_value_increments_version_and_keeps_id",
         "revoke_secret_clears_ciphertext_and_blocks_resolution",
-        "team_and_workspace_scope_resolution_matrix_and_detach",
+        "group_and_workspace_scope_resolution_matrix_and_detach",
         "create_secret_rejects_duplicate_global_name_or_alias",
         "update_secret_rejects_duplicate_global_name_or_alias",
         "find_global_secret_ref_by_name_is_deterministic_for_legacy_conflicts",
@@ -633,8 +633,8 @@
           }
         },
         {
-          "slug": "vault-foundation-team-scope-resolution",
-          "story": "As a runtime integrator, I want secret resolution to enforce global, workspace, and team scope rules plus explicit team attachments, so access control is predictable per execution context.",
+          "slug": "vault-foundation-group-scope-resolution",
+          "story": "As a runtime integrator, I want secret resolution to enforce global, workspace, and group scope rules plus explicit group attachments, so access control is predictable per execution context.",
           "evidenceLinks": [
             "ev-vault-runtime-tests"
           ],
@@ -649,31 +649,31 @@
             "runtime": [
               {
                 "file": "src/vault/mod.rs",
-                "symbol": "VaultRuntime::resolve_secret_ref_for_team"
+                "symbol": "VaultRuntime::resolve_secret_ref_for_group"
               }
             ],
             "guards": [
               {
                 "file": "src/vault/mod.rs",
-                "symbol": "VaultRuntime::resolve_secret_ref_for_team"
+                "symbol": "VaultRuntime::resolve_secret_ref_for_group"
               }
             ],
             "stateEffects": [
               {
                 "file": "src/vault/mod.rs",
-                "symbol": "VaultRuntime::attach_secret_to_team"
+                "symbol": "VaultRuntime::attach_secret_to_group"
               }
             ],
             "userSurface": [
               {
                 "file": "src/app.rs",
-                "symbol": "print_resolved_value"
+                "symbol": "print_invoke_body"
               }
             ],
             "assertions": [
               {
                 "evidenceId": "ev-vault-runtime-tests",
-                "test": "env_provider_create_and_resolve_secret"
+                "test": "group_and_workspace_scope_resolution_matrix_and_detach"
               }
             ]
           }

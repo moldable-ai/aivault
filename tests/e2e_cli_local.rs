@@ -172,6 +172,168 @@ fn e2e_describe_and_aliases_return_capability_shape() {
 }
 
 #[test]
+fn e2e_invoke_workspace_group_context_enforces_secret_attachments() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_GROUP_CONTEXT_SECRET", "sk-group-context");
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    create_header_credential(
+        &dir,
+        "group-context-cred",
+        "local-group-context-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/group-context",
+        "group-context-cred",
+        &["GET"],
+        &["/v1/items"],
+    );
+
+    // Group-context invocations should not be able to use global secrets unless explicitly attached.
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/group-context",
+            "--path",
+            "/v1/items",
+            "--credential",
+            "group-context-cred",
+            "--workspace-id",
+            "default",
+            "--group-id",
+            "dev",
+        ],
+    );
+    assert!(
+        err.contains("secret not accessible"),
+        "unexpected error output: {}",
+        err
+    );
+
+    run_ok_json(
+        &dir,
+        &[
+            "secrets",
+            "attach-group",
+            "--id",
+            &secret_id,
+            "--workspace-id",
+            "default",
+            "--group-id",
+            "dev",
+        ],
+    );
+
+    // Once attached, we should proceed far enough to hit the SSRF guard (no real network call).
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/group-context",
+            "--path",
+            "/v1/items",
+            "--credential",
+            "group-context-cred",
+            "--workspace-id",
+            "default",
+            "--group-id",
+            "dev",
+        ],
+    );
+    assert!(
+        err.contains("upstream host blocked by SSRF guard"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_workspace_scoped_secret_isolated_by_workspace_id() {
+    let dir = TempDir::new().expect("temp dir");
+    let created = run_ok_json(
+        &dir,
+        &[
+            "secrets",
+            "create",
+            "--name",
+            "LOCAL_WS_SECRET",
+            "--value",
+            "sk-ws",
+            "--scope",
+            "workspace",
+            "--workspace-id",
+            "default",
+        ],
+    );
+    let secret_id = created["secretId"]
+        .as_str()
+        .expect("secretId should be present")
+        .to_string();
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    create_header_credential(
+        &dir,
+        "workspace-scope-cred",
+        "local-workspace-scope-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/workspace-scope",
+        "workspace-scope-cred",
+        &["GET"],
+        &["/v1/items"],
+    );
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/workspace-scope",
+            "--path",
+            "/v1/items",
+            "--credential",
+            "workspace-scope-cred",
+            "--workspace-id",
+            "other",
+            "--group-id",
+            "dev",
+        ],
+    );
+    assert!(
+        err.contains("secret not accessible"),
+        "unexpected error output: {}",
+        err
+    );
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/workspace-scope",
+            "--path",
+            "/v1/items",
+            "--credential",
+            "workspace-scope-cred",
+            "--workspace-id",
+            "default",
+            "--group-id",
+            "dev",
+        ],
+    );
+    assert!(
+        err.contains("upstream host blocked by SSRF guard"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
 fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
     let dir = TempDir::new().expect("temp dir");
     let secret_id = create_secret(&dir, "LOCAL_REGISTRY_SECRET", "sk-local-registry");
@@ -181,31 +343,83 @@ fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
     create_registry_credential(&dir, "deepgram-default", "deepgram", &secret_ref);
     create_registry_credential(&dir, "elevenlabs-default", "elevenlabs", &secret_ref);
 
-    let capability_expectations = [
+    // Capabilities with exactly one method and one path prefix get defaults for both.
+    let single_method_expectations = [
         (
             "openai/transcription",
             "openai",
-            "POST",
-            "/v1/audio/transcriptions",
+            Some("POST"),
+            Some("/v1/audio/transcriptions"),
         ),
-        ("deepgram/transcription", "deepgram", "POST", "/v1/listen"),
+        (
+            "openai/embeddings",
+            "openai",
+            Some("POST"),
+            Some("/v1/embeddings"),
+        ),
+        (
+            "openai/image-generation",
+            "openai",
+            Some("POST"),
+            Some("/v1/images"),
+        ),
+        (
+            "openai/moderation",
+            "openai",
+            Some("POST"),
+            Some("/v1/moderations"),
+        ),
+        (
+            "deepgram/transcription",
+            "deepgram",
+            Some("POST"),
+            Some("/v1/listen"),
+        ),
         (
             "elevenlabs/transcription",
             "elevenlabs",
-            "POST",
-            "/v1/speech-to-text",
+            Some("POST"),
+            Some("/v1/speech-to-text"),
         ),
     ];
 
-    for (capability, provider, method, path) in capability_expectations {
+    for (capability, provider, method, path) in single_method_expectations {
         let described = run_ok_json(&dir, &["capability", "describe", capability]);
         assert_eq!(described["provider"].as_str(), Some(provider));
-        assert_eq!(
-            described["call"]["defaults"]["method"].as_str(),
-            Some(method)
-        );
-        assert_eq!(described["call"]["defaults"]["path"].as_str(), Some(path));
+        assert_eq!(described["call"]["defaults"]["method"].as_str(), method);
+        assert_eq!(described["call"]["defaults"]["path"].as_str(), path);
     }
+
+    // Multi-method capabilities have null default method but still resolve the path.
+    let multi_method_expectations = [
+        (
+            "openai/chat-completions",
+            "openai",
+            Some("/v1/chat/completions"),
+        ),
+        ("openai/responses", "openai", Some("/v1/responses")),
+        ("openai/models", "openai", Some("/v1/models")),
+        ("openai/files", "openai", Some("/v1/files")),
+        ("openai/vector-stores", "openai", Some("/v1/vector_stores")),
+        ("openai/realtime", "openai", Some("/v1/realtime")),
+    ];
+
+    for (capability, provider, path) in multi_method_expectations {
+        let described = run_ok_json(&dir, &["capability", "describe", capability]);
+        assert_eq!(described["provider"].as_str(), Some(provider));
+        assert!(
+            described["call"]["defaults"]["method"].is_null(),
+            "multi-method capability '{}' should have null default method",
+            capability
+        );
+        assert_eq!(described["call"]["defaults"]["path"].as_str(), path);
+    }
+
+    // Assistants has multiple path prefixes, so both defaults are null.
+    let assistants = run_ok_json(&dir, &["capability", "describe", "openai/assistants"]);
+    assert_eq!(assistants["provider"].as_str(), Some("openai"));
+    assert!(assistants["call"]["defaults"]["method"].is_null());
+    assert!(assistants["call"]["defaults"]["path"].is_null());
 }
 
 #[test]

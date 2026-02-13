@@ -76,14 +76,12 @@ Those proxy contracts are modeled and tested at the broker runtime layer today, 
 - `aivault capability delete <id>`
 - `aivault capability policy set --capability <id> [--rate-limit-per-minute ...] [--max-request-body-bytes ...] [--max-response-body-bytes ...] [--response-block ...]`
 - `aivault capability describe <id>` (aliases: `args`, `shape`, `inspect`)
-- `aivault capability invoke <id> ...` (alias: `call`)
+- `aivault capability invoke <id> ... [--workspace-id ... --group-id ...]` (alias: `call`)
 - `aivault capability json <id> ...` (alias: `aivault json`)
 - `aivault capability markdown <id> ...` (alias: `aivault markdown`, `aivault md`)
-- `aivault invoke <id> ...` (top-level alias of `capability invoke`)
+- `aivault invoke <id> ... [--workspace-id ... --group-id ...]` (top-level alias of `capability invoke`)
 - `aivault json <id> ...` (prints upstream body parsed as JSON)
 - `aivault markdown <id> ...` (alias: `md`; prints upstream body as markdown)
-- `aivault resolve --secret-ref vault:secret:<id> [--raw]`
-- `aivault resolve-team --secret-ref vault:secret:<id> --workspace-id ... --team ... [--raw]`
 
 ## Quickstart (CLI)
 
@@ -102,8 +100,8 @@ aivault secrets create \
   --value sk-test \
   --scope global
 
-# Resolve it back (replace <secret-id> with returned secretId)
-aivault resolve --secret-ref vault:secret:<secret-id> --raw
+# List secrets (values are never printed)
+aivault secrets list
 ```
 
 ## Quickstart (pnpm)

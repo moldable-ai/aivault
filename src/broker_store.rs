@@ -4,11 +4,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::broker::{AuthStrategy, Capability, CapabilityAdvancedPolicy};
 
+#[cfg(unix)]
+fn chmod_best_effort(path: &Path, mode: u32) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let perm = std::fs::Permissions::from_mode(mode);
+    std::fs::set_permissions(path, perm).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredCredential {
     pub id: String,
     pub provider: String,
+    /// Optional execution context this credential is intended for.
+    /// If present, invoke paths must supply matching `--workspace-id/--group-id`.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub group_id: Option<String>,
     pub auth: AuthStrategy,
     pub hosts: Vec<String>,
     pub secret_ref: String,
@@ -63,6 +76,14 @@ impl BrokerStore {
             });
         }
 
+        #[cfg(unix)]
+        {
+            if let Some(parent) = path.parent() {
+                let _ = chmod_best_effort(parent, 0o700);
+            }
+            let _ = chmod_best_effort(path, 0o600);
+        }
+
         let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
         let data: BrokerStoreData = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
         Ok(Self {
@@ -74,9 +95,18 @@ impl BrokerStore {
     pub fn save(&self) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            #[cfg(unix)]
+            {
+                chmod_best_effort(parent, 0o700)?;
+            }
         }
         let raw = serde_json::to_string_pretty(&self.data).map_err(|e| e.to_string())?;
-        std::fs::write(&self.path, raw).map_err(|e| e.to_string())
+        std::fs::write(&self.path, raw).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            chmod_best_effort(&self.path, 0o600)?;
+        }
+        Ok(())
     }
 
     pub fn credentials(&self) -> &[StoredCredential] {
@@ -170,6 +200,8 @@ mod tests {
         store.upsert_credential(StoredCredential {
             id: "openai".to_string(),
             provider: "openai".to_string(),
+            workspace_id: None,
+            group_id: None,
             auth: AuthStrategy::Header {
                 header_name: "authorization".to_string(),
                 value_template: "Bearer {{secret}}".to_string(),
@@ -193,5 +225,37 @@ mod tests {
         assert_eq!(loaded.capabilities().len(), 1);
         assert_eq!(loaded.credentials()[0].id, "openai");
         assert_eq!(loaded.capabilities()[0].id, "openai/chat");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn broker_store_save_uses_restrictive_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = BrokerStore::open_under(dir.path()).unwrap();
+        store.upsert_credential(StoredCredential {
+            id: "openai".to_string(),
+            provider: "openai".to_string(),
+            workspace_id: None,
+            group_id: None,
+            auth: AuthStrategy::Header {
+                header_name: "authorization".to_string(),
+                value_template: "Bearer {{secret}}".to_string(),
+            },
+            hosts: vec!["api.openai.com".to_string()],
+            secret_ref: "vault:secret:abc".to_string(),
+        });
+        store.save().unwrap();
+
+        let dir_mode = std::fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700);
+
+        let file_mode = std::fs::metadata(dir.path().join("broker.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(file_mode, 0o600);
     }
 }

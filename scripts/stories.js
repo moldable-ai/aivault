@@ -208,7 +208,7 @@ function printHelp() {
   console.log("Examples:");
   console.log("  pnpm stories");
   console.log("  pnpm stories -- approvals");
-  console.log("  pnpm stories -- approvals teams");
+  console.log("  pnpm stories -- approvals groups");
   console.log("  pnpm stories -- prds/user-stories/approvals.json");
   console.log("  pnpm stories -- --plain approvals");
 }

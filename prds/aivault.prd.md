@@ -417,7 +417,7 @@ Two separate auth classes:
 2. **Proxy token**: broker endpoint only, short TTL. Minted by the runtime before code executes. Optionally scoped by:
    - **Capability IDs** — a token scoped to `["openai/transcription"]` cannot call `openai/chat`.
    - **Credential ID** — a token scoped to `"openai-work"` will always resolve to that credential, eliminating ambiguity. Callers don't need to pass `"credential"` per request.
-   - **Workspace/team** — implementation-specific context.
+  - **Workspace/groupId** — implementation-specific context.
 
 Credential scoping on tokens is the recommended way to handle multi-account providers. The runtime mints a token pinned to a credential; the caller just says `"capability": "openai/transcription"` and the token handles the rest.
 
@@ -463,7 +463,7 @@ Recommended request/response shapes:
   "capabilities": ["openai/transcription"],
   "credential": "openai-work",
   "ttlMs": 600000,
-  "context": { "workspaceId": "default", "team": "dev" }
+  "context": { "workspaceId": "default", "groupId": "dev" }
 }
 ```
 
