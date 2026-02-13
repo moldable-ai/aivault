@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "xero",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.xero.com"],
+  "capabilities": [
+    {
+      "id": "xero/accounting",
+      "provider": "xero",
+      "allow": {
+        "hosts": ["api.xero.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/api.xro/2.0/"]
+      }
+    }
+  ]
+}

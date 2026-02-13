@@ -10,12 +10,147 @@
   "hosts": ["api.elevenlabs.io"],
   "capabilities": [
     {
+      "id": "elevenlabs/text-to-speech",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/text-to-speech"]
+      }
+    },
+    {
       "id": "elevenlabs/transcription",
       "provider": "elevenlabs",
       "allow": {
         "hosts": ["api.elevenlabs.io"],
         "methods": ["POST"],
         "pathPrefixes": ["/v1/speech-to-text"]
+      }
+    },
+    {
+      "id": "elevenlabs/text-to-dialogue",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/text-to-dialogue"]
+      }
+    },
+    {
+      "id": "elevenlabs/voice-changer",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/speech-to-speech"]
+      }
+    },
+    {
+      "id": "elevenlabs/sound-effects",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/sound-generation"]
+      }
+    },
+    {
+      "id": "elevenlabs/audio-isolation",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/audio-isolation"]
+      }
+    },
+    {
+      "id": "elevenlabs/dubbing",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/dubbing"]
+      }
+    },
+    {
+      "id": "elevenlabs/forced-alignment",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/forced-alignment"]
+      }
+    },
+    {
+      "id": "elevenlabs/voices",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/voices", "/v2/voices"]
+      }
+    },
+    {
+      "id": "elevenlabs/voice-design",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/voice-generation", "/v1/text-to-voice"]
+      }
+    },
+    {
+      "id": "elevenlabs/models",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/models"]
+      }
+    },
+    {
+      "id": "elevenlabs/history",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/history"]
+      }
+    },
+    {
+      "id": "elevenlabs/pronunciation-dictionaries",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/pronunciation-dictionaries"]
+      }
+    },
+    {
+      "id": "elevenlabs/conversational-ai",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1/convai"]
+      }
+    },
+    {
+      "id": "elevenlabs/audio-native",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/audio-native"]
+      }
+    },
+    {
+      "id": "elevenlabs/studio",
+      "provider": "elevenlabs",
+      "allow": {
+        "hosts": ["api.elevenlabs.io"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/projects"]
       }
     }
   ]

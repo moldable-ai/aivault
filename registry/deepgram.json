@@ -7,15 +7,51 @@
       "value_template": "Token {{secret}}"
     }
   },
-  "hosts": ["api.deepgram.com"],
+  "hosts": ["api.deepgram.com", "agent.deepgram.com"],
   "capabilities": [
     {
       "id": "deepgram/transcription",
       "provider": "deepgram",
       "allow": {
         "hosts": ["api.deepgram.com"],
-        "methods": ["POST"],
+        "methods": ["POST", "GET"],
         "pathPrefixes": ["/v1/listen"]
+      }
+    },
+    {
+      "id": "deepgram/text-to-speech",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": ["api.deepgram.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/speak"]
+      }
+    },
+    {
+      "id": "deepgram/text-intelligence",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": ["api.deepgram.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/read"]
+      }
+    },
+    {
+      "id": "deepgram/models",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": ["api.deepgram.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/models"]
+      }
+    },
+    {
+      "id": "deepgram/voice-agent",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": ["agent.deepgram.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/agent"]
       }
     }
   ]

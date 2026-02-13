@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "quickbooks",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["quickbooks.api.intuit.com"],
+  "capabilities": [
+    {
+      "id": "quickbooks/accounting",
+      "provider": "quickbooks",
+      "allow": {
+        "hosts": ["quickbooks.api.intuit.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v3/company/"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "spotify",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.spotify.com"],
+  "capabilities": [
+    {
+      "id": "spotify/catalog",
+      "provider": "spotify",
+      "allow": {
+        "hosts": ["api.spotify.com"],
+        "methods": ["GET"],
+        "pathPrefixes": [
+          "/v1/tracks",
+          "/v1/albums",
+          "/v1/artists",
+          "/v1/audio-features",
+          "/v1/audio-analysis",
+          "/v1/search",
+          "/v1/browse",
+          "/v1/recommendations",
+          "/v1/shows",
+          "/v1/episodes",
+          "/v1/audiobooks",
+          "/v1/chapters",
+          "/v1/genres",
+          "/v1/markets"
+        ]
+      }
+    },
+    {
+      "id": "spotify/playlists",
+      "provider": "spotify",
+      "allow": {
+        "hosts": ["api.spotify.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/v1/playlists"]
+      }
+    },
+    {
+      "id": "spotify/me",
+      "provider": "spotify",
+      "allow": {
+        "hosts": ["api.spotify.com"],
+        "methods": ["GET", "PUT", "POST", "DELETE"],
+        "pathPrefixes": ["/v1/me"]
+      }
+    },
+    {
+      "id": "spotify/users",
+      "provider": "spotify",
+      "allow": {
+        "hosts": ["api.spotify.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/users"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "airtable",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.airtable.com"],
+  "capabilities": [
+    {
+      "id": "airtable/records",
+      "provider": "airtable",
+      "allow": {
+        "hosts": ["api.airtable.com"],
+        "methods": ["GET", "POST", "PATCH", "PUT", "DELETE"],
+        "pathPrefixes": ["/v0/"]
+      }
+    },
+    {
+      "id": "airtable/meta",
+      "provider": "airtable",
+      "allow": {
+        "hosts": ["api.airtable.com"],
+        "methods": ["GET", "POST", "PATCH"],
+        "pathPrefixes": ["/v0/meta/bases"]
+      }
+    },
+    {
+      "id": "airtable/webhooks",
+      "provider": "airtable",
+      "allow": {
+        "hosts": ["api.airtable.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v0/bases"]
+      }
+    }
+  ]
+}

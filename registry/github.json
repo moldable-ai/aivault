@@ -1,0 +1,94 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "github",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.github.com"],
+  "capabilities": [
+    {
+      "id": "github/repos",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["POST", "GET", "PUT", "PATCH", "DELETE"],
+        "pathPrefixes": ["/repos"]
+      }
+    },
+    {
+      "id": "github/orgs",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["POST", "GET", "PUT", "PATCH", "DELETE"],
+        "pathPrefixes": ["/orgs", "/organizations"]
+      }
+    },
+    {
+      "id": "github/issues",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/issues"]
+      }
+    },
+    {
+      "id": "github/search",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/search"]
+      }
+    },
+    {
+      "id": "github/graphql",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/graphql"]
+      }
+    },
+    {
+      "id": "github/gists",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/gists"]
+      }
+    },
+    {
+      "id": "github/users",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/users", "/user"]
+      }
+    },
+    {
+      "id": "github/notifications",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["GET", "PUT", "PATCH", "DELETE"],
+        "pathPrefixes": ["/notifications"]
+      }
+    },
+    {
+      "id": "github/meta",
+      "provider": "github",
+      "allow": {
+        "hosts": ["api.github.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/meta", "/rate_limit", "/emojis", "/licenses", "/gitignore"]
+      }
+    }
+  ]
+}

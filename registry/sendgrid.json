@@ -1,0 +1,58 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "sendgrid",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.sendgrid.com"],
+  "capabilities": [
+    {
+      "id": "sendgrid/mail",
+      "provider": "sendgrid",
+      "allow": {
+        "hosts": ["api.sendgrid.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v3/mail"]
+      }
+    },
+    {
+      "id": "sendgrid/marketing",
+      "provider": "sendgrid",
+      "allow": {
+        "hosts": ["api.sendgrid.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v3/marketing"]
+      }
+    },
+    {
+      "id": "sendgrid/templates",
+      "provider": "sendgrid",
+      "allow": {
+        "hosts": ["api.sendgrid.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v3/templates"]
+      }
+    },
+    {
+      "id": "sendgrid/stats",
+      "provider": "sendgrid",
+      "allow": {
+        "hosts": ["api.sendgrid.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v3/stats", "/v3/categories"]
+      }
+    },
+    {
+      "id": "sendgrid/suppressions",
+      "provider": "sendgrid",
+      "allow": {
+        "hosts": ["api.sendgrid.com"],
+        "methods": ["GET", "DELETE"],
+        "pathPrefixes": ["/v3/suppression"]
+      }
+    }
+  ]
+}

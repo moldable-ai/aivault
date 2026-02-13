@@ -1,0 +1,76 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "square",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["connect.squareup.com"],
+  "capabilities": [
+    {
+      "id": "square/payments",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v2/payments"]
+      }
+    },
+    {
+      "id": "square/orders",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v2/orders"]
+      }
+    },
+    {
+      "id": "square/catalog",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/v2/catalog"]
+      }
+    },
+    {
+      "id": "square/customers",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/v2/customers"]
+      }
+    },
+    {
+      "id": "square/inventory",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v2/inventory"]
+      }
+    },
+    {
+      "id": "square/invoices",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/v2/invoices"]
+      }
+    },
+    {
+      "id": "square/locations",
+      "provider": "square",
+      "allow": {
+        "hosts": ["connect.squareup.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v2/locations"]
+      }
+    }
+  ]
+}

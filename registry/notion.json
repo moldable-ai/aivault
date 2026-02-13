@@ -1,0 +1,67 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "notion",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.notion.com"],
+  "capabilities": [
+    {
+      "id": "notion/pages",
+      "provider": "notion",
+      "allow": {
+        "hosts": ["api.notion.com"],
+        "methods": ["POST", "GET", "PATCH"],
+        "pathPrefixes": ["/v1/pages"]
+      }
+    },
+    {
+      "id": "notion/databases",
+      "provider": "notion",
+      "allow": {
+        "hosts": ["api.notion.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/databases"]
+      }
+    },
+    {
+      "id": "notion/blocks",
+      "provider": "notion",
+      "allow": {
+        "hosts": ["api.notion.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1/blocks"]
+      }
+    },
+    {
+      "id": "notion/users",
+      "provider": "notion",
+      "allow": {
+        "hosts": ["api.notion.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/users"]
+      }
+    },
+    {
+      "id": "notion/search",
+      "provider": "notion",
+      "allow": {
+        "hosts": ["api.notion.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/search"]
+      }
+    },
+    {
+      "id": "notion/comments",
+      "provider": "notion",
+      "allow": {
+        "hosts": ["api.notion.com"],
+        "methods": ["GET", "POST"],
+        "pathPrefixes": ["/v1/comments"]
+      }
+    }
+  ]
+}

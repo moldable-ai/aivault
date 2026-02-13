@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "telegram",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.telegram.org"],
+  "capabilities": [
+    {
+      "id": "telegram/bot",
+      "provider": "telegram",
+      "allow": {
+        "hosts": ["api.telegram.org"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/bot"]
+      }
+    }
+  ]
+}

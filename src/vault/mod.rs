@@ -244,10 +244,29 @@ impl VaultRuntime {
                         .map(|mut it| it.any(|e| e.ok().is_some_and(|e| e.path().is_file())))
                         .unwrap_or(false);
                 if has_secrets {
-                    return Err(VaultError::Provider(format!(
-                        "Keychain entry missing for service={}, account={} (secrets exist; refusing to overwrite).",
-                        service, account
-                    )));
+                    let mut msg = format!(
+                        "Keychain entry missing for service={service}, account={account}. Vault secrets already exist at {} so aivault will not generate a new key (that would make existing secrets unrecoverable).",
+                        secrets_dir.display()
+                    );
+
+                    #[cfg(target_os = "macos")]
+                    {
+                        use keyring::credential::CredentialPersistence;
+                        let persistence =
+                            keyring::default::default_credential_builder().persistence();
+                        if matches!(
+                            persistence,
+                            CredentialPersistence::EntryOnly | CredentialPersistence::ProcessOnly
+                        ) {
+                            msg.push_str(" This build appears to be using a non-persistent keyring backend (macOS Keychain support likely not enabled). Ensure the `keyring` dependency is built with the `apple-native` feature.");
+                        }
+                    }
+
+                    msg.push_str(&format!(
+                        " Debug: `security find-generic-password -s {service} -a {account} -g`."
+                    ));
+
+                    return Err(VaultError::Provider(msg));
                 }
 
                 let kek = random_key_32();
@@ -1297,6 +1316,12 @@ fn store_kek_file(path: &str, kek: &[u8; 32]) -> Result<(), String> {
     let p = std::path::PathBuf::from(path);
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perm = std::fs::Permissions::from_mode(0o700);
+            let _ = std::fs::set_permissions(parent, perm);
+        }
     }
     let b64 = base64::engine::general_purpose::STANDARD.encode(kek);
     let mut f = std::fs::OpenOptions::new()
@@ -1371,22 +1396,42 @@ impl VaultRuntime {
 
         // Default provider:
         // - macOS: Keychain (best UX)
-        // - other: file-based key inside the vault dir (seamless local ops)
-        let default_provider = if cfg!(target_os = "macos") && !is_override_dir && is_canonical_home
+        // - other: file-based key outside the vault dir (vault dir alone is not enough to decrypt)
+        let force_file_default = env_flag_true("AIVAULT_DEV_FORCE_DEFAULT_FILE_PROVIDER");
+        let default_provider = if cfg!(target_os = "macos")
+            && !force_file_default
+            && !is_override_dir
+            && is_canonical_home
         {
             VaultProviderConfig::MacosKeychain {
                 service: "aivault".to_string(),
                 account: "kek".to_string(),
             }
         } else {
-            let key_path = self.paths.root_dir().join("kek.key").display().to_string();
+            let key_path = if !is_override_dir && is_canonical_home {
+                crate::paths::aivault_root_dir()
+                    .join("keys")
+                    .join("kek.key")
+                    .display()
+                    .to_string()
+            } else {
+                self.paths.root_dir().join("kek.key").display().to_string()
+            };
             VaultProviderConfig::File { path: key_path }
         };
 
         // Best-effort init with fallback to file provider on macOS if Keychain fails.
         let init_res = self.init_unlocked(default_provider);
         if init_res.is_err() && cfg!(target_os = "macos") {
-            let key_path = self.paths.root_dir().join("kek.key").display().to_string();
+            let key_path = if !is_override_dir && is_canonical_home {
+                crate::paths::aivault_root_dir()
+                    .join("keys")
+                    .join("kek.key")
+                    .display()
+                    .to_string()
+            } else {
+                self.paths.root_dir().join("kek.key").display().to_string()
+            };
             let _ = self.init_unlocked(VaultProviderConfig::File { path: key_path })?;
         } else {
             init_res?;
@@ -1394,6 +1439,13 @@ impl VaultRuntime {
 
         Ok(())
     }
+}
+
+fn env_flag_true(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -2121,5 +2173,40 @@ mod tests {
             .unwrap()
             .len();
         assert_eq!(after, before);
+    }
+
+    #[test]
+    fn default_file_provider_keeps_kek_out_of_vault_dir_for_canonical_install_when_forced() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().join("home");
+        std::fs::create_dir_all(&home).unwrap();
+
+        // Force canonical-home default init without touching the real user vault or Keychain.
+        let _home = ScopedEnvVar::set("HOME", home.as_os_str());
+        let _no_override = ScopedEnvVar::remove("AIVAULT_DIR");
+        let _force_file = ScopedEnvVar::set("AIVAULT_DEV_FORCE_DEFAULT_FILE_PROVIDER", "1");
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+
+        let raw = std::fs::read_to_string(vault.paths().config_path()).unwrap();
+        let cfg: VaultConfig = serde_json::from_str(&raw).unwrap();
+        let VaultProviderConfig::File { path } = cfg.provider else {
+            panic!("expected file provider when forced");
+        };
+
+        let key_path = std::path::PathBuf::from(path);
+        assert!(
+            !key_path.starts_with(vault.paths().root_dir()),
+            "expected key path outside vault dir; got {} under {}",
+            key_path.display(),
+            vault.paths().root_dir().display()
+        );
+        assert!(
+            key_path.exists(),
+            "key file should exist at {}",
+            key_path.display()
+        );
     }
 }

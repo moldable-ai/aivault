@@ -1,0 +1,58 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "x",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.x.com"],
+  "capabilities": [
+    {
+      "id": "x/tweets",
+      "provider": "x",
+      "allow": {
+        "hosts": ["api.x.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/2/tweets"]
+      }
+    },
+    {
+      "id": "x/users",
+      "provider": "x",
+      "allow": {
+        "hosts": ["api.x.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/2/users"]
+      }
+    },
+    {
+      "id": "x/lists",
+      "provider": "x",
+      "allow": {
+        "hosts": ["api.x.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/2/lists"]
+      }
+    },
+    {
+      "id": "x/spaces",
+      "provider": "x",
+      "allow": {
+        "hosts": ["api.x.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/2/spaces"]
+      }
+    },
+    {
+      "id": "x/dm",
+      "provider": "x",
+      "allow": {
+        "hosts": ["api.x.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/2/dm_conversations", "/2/dm_events"]
+      }
+    }
+  ]
+}

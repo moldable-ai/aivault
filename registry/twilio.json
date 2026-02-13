@@ -1,0 +1,17 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "twilio",
+  "auth": "basic",
+  "hosts": ["api.twilio.com"],
+  "capabilities": [
+    {
+      "id": "twilio/api",
+      "provider": "twilio",
+      "allow": {
+        "hosts": ["api.twilio.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/2010-04-01"]
+      }
+    }
+  ]
+}

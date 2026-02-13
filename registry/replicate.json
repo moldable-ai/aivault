@@ -1,0 +1,67 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "replicate",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.replicate.com"],
+  "capabilities": [
+    {
+      "id": "replicate/predictions",
+      "provider": "replicate",
+      "allow": {
+        "hosts": ["api.replicate.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/predictions"]
+      }
+    },
+    {
+      "id": "replicate/models",
+      "provider": "replicate",
+      "allow": {
+        "hosts": ["api.replicate.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1/models"]
+      }
+    },
+    {
+      "id": "replicate/deployments",
+      "provider": "replicate",
+      "allow": {
+        "hosts": ["api.replicate.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1/deployments"]
+      }
+    },
+    {
+      "id": "replicate/trainings",
+      "provider": "replicate",
+      "allow": {
+        "hosts": ["api.replicate.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/trainings"]
+      }
+    },
+    {
+      "id": "replicate/files",
+      "provider": "replicate",
+      "allow": {
+        "hosts": ["api.replicate.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1/files"]
+      }
+    },
+    {
+      "id": "replicate/collections",
+      "provider": "replicate",
+      "allow": {
+        "hosts": ["api.replicate.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/collections"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "resend",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.resend.com"],
+  "capabilities": [
+    {
+      "id": "resend/emails",
+      "provider": "resend",
+      "allow": {
+        "hosts": ["api.resend.com"],
+        "methods": ["POST", "GET", "PATCH"],
+        "pathPrefixes": ["/emails"]
+      }
+    },
+    {
+      "id": "resend/contacts",
+      "provider": "resend",
+      "allow": {
+        "hosts": ["api.resend.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/contacts"]
+      }
+    },
+    {
+      "id": "resend/broadcasts",
+      "provider": "resend",
+      "allow": {
+        "hosts": ["api.resend.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/broadcasts"]
+      }
+    },
+    {
+      "id": "resend/domains",
+      "provider": "resend",
+      "allow": {
+        "hosts": ["api.resend.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/domains"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "anthropic",
+  "auth": {
+    "header": {
+      "header_name": "x-api-key",
+      "value_template": "{{secret}}"
+    }
+  },
+  "hosts": ["api.anthropic.com"],
+  "capabilities": [
+    {
+      "id": "anthropic/messages",
+      "provider": "anthropic",
+      "allow": {
+        "hosts": ["api.anthropic.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/messages"]
+      }
+    },
+    {
+      "id": "anthropic/models",
+      "provider": "anthropic",
+      "allow": {
+        "hosts": ["api.anthropic.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/models"]
+      }
+    }
+  ]
+}

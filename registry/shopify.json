@@ -1,0 +1,22 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "shopify",
+  "auth": {
+    "header": {
+      "header_name": "X-Shopify-Access-Token",
+      "value_template": "{{secret}}"
+    }
+  },
+  "hosts": ["myshopify.com"],
+  "capabilities": [
+    {
+      "id": "shopify/admin",
+      "provider": "shopify",
+      "allow": {
+        "hosts": ["myshopify.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/admin/api/"]
+      }
+    }
+  ]
+}

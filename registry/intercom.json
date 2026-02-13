@@ -1,0 +1,112 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "intercom",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.intercom.io"],
+  "capabilities": [
+    {
+      "id": "intercom/contacts",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/contacts", "/companies/"]
+      }
+    },
+    {
+      "id": "intercom/conversations",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT"],
+        "pathPrefixes": ["/conversations"]
+      }
+    },
+    {
+      "id": "intercom/messages",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST"],
+        "pathPrefixes": ["/messages"]
+      }
+    },
+    {
+      "id": "intercom/articles",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/articles"]
+      }
+    },
+    {
+      "id": "intercom/help_center",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/help_center"]
+      }
+    },
+    {
+      "id": "intercom/teams",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/teams"]
+      }
+    },
+    {
+      "id": "intercom/admins",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "PUT"],
+        "pathPrefixes": ["/admins", "/me"]
+      }
+    },
+    {
+      "id": "intercom/tags",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "pathPrefixes": ["/tags"]
+      }
+    },
+    {
+      "id": "intercom/segments",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/segments"]
+      }
+    },
+    {
+      "id": "intercom/data_attributes",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT"],
+        "pathPrefixes": ["/data_attributes"]
+      }
+    },
+    {
+      "id": "intercom/tickets",
+      "provider": "intercom",
+      "allow": {
+        "hosts": ["api.intercom.io"],
+        "methods": ["GET", "POST", "PUT"],
+        "pathPrefixes": ["/tickets"]
+      }
+    }
+  ]
+}

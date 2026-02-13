@@ -22,6 +22,7 @@ use crate::cli::{
     AuthKind, CapabilitiesCommand, CapabilityCommand, CapabilityPolicyCommand, Cli, Command,
     CredentialCommand, InvokeArgs, OauthCommand, ProviderKind, ScopeKind, SecretsCommand,
 };
+use crate::daemon::{self, DaemonRequest};
 use crate::markdown::{to_markdown, ToMarkdownOptions};
 use crate::vault::{
     read_audit_events, read_audit_events_before, SecretRef, SecretScope, VaultProviderConfig,
@@ -708,7 +709,7 @@ fn invoke_with_store(
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
     let response =
-        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+        maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
     print_invoke_body(&response)
 }
 
@@ -728,7 +729,7 @@ fn invoke_json_with_store(
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
     let response =
-        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+        maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
 
     let planned = response
         .get("planned")
@@ -777,7 +778,7 @@ fn invoke_markdown_with_store(
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
     let response =
-        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+        maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
 
     let bytes = extract_invoke_body_bytes(&response)?;
     let value = if let Ok(json) = serde_json::from_slice::<Value>(&bytes) {
@@ -1211,7 +1212,7 @@ fn parse_key_value_pair(raw: &str, flag: &str) -> Result<(String, String), Strin
     Ok((key.to_string(), value.to_string()))
 }
 
-fn run_capability_envelope(
+pub(crate) fn run_capability_envelope(
     vault: &VaultRuntime,
     store: &BrokerStore,
     envelope: ProxyEnvelope,
@@ -1253,6 +1254,146 @@ fn run_capability_envelope(
         .execute_envelope(&RequestAuth::Proxy(token.token), envelope, client_ip)
         .map_err(|e| e.to_string())?;
     execute_planned_http_request(&broker, &planned)
+}
+
+fn maybe_run_capability_envelope(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    envelope: ProxyEnvelope,
+    client_ip: IpAddr,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> Result<Value, String> {
+    if env_flag_true("AIVAULTD_DISABLE") {
+        return run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id);
+    }
+
+    // Default to daemon-backed execution on unix platforms. This keeps CLI UX as `aivault <cmd>`
+    // while ensuring secret use happens in the daemon boundary when available.
+    let socket_path = daemon::socket_path_from_env().unwrap_or_else(daemon::default_socket_path);
+
+    #[cfg(unix)]
+    {
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+
+        let request = DaemonRequest::ExecuteEnvelope {
+            envelope: envelope.clone(),
+            client_ip: client_ip.to_string(),
+            workspace_id: workspace_id.map(|s| s.to_string()),
+            group_id: group_id.map(|s| s.to_string()),
+        };
+
+        let attempt = daemon::client_execute_envelope_typed(&socket_path, request.clone());
+        if let Err(crate::daemon::DaemonClientError::Connect(_)) = attempt {
+            let autostart_enabled = std::env::var("AIVAULTD_AUTOSTART")
+                .ok()
+                .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+                .unwrap_or(true);
+            if !autostart_enabled {
+                return Err(format!(
+                    "aivaultd not running at '{}' (autostart disabled)",
+                    socket_path.display()
+                ));
+            }
+
+            let aivault_dir_set = std::env::var("AIVAULT_DIR")
+                .ok()
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false);
+            let autostart_once = env_flag_true("AIVAULTD_AUTOSTART_ONCE") || aivault_dir_set;
+
+            // Try to locate aivaultd alongside the current executable first.
+            let mut daemon_exe = std::env::current_exe()
+                .ok()
+                .unwrap_or_else(|| std::path::PathBuf::from("aivault"));
+            #[cfg(target_os = "windows")]
+            {
+                daemon_exe.set_file_name("aivaultd.exe");
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                daemon_exe.set_file_name("aivaultd");
+            }
+            if !daemon_exe.exists() {
+                daemon_exe = std::path::PathBuf::from("aivaultd");
+            }
+
+            let mut cmd = Command::new(daemon_exe);
+            cmd.arg("--socket")
+                .arg(socket_path.to_string_lossy().to_string())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            if autostart_once {
+                cmd.arg("--once");
+            }
+
+            let mut child = cmd
+                .spawn()
+                .map_err(|e| format!("failed to start aivaultd: {}", e))?;
+
+            // Wait for the daemon to become connectable, then retry the request.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                match daemon::client_execute_envelope_typed(&socket_path, request.clone()) {
+                    Ok(value) => {
+                        if autostart_once {
+                            let _ = child.wait();
+                        }
+                        return Ok(value);
+                    }
+                    Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                        if Instant::now() > deadline {
+                            if autostart_once {
+                                let _ = child.wait();
+                            }
+                            return Err(format!(
+                                "failed connecting to aivaultd at '{}' after autostart",
+                                socket_path.display()
+                            ));
+                        }
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(crate::daemon::DaemonClientError::Protocol(e)) => {
+                        if autostart_once {
+                            let _ = child.wait();
+                        }
+                        return Err(format!(
+                            "invalid response from aivaultd at '{}': {}",
+                            socket_path.display(),
+                            e
+                        ));
+                    }
+                    Err(crate::daemon::DaemonClientError::Remote(e)) => {
+                        if autostart_once {
+                            let _ = child.wait();
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        attempt.map_err(|e| match e {
+            crate::daemon::DaemonClientError::Connect(err) => format!(
+                "failed connecting to aivaultd at '{}': {}",
+                socket_path.display(),
+                err
+            ),
+            crate::daemon::DaemonClientError::Protocol(err) => format!(
+                "invalid response from aivaultd at '{}': {}",
+                socket_path.display(),
+                err
+            ),
+            crate::daemon::DaemonClientError::Remote(err) => err,
+        })
+    }
+
+    #[cfg(not(unix))]
+    {
+        // Non-unix targets: daemon boundary not supported; fall back to in-process.
+        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)
+    }
 }
 
 struct AuthBuildOptions {

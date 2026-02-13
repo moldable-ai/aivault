@@ -1,0 +1,58 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "postmark",
+  "auth": {
+    "header": {
+      "header_name": "X-Postmark-Server-Token",
+      "value_template": "{{secret}}"
+    }
+  },
+  "hosts": ["api.postmarkapp.com"],
+  "capabilities": [
+    {
+      "id": "postmark/email",
+      "provider": "postmark",
+      "allow": {
+        "hosts": ["api.postmarkapp.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/email"]
+      }
+    },
+    {
+      "id": "postmark/bounces",
+      "provider": "postmark",
+      "allow": {
+        "hosts": ["api.postmarkapp.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/bounces"]
+      }
+    },
+    {
+      "id": "postmark/templates",
+      "provider": "postmark",
+      "allow": {
+        "hosts": ["api.postmarkapp.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/templates"]
+      }
+    },
+    {
+      "id": "postmark/stats",
+      "provider": "postmark",
+      "allow": {
+        "hosts": ["api.postmarkapp.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/stats"]
+      }
+    },
+    {
+      "id": "postmark/message-streams",
+      "provider": "postmark",
+      "allow": {
+        "hosts": ["api.postmarkapp.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/message-streams"]
+      }
+    }
+  ]
+}

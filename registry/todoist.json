@@ -1,0 +1,67 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "todoist",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.todoist.com"],
+  "capabilities": [
+    {
+      "id": "todoist/tasks",
+      "provider": "todoist",
+      "allow": {
+        "hosts": ["api.todoist.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/rest/v2/tasks"]
+      }
+    },
+    {
+      "id": "todoist/projects",
+      "provider": "todoist",
+      "allow": {
+        "hosts": ["api.todoist.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/rest/v2/projects"]
+      }
+    },
+    {
+      "id": "todoist/sections",
+      "provider": "todoist",
+      "allow": {
+        "hosts": ["api.todoist.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/rest/v2/sections"]
+      }
+    },
+    {
+      "id": "todoist/comments",
+      "provider": "todoist",
+      "allow": {
+        "hosts": ["api.todoist.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/rest/v2/comments"]
+      }
+    },
+    {
+      "id": "todoist/labels",
+      "provider": "todoist",
+      "allow": {
+        "hosts": ["api.todoist.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/rest/v2/labels"]
+      }
+    },
+    {
+      "id": "todoist/sync",
+      "provider": "todoist",
+      "allow": {
+        "hosts": ["api.todoist.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/sync/v9"]
+      }
+    }
+  ]
+}

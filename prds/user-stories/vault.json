@@ -130,6 +130,15 @@
       "tests": [
         "secret_files_are_not_plaintext_and_use_restrictive_permissions"
       ]
+    },
+    {
+      "id": "ev-vault-key-custody-keeps-kek-out-of-vault-dir-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/mod.rs",
+      "tests": [
+        "default_file_provider_keeps_kek_out_of_vault_dir_for_canonical_install_when_forced"
+      ]
     }
   ],
   "sections": [
@@ -367,6 +376,18 @@
               }
             ]
           }
+        },
+        {
+          "slug": "vault-secret-material-multi-field",
+          "story": "As an operator, I want a standard way to store multi-field secret material (multiple named values) for a single credential, so providers requiring multiple keys can be supported without splitting one logical credential into many.",
+          "evidenceLinks": [],
+          "gapReason": "Vault secrets can store arbitrary bytes, but the broker secret material model and CLI flows do not define or enforce a standard multi-field secret shape for auth injection."
+        },
+        {
+          "slug": "vault-broker-auth-secret-writeback",
+          "story": "As an operator, I want broker-side auth flows (like oauth2 token refresh) to write updated access tokens and expiry back into vault secret material atomically, so token refresh can be baked into proxy execution without external orchestration.",
+          "evidenceLinks": [],
+          "gapReason": "Broker runtime currently loads secrets into memory at invocation time and has no persistence/write-back integration to update vault secret values after auth refresh."
         }
       ]
     },
@@ -466,6 +487,12 @@
               }
             ]
           }
+        },
+        {
+          "slug": "vault-per-tenant-host-binding-with-registry",
+          "story": "As an operator, I want per-tenant APIs (Shopify, Zendesk, Jira, Supabase, Mailchimp) to bind a specific upstream host at credential creation while still using registry-derived capability policy, so multi-tenant hostnames work without weakening host authorization.",
+          "evidenceLinks": [],
+          "gapReason": "Registry-backed providers currently derive hosts from compiled-in registry templates and require exact host intersection; there is no host pattern matching or safe host instance binding for registry providers."
         }
       ]
     },
@@ -574,6 +601,51 @@
               {
                 "evidenceId": "ev-vault-runtime-tests",
                 "test": "env_provider_create_and_resolve_secret"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-key-custody-keeps-kek-out-of-vault-dir",
+          "story": "As a security reviewer, I want file-based vault keys stored outside the vault directory by default for canonical installs, so copying ~/.aivault/data/vault alone is not sufficient to decrypt secrets.",
+          "evidenceLinks": [
+            "ev-vault-key-custody-keeps-kek-out-of-vault-dir-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::load"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::ensure_default_initialized"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "store_kek_file"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::write_config"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultStatus"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-key-custody-keeps-kek-out-of-vault-dir-test",
+                "test": "default_file_provider_keeps_kek_out_of_vault_dir_for_canonical_install_when_forced"
               }
             ]
           }

@@ -3,11 +3,16 @@ name = "aivault"
 version = "0.1.0"
 edition = "2021"
 description = "Standalone CLI for local vault lifecycle and secret management"
-license = "MIT"
+license = "Apache-2.0"
+default-run = "aivault"
 
 [[bin]]
 name = "aivault"
 path = "src/main.rs"
+
+[[bin]]
+name = "aivaultd"
+path = "src/bin/aivaultd.rs"
 
 [dependencies]
 argon2 = "0.5"
@@ -18,7 +23,6 @@ clap = { version = "4.5", features = ["derive"] }
 dirs = "6"
 hex = "0.4"
 include_dir = "0.7"
-keyring = "3.6"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -27,6 +31,12 @@ sha2 = "0.10"
 thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring = "3.6"
 
 [dev-dependencies]
 axum = "0.8"

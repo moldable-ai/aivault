@@ -1,0 +1,49 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "stripe",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.stripe.com"],
+  "capabilities": [
+    {
+      "id": "stripe/payments",
+      "provider": "stripe",
+      "allow": {
+        "hosts": ["api.stripe.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/payment_intents", "/v1/charges", "/v1/refunds", "/v1/balance_transactions"]
+      }
+    },
+    {
+      "id": "stripe/customers",
+      "provider": "stripe",
+      "allow": {
+        "hosts": ["api.stripe.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/customers"]
+      }
+    },
+    {
+      "id": "stripe/billing",
+      "provider": "stripe",
+      "allow": {
+        "hosts": ["api.stripe.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/subscriptions", "/v1/invoices", "/v1/products", "/v1/prices"]
+      }
+    },
+    {
+      "id": "stripe/disputes",
+      "provider": "stripe",
+      "allow": {
+        "hosts": ["api.stripe.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/disputes", "/v1/payouts"]
+      }
+    }
+  ]
+}

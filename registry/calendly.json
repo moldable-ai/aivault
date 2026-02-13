@@ -1,0 +1,85 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "calendly",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.calendly.com"],
+  "capabilities": [
+    {
+      "id": "calendly/scheduled_events",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/scheduled_events"]
+      }
+    },
+    {
+      "id": "calendly/event_types",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/event_types", "/event_type_available_times"]
+      }
+    },
+    {
+      "id": "calendly/users",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/users"]
+      }
+    },
+    {
+      "id": "calendly/organizations",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/organizations"]
+      }
+    },
+    {
+      "id": "calendly/availability",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/user_availability_schedules", "/user_busy_times"]
+      }
+    },
+    {
+      "id": "calendly/webhooks",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/webhook_subscriptions"]
+      }
+    },
+    {
+      "id": "calendly/routing_forms",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/routing_forms"]
+      }
+    },
+    {
+      "id": "calendly/scheduling_links",
+      "provider": "calendly",
+      "allow": {
+        "hosts": ["api.calendly.com"],
+        "methods": ["GET", "POST", "DELETE"],
+        "pathPrefixes": ["/scheduling_links"]
+      }
+    }
+  ]
+}

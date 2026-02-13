@@ -370,12 +370,6 @@ fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
             Some("/v1/moderations"),
         ),
         (
-            "deepgram/transcription",
-            "deepgram",
-            Some("POST"),
-            Some("/v1/listen"),
-        ),
-        (
             "elevenlabs/transcription",
             "elevenlabs",
             Some("POST"),
@@ -402,6 +396,7 @@ fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
         ("openai/files", "openai", Some("/v1/files")),
         ("openai/vector-stores", "openai", Some("/v1/vector_stores")),
         ("openai/realtime", "openai", Some("/v1/realtime")),
+        ("deepgram/transcription", "deepgram", Some("/v1/listen")),
     ];
 
     for (capability, provider, path) in multi_method_expectations {

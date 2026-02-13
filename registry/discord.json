@@ -1,0 +1,103 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "discord",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bot {{secret}}"
+    }
+  },
+  "hosts": ["discord.com"],
+  "capabilities": [
+    {
+      "id": "discord/channels",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "PUT"],
+        "pathPrefixes": ["/api/v10/channels"]
+      }
+    },
+    {
+      "id": "discord/guilds",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "PUT"],
+        "pathPrefixes": ["/api/v10/guilds"]
+      }
+    },
+    {
+      "id": "discord/users",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "pathPrefixes": ["/api/v10/users"]
+      }
+    },
+    {
+      "id": "discord/webhooks",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "pathPrefixes": ["/api/v10/webhooks"]
+      }
+    },
+    {
+      "id": "discord/applications",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "PUT"],
+        "pathPrefixes": ["/api/v10/applications"]
+      }
+    },
+    {
+      "id": "discord/invites",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "DELETE"],
+        "pathPrefixes": ["/api/v10/invites"]
+      }
+    },
+    {
+      "id": "discord/gateway",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/api/v10/gateway"]
+      }
+    },
+    {
+      "id": "discord/voice",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/api/v10/voice"]
+      }
+    },
+    {
+      "id": "discord/stage-instances",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "pathPrefixes": ["/api/v10/stage-instances"]
+      }
+    },
+    {
+      "id": "discord/stickers",
+      "provider": "discord",
+      "allow": {
+        "hosts": ["discord.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/api/v10/sticker-packs"]
+      }
+    }
+  ]
+}

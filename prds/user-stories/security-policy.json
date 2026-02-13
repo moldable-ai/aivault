@@ -182,6 +182,38 @@
       "tests": [
         "cli_rejects_plaintext_secret_resolution_commands"
       ]
+    },
+    {
+      "id": "ev-daemon-e2e-invoke-via-unix-socket-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_daemon.rs",
+      "tests": [
+        "e2e_aivaultd_socket_is_required_when_env_is_set",
+        "e2e_invoke_autostarts_aivaultd_when_not_running",
+        "e2e_invoke_via_aivaultd_unix_socket"
+      ]
+    },
+    {
+      "id": "ev-ci-release-signing-workflow-code",
+      "kind": "code",
+      "automated": false,
+      "file": ".github/workflows/release.yml",
+      "references": [
+        "build",
+        "Sign binaries (macOS)",
+        "Notarize zip (macOS)",
+        "Sign artifact (Linux, cosign keyless)"
+      ]
+    },
+    {
+      "id": "ev-doc-release-verification-code",
+      "kind": "code",
+      "automated": false,
+      "file": "README.md",
+      "references": [
+        "Release verification"
+      ]
     }
   ],
   "sections": [
@@ -1003,6 +1035,71 @@
               }
             ]
           }
+        }
+      ]
+    },
+    {
+      "id": "sec-daemon-boundary",
+      "group": "Security",
+      "title": "Daemon Boundary",
+      "stories": [
+        {
+          "slug": "sec-daemon-boundary-unix-socket-broker",
+          "story": "As a security reviewer, I want aivaultd to serve broker/capability invocation over a local unix socket, so clients can be thin while the daemon enforces the no-plaintext-secret contract.",
+          "evidenceLinks": [
+            "ev-daemon-e2e-invoke-via-unix-socket-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/bin/aivaultd.rs",
+                "symbol": "main"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/daemon.rs",
+                "symbol": "serve"
+              },
+              {
+                "file": "src/daemon.rs",
+                "symbol": "handle_request"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "Command::Invoke"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-daemon-e2e-invoke-via-unix-socket-test",
+                "test": "e2e_invoke_via_aivaultd_unix_socket"
+              },
+              {
+                "evidenceId": "ev-daemon-e2e-invoke-via-unix-socket-test",
+                "test": "e2e_aivaultd_socket_is_required_when_env_is_set"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-supply-chain-signed-release-artifacts",
+          "story": "As an operator, I want signed and verifiable release artifacts (and platform-appropriate notarization where applicable), so users can detect modified binaries before trusting them with local vault access.",
+          "partial": true,
+          "gapReason": "Release workflow and verification docs exist, but signing/notarization is only proven once CI secrets are configured and a real tagged release is executed.",
+          "evidenceLinks": [
+            "ev-ci-release-signing-workflow-code",
+            "ev-doc-release-verification-code"
+          ]
         }
       ]
     },

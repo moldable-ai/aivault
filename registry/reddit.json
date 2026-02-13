@@ -1,0 +1,50 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "reddit",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["oauth.reddit.com"],
+  "capabilities": [
+    {
+      "id": "reddit/api",
+      "provider": "reddit",
+      "allow": {
+        "hosts": ["oauth.reddit.com"],
+        "methods": ["POST", "GET", "PATCH", "PUT", "DELETE"],
+        "pathPrefixes": ["/api/"]
+      }
+    },
+    {
+      "id": "reddit/content",
+      "provider": "reddit",
+      "allow": {
+        "hosts": ["oauth.reddit.com"],
+        "methods": ["GET"],
+        "pathPrefixes": [
+          "/r/",
+          "/comments/",
+          "/subreddits/",
+          "/user/",
+          "/users/",
+          "/search",
+          "/message/",
+          "/wiki/",
+          "/by_id/",
+          "/duplicates/",
+          "/hot",
+          "/new",
+          "/top",
+          "/best",
+          "/rising",
+          "/controversial",
+          "/about/",
+          "/prefs/"
+        ]
+      }
+    }
+  ]
+}

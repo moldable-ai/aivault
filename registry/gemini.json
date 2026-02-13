@@ -1,0 +1,84 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "gemini",
+  "auth": {
+    "query": {
+      "param_name": "key"
+    }
+  },
+  "hosts": ["generativelanguage.googleapis.com"],
+  "capabilities": [
+    {
+      "id": "gemini/models",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/v1/models", "/v1beta/models"]
+      }
+    },
+    {
+      "id": "gemini/files",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1beta/files", "/upload/v1beta/files"]
+      }
+    },
+    {
+      "id": "gemini/cached-content",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1beta/cachedContents"]
+      }
+    },
+    {
+      "id": "gemini/batches",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1beta/batches"]
+      }
+    },
+    {
+      "id": "gemini/tuned-models",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1beta/tunedModels"]
+      }
+    },
+    {
+      "id": "gemini/file-search",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/v1beta/fileSearchStores", "/upload/v1beta/fileSearchStores"]
+      }
+    },
+    {
+      "id": "gemini/corpora",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["POST", "GET", "PATCH", "DELETE"],
+        "pathPrefixes": ["/v1beta/corpora"]
+      }
+    },
+    {
+      "id": "gemini/generated-files",
+      "provider": "gemini",
+      "allow": {
+        "hosts": ["generativelanguage.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1beta/generatedFiles"]
+      }
+    }
+  ]
+}

@@ -219,7 +219,16 @@ If you want to call using:
 - `/v/{credential}/...`
 
 those contracts are implemented at the broker runtime model level, but this repo still needs a network adapter/daemon to expose those routes.
-Use `aivault invoke` (or `aivault capability invoke`) today for real request execution without a daemon.
+Use `aivault invoke` (or `aivault capability invoke`) today for real request execution.
+
+### Daemon boundary (`aivaultd`)
+
+On unix platforms (macOS/Linux), capability invocation defaults to a local daemon boundary:
+
+- `aivault invoke ...` will connect to `aivaultd` over a unix socket, and **auto-start** the daemon if needed.
+- Set `AIVAULTD_DISABLE=1` to force in-process execution (dev/debug).
+- Set `AIVAULTD_AUTOSTART=0` to require a daemon already running (no autostart).
+- Set `AIVAULTD_SOCKET=/path/to.sock` to override the socket path.
 
 ## Calling broker runtime directly (Rust)
 
@@ -257,7 +266,19 @@ For local TLS listener testing, the CLI supports development-only HTTP client ov
 
 These are intended for local/e2e testing only.
 
-GitHub Actions runs the same checks on push and pull requests via `/Users/rob/aivault/.github/workflows/ci.yml`.
+GitHub Actions runs the same checks on push and pull requests via `.github/workflows/ci.yml`.
+
+## Release verification
+
+Release artifacts are built via GitHub Actions and (on macOS) signed and notarized.
+
+To verify downloads:
+
+- Check checksums: compare against the published `.sha256` files.
+- macOS signature inspection: `codesign -dv --verbose=4 aivault`
+- macOS Gatekeeper assessment: `spctl --assess --verbose aivault`
+- Linux artifact authenticity (cosign keyless, CI-driven):
+  - `cosign verify-blob --certificate aivault-...tar.gz.cert --signature aivault-...tar.gz.sig --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity 'https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/cli-vX.Y.Z' aivault-...tar.gz`
 
 ## Storage defaults
 

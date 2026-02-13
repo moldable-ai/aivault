@@ -1,0 +1,202 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "slack",
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["slack.com"],
+  "capabilities": [
+    {
+      "id": "slack/chat",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/api/chat."]
+      }
+    },
+    {
+      "id": "slack/conversations",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/conversations."]
+      }
+    },
+    {
+      "id": "slack/users",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/users."]
+      }
+    },
+    {
+      "id": "slack/files",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/files."]
+      }
+    },
+    {
+      "id": "slack/reactions",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/reactions."]
+      }
+    },
+    {
+      "id": "slack/search",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/api/search."]
+      }
+    },
+    {
+      "id": "slack/bookmarks",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/bookmarks."]
+      }
+    },
+    {
+      "id": "slack/pins",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/pins."]
+      }
+    },
+    {
+      "id": "slack/reminders",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/reminders."]
+      }
+    },
+    {
+      "id": "slack/stars",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/stars."]
+      }
+    },
+    {
+      "id": "slack/team",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/team."]
+      }
+    },
+    {
+      "id": "slack/usergroups",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/usergroups."]
+      }
+    },
+    {
+      "id": "slack/views",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/api/views."]
+      }
+    },
+    {
+      "id": "slack/dialog",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/api/dialog."]
+      }
+    },
+    {
+      "id": "slack/emoji",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/emoji."]
+      }
+    },
+    {
+      "id": "slack/auth",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/auth."]
+      }
+    },
+    {
+      "id": "slack/apps",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/apps."]
+      }
+    },
+    {
+      "id": "slack/workflow",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/api/workflow."]
+      }
+    },
+    {
+      "id": "slack/calls",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/calls."]
+      }
+    },
+    {
+      "id": "slack/admin",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/admin."]
+      }
+    },
+    {
+      "id": "slack/api",
+      "provider": "slack",
+      "allow": {
+        "hosts": ["slack.com"],
+        "methods": ["POST", "GET"],
+        "pathPrefixes": ["/api/api."]
+      }
+    }
+  ]
+}

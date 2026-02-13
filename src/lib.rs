@@ -3,6 +3,7 @@ pub mod broker;
 pub mod broker_store;
 pub mod capabilities;
 pub mod cli;
+pub mod daemon;
 pub mod log_retention;
 pub mod markdown;
 pub mod paths;

@@ -1,0 +1,75 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "youtube",
+  "auth": {
+    "query": {
+      "param_name": "key"
+    }
+  },
+  "hosts": ["www.googleapis.com"],
+  "capabilities": [
+    {
+      "id": "youtube/videos",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/youtube/v3/videos"]
+      }
+    },
+    {
+      "id": "youtube/search",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/youtube/v3/search"]
+      }
+    },
+    {
+      "id": "youtube/channels",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["GET", "PUT"],
+        "pathPrefixes": ["/youtube/v3/channels", "/youtube/v3/channelSections", "/youtube/v3/channelBanners"]
+      }
+    },
+    {
+      "id": "youtube/playlists",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/youtube/v3/playlists", "/youtube/v3/playlistItems"]
+      }
+    },
+    {
+      "id": "youtube/comments",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/youtube/v3/comments", "/youtube/v3/commentThreads"]
+      }
+    },
+    {
+      "id": "youtube/subscriptions",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["POST", "GET", "DELETE"],
+        "pathPrefixes": ["/youtube/v3/subscriptions"]
+      }
+    },
+    {
+      "id": "youtube/captions",
+      "provider": "youtube",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["POST", "GET", "PUT", "DELETE"],
+        "pathPrefixes": ["/youtube/v3/captions"]
+      }
+    }
+  ]
+}
