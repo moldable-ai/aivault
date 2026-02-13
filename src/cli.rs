@@ -92,6 +92,26 @@ pub enum Command {
         #[command(flatten)]
         args: InvokeArgs,
     },
+    /// Invoke a capability and print the upstream response parsed as JSON.
+    Json {
+        #[command(flatten)]
+        args: InvokeArgs,
+    },
+    /// Invoke a capability and print the upstream response converted to markdown.
+    #[command(alias = "md")]
+    Markdown {
+        #[command(flatten)]
+        args: InvokeArgs,
+        /// Namespace to wrap the markdown in (e.g. "data" -> <begin data> ... </end data>)
+        #[arg(long)]
+        namespace: Option<String>,
+        /// Fields to exclude from the markdown output
+        #[arg(long)]
+        exclude_field: Vec<String>,
+        /// Fields to wrap in begin/end tags (for fields containing markdown)
+        #[arg(long)]
+        wrap_field: Vec<String>,
+    },
     Resolve {
         #[arg(long)]
         secret_ref: String,
@@ -357,6 +377,23 @@ pub enum CapabilityCommand {
     Invoke {
         #[command(flatten)]
         args: InvokeArgs,
+    },
+    /// Invoke a capability and print the upstream response parsed as JSON.
+    Json {
+        #[command(flatten)]
+        args: InvokeArgs,
+    },
+    /// Invoke a capability and print the upstream response converted to markdown.
+    #[command(alias = "md")]
+    Markdown {
+        #[command(flatten)]
+        args: InvokeArgs,
+        #[arg(long)]
+        namespace: Option<String>,
+        #[arg(long)]
+        exclude_field: Vec<String>,
+        #[arg(long)]
+        wrap_field: Vec<String>,
     },
 }
 

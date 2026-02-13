@@ -77,7 +77,11 @@ Those proxy contracts are modeled and tested at the broker runtime layer today, 
 - `aivault capability policy set --capability <id> [--rate-limit-per-minute ...] [--max-request-body-bytes ...] [--max-response-body-bytes ...] [--response-block ...]`
 - `aivault capability describe <id>` (aliases: `args`, `shape`, `inspect`)
 - `aivault capability invoke <id> ...` (alias: `call`)
+- `aivault capability json <id> ...` (alias: `aivault json`)
+- `aivault capability markdown <id> ...` (alias: `aivault markdown`, `aivault md`)
 - `aivault invoke <id> ...` (top-level alias of `capability invoke`)
+- `aivault json <id> ...` (prints upstream body parsed as JSON)
+- `aivault markdown <id> ...` (alias: `md`; prints upstream body as markdown)
 - `aivault resolve --secret-ref vault:secret:<id> [--raw]`
 - `aivault resolve-team --secret-ref vault:secret:<id> --workspace-id ... --team ... [--raw]`
 
@@ -101,6 +105,19 @@ aivault secrets create \
 # Resolve it back (replace <secret-id> with returned secretId)
 aivault resolve --secret-ref vault:secret:<secret-id> --raw
 ```
+
+## Quickstart (pnpm)
+
+```bash
+pnpm build
+pnpm dev -- status
+pnpm dev -- invoke openai/transcription --path /v1/audio/transcriptions ...
+pnpm dev -- json openai/transcription --path /v1/audio/transcriptions ...
+pnpm dev -- markdown openai/transcription --path /v1/audio/transcriptions ...
+pnpm dev -- --help
+```
+
+Note: `aivault json` intentionally does **not** return upstream response headers. In untrusted execution environments, headers can carry identifiers or cookies; use `aivault invoke` if you need raw upstream bytes, or add a purpose-built debug mode locally.
 
 Registry-backed capability example (`registry/openai.json`):
 

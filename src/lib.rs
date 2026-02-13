@@ -4,6 +4,7 @@ pub mod broker_store;
 pub mod capabilities;
 pub mod cli;
 pub mod log_retention;
+pub mod markdown;
 pub mod paths;
 pub mod registry;
 #[cfg(test)]

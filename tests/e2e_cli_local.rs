@@ -6,9 +6,27 @@ use tempfile::{NamedTempFile, TempDir};
 fn run_aivault(dir: &TempDir, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_aivault"))
         .env("AIVAULT_DIR", dir.path())
-        .args(args)
+        .args(rewrite_invoke_to_json(args))
         .output()
         .expect("failed to run aivault binary")
+}
+
+fn rewrite_invoke_to_json<'a>(args: &'a [&'a str]) -> Vec<&'a str> {
+    if args.first() == Some(&"invoke") {
+        let mut updated = Vec::with_capacity(args.len());
+        updated.push("json");
+        updated.extend_from_slice(&args[1..]);
+        return updated;
+    }
+    if args.first() == Some(&"capability") && matches!(args.get(1), Some(&"invoke") | Some(&"call"))
+    {
+        let mut updated = Vec::with_capacity(args.len());
+        updated.push("capability");
+        updated.push("json");
+        updated.extend_from_slice(&args[2..]);
+        return updated;
+    }
+    args.to_vec()
 }
 
 fn run_ok_json(dir: &TempDir, args: &[&str]) -> Value {

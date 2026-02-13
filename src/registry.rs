@@ -22,10 +22,12 @@ pub fn builtin_registry() -> BrokerResult<Registry> {
     let mut templates = Vec::new();
     for file in json_files {
         let source = file.path().to_string_lossy().to_string();
-        let raw = file.contents_utf8().ok_or_else(|| crate::broker::BrokerError {
-            error: ErrorCode::InvalidRequest,
-            message: format!("invalid utf-8 in built-in registry provider '{}'", source),
-        })?;
+        let raw = file
+            .contents_utf8()
+            .ok_or_else(|| crate::broker::BrokerError {
+                error: ErrorCode::InvalidRequest,
+                message: format!("invalid utf-8 in built-in registry provider '{}'", source),
+            })?;
         templates.push(parse_provider_template(raw, &source)?);
     }
     Registry::from_templates(templates)

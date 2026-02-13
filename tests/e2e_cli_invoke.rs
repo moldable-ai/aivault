@@ -12,9 +12,27 @@ fn e2e_enabled() -> bool {
 fn run_aivault(dir: &TempDir, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_aivault"))
         .env("AIVAULT_DIR", dir.path())
-        .args(args)
+        .args(rewrite_invoke_to_json(args))
         .output()
         .expect("failed to run aivault binary")
+}
+
+fn rewrite_invoke_to_json<'a>(args: &'a [&'a str]) -> Vec<&'a str> {
+    if args.first() == Some(&"invoke") {
+        let mut updated = Vec::with_capacity(args.len());
+        updated.push("json");
+        updated.extend_from_slice(&args[1..]);
+        return updated;
+    }
+    if args.first() == Some(&"capability") && matches!(args.get(1), Some(&"invoke") | Some(&"call"))
+    {
+        let mut updated = Vec::with_capacity(args.len());
+        updated.push("capability");
+        updated.push("json");
+        updated.extend_from_slice(&args[2..]);
+        return updated;
+    }
+    args.to_vec()
 }
 
 fn run_ok_json(dir: &TempDir, args: &[&str]) -> Value {
@@ -135,15 +153,17 @@ fn e2e_invoke_injects_header_secret_and_executes_upstream() {
         planned_url
     );
 
-    let body = response["response"]["bodyUtf8"]
-        .as_str()
-        .expect("response.bodyUtf8 should be present");
     assert!(
-        body.contains("Bearer sk-e2e-header-secret"),
-        "upstream echo body should contain injected bearer header"
+        response["response"]["json"]["headers"]["authorization"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Bearer sk-e2e-header-secret"),
+        "upstream echo json should contain injected bearer header"
     );
     assert!(
-        !body.contains("vault:secret:"),
+        !response["response"]["json"]
+            .to_string()
+            .contains("vault:secret:"),
         "secret references must not be forwarded upstream"
     );
 }
@@ -316,9 +336,7 @@ fn e2e_invoke_query_auth_is_injected_when_param_not_supplied() {
     );
 
     let response = run_ok_json(&dir, &["invoke", "legacy/inject", "--path", "/get?x=1"]);
-    let body = response["response"]["bodyUtf8"]
-        .as_str()
-        .expect("response.bodyUtf8 should be present");
+    let body = response["response"]["json"].to_string();
     assert!(
         body.contains("\"api_key\":\"query-injected\""),
         "query-auth parameter should be injected by broker, body: {}",
@@ -503,9 +521,7 @@ fn e2e_invoke_multipart_content_type_is_broker_owned() {
             "x=1",
         ],
     );
-    let body = response["response"]["bodyUtf8"]
-        .as_str()
-        .expect("response.bodyUtf8 should be present");
+    let body = response["response"]["json"].to_string();
     assert!(
         body.contains("multipart/form-data"),
         "expected multipart content-type in upstream echo body: {}",
@@ -549,9 +565,7 @@ fn e2e_invoke_applies_response_body_block_filtering_policy() {
     );
 
     let response = run_ok_json(&dir, &["invoke", "openai/filter", "--path", "/get?x=1"]);
-    let body = response["response"]["bodyUtf8"]
-        .as_str()
-        .expect("response.bodyUtf8 should be present");
+    let body = response["response"]["json"].to_string();
     assert!(
         body.contains("[REDACTED]"),
         "response should contain redacted marker, got: {}",

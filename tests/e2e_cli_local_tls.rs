@@ -194,11 +194,31 @@ fn wait_until_listener_ready(addr: SocketAddr) {
 
 fn run_aivault_with_env(dir: &TempDir, args: &[&str], envs: &[(String, String)]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_aivault"));
-    command.env("AIVAULT_DIR", dir.path()).args(args);
+    command
+        .env("AIVAULT_DIR", dir.path())
+        .args(rewrite_invoke_to_json(args));
     for (key, value) in envs {
         command.env(key, value);
     }
     command.output().expect("failed to run aivault binary")
+}
+
+fn rewrite_invoke_to_json<'a>(args: &'a [&'a str]) -> Vec<&'a str> {
+    if args.first() == Some(&"invoke") {
+        let mut updated = Vec::with_capacity(args.len());
+        updated.push("json");
+        updated.extend_from_slice(&args[1..]);
+        return updated;
+    }
+    if args.first() == Some(&"capability") && matches!(args.get(1), Some(&"invoke") | Some(&"call"))
+    {
+        let mut updated = Vec::with_capacity(args.len());
+        updated.push("capability");
+        updated.push("json");
+        updated.extend_from_slice(&args[2..]);
+        return updated;
+    }
+    args.to_vec()
 }
 
 fn run_ok_json(dir: &TempDir, args: &[&str], envs: &[(String, String)]) -> Value {
@@ -251,7 +271,10 @@ fn setup_tls_capability(
     let secret_id = create_secret(
         dir,
         envs,
-        &format!("{}_SECRET", capability_id.replace('/', "_").to_ascii_uppercase()),
+        &format!(
+            "{}_SECRET",
+            capability_id.replace('/', "_").to_ascii_uppercase()
+        ),
         &format!("sk-{}", capability_id.replace('/', "-")),
     );
     let secret_ref = format!("vault:secret:{secret_id}");
@@ -316,14 +339,11 @@ fn e2e_local_tls_invoke_routes_to_local_listener_and_injects_secret() {
     );
     assert_eq!(response["response"]["status"].as_u64(), Some(200));
 
-    let body = response["response"]["bodyUtf8"]
+    let upstream = &response["response"]["json"];
+    let authorization = upstream["headers"]["authorization"]
         .as_str()
-        .expect("bodyUtf8 should be present");
-    assert!(
-        body.contains("sk-local-tls"),
-        "expected injected auth material in echoed response body: {}",
-        body
-    );
+        .expect("json.headers.authorization should be present");
+    assert_eq!(authorization, "Bearer sk-local-tls");
 
     let captured = server.captured_requests();
     assert!(
@@ -481,7 +501,12 @@ fn e2e_local_tls_response_size_policy_blocks_large_response() {
 
     let err = run_err_text(
         &dir,
-        &["invoke", "local/tls-response-limit", "--path", "/v1/users?x=1"],
+        &[
+            "invoke",
+            "local/tls-response-limit",
+            "--path",
+            "/v1/users?x=1",
+        ],
         &envs,
     );
     assert!(

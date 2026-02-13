@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
+use std::io::Write;
 use std::net::{IpAddr, SocketAddr};
 
 use base64::Engine;
@@ -21,6 +22,7 @@ use crate::cli::{
     AuthKind, CapabilitiesCommand, CapabilityCommand, CapabilityPolicyCommand, Cli, Command,
     CredentialCommand, InvokeArgs, OauthCommand, ProviderKind, ScopeKind, SecretsCommand,
 };
+use crate::markdown::{to_markdown, ToMarkdownOptions};
 use crate::vault::{
     read_audit_events, read_audit_events_before, SecretRef, SecretScope, VaultProviderConfig,
     VaultRuntime,
@@ -82,6 +84,13 @@ pub fn run(cli: Cli) -> Result<(), String> {
         Command::Credential { command } => run_credential(&vault, command),
         Command::Capability { command } => run_capability(&vault, command),
         Command::Invoke { args } => run_invoke(&vault, args),
+        Command::Json { args } => run_invoke_json(&vault, args),
+        Command::Markdown {
+            args,
+            namespace,
+            exclude_field,
+            wrap_field,
+        } => run_invoke_markdown(&vault, args, namespace, exclude_field, wrap_field),
         Command::Resolve { secret_ref, raw } => {
             let value = vault
                 .resolve_secret_ref(&secret_ref, Some("vault.resolve"), Some("aivault-cli"))
@@ -686,12 +695,35 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
         },
         CapabilityCommand::Describe { id } => print_capability_call_args(&store, &id),
         CapabilityCommand::Invoke { args } => invoke_with_store(vault, &store, args),
+        CapabilityCommand::Json { args } => invoke_json_with_store(vault, &store, args),
+        CapabilityCommand::Markdown {
+            args,
+            namespace,
+            exclude_field,
+            wrap_field,
+        } => invoke_markdown_with_store(vault, &store, args, namespace, exclude_field, wrap_field),
     }
 }
 
 fn run_invoke(vault: &VaultRuntime, args: InvokeArgs) -> Result<(), String> {
     let store = BrokerStore::open_under(vault.paths().root_dir())?;
     invoke_with_store(vault, &store, args)
+}
+
+fn run_invoke_json(vault: &VaultRuntime, args: InvokeArgs) -> Result<(), String> {
+    let store = BrokerStore::open_under(vault.paths().root_dir())?;
+    invoke_json_with_store(vault, &store, args)
+}
+
+fn run_invoke_markdown(
+    vault: &VaultRuntime,
+    args: InvokeArgs,
+    namespace: Option<String>,
+    exclude_field: Vec<String>,
+    wrap_field: Vec<String>,
+) -> Result<(), String> {
+    let store = BrokerStore::open_under(vault.paths().root_dir())?;
+    invoke_markdown_with_store(vault, &store, args, namespace, exclude_field, wrap_field)
 }
 
 fn invoke_with_store(
@@ -708,7 +740,109 @@ fn invoke_with_store(
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
     let response = run_capability_envelope(vault, store, envelope, client_ip)?;
-    print_json(&response)
+    print_invoke_body(&response)
+}
+
+fn invoke_json_with_store(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    args: InvokeArgs,
+) -> Result<(), String> {
+    let capability = store
+        .find_capability(args.id.trim())
+        .ok_or_else(|| format!("capability '{}' not found", args.id.trim()))?;
+    let envelope = build_capability_call_envelope(capability, args.clone())?;
+    let client_ip: IpAddr = args
+        .client_ip
+        .parse()
+        .map_err(|_| "invalid --client-ip".to_string())?;
+    let response = run_capability_envelope(vault, store, envelope, client_ip)?;
+
+    let planned = response
+        .get("planned")
+        .cloned()
+        .ok_or_else(|| "missing planned in invoke output".to_string())?;
+    let status = response
+        .get("response")
+        .and_then(|v| v.get("status"))
+        .cloned()
+        .ok_or_else(|| "missing response.status in invoke output".to_string())?;
+
+    let bytes = extract_invoke_body_bytes(&response)?;
+    let json: Value = serde_json::from_slice(&bytes).map_err(|e| {
+        format!(
+            "upstream response body is not valid JSON ({}); use `aivault invoke` for raw output",
+            e
+        )
+    })?;
+
+    let payload = serde_json::json!({
+        "planned": planned,
+        "response": {
+            "status": status,
+            "json": json
+        }
+    });
+    print_json(&payload)
+}
+
+fn invoke_markdown_with_store(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    args: InvokeArgs,
+    namespace: Option<String>,
+    exclude_field: Vec<String>,
+    wrap_field: Vec<String>,
+) -> Result<(), String> {
+    let capability = store
+        .find_capability(args.id.trim())
+        .ok_or_else(|| format!("capability '{}' not found", args.id.trim()))?;
+    let envelope = build_capability_call_envelope(capability, args.clone())?;
+    let client_ip: IpAddr = args
+        .client_ip
+        .parse()
+        .map_err(|_| "invalid --client-ip".to_string())?;
+    let response = run_capability_envelope(vault, store, envelope, client_ip)?;
+
+    let bytes = extract_invoke_body_bytes(&response)?;
+    let value = if let Ok(json) = serde_json::from_slice::<Value>(&bytes) {
+        json
+    } else {
+        let text = String::from_utf8(bytes)
+            .map_err(|_| "upstream response body is not utf8 or json".to_string())?;
+        Value::String(text)
+    };
+
+    let md = to_markdown(
+        &value,
+        &ToMarkdownOptions {
+            namespace,
+            exclude_fields: exclude_field,
+            wrap_fields: wrap_field,
+        },
+    );
+    print!("{}", md);
+    Ok(())
+}
+
+fn print_invoke_body(envelope_response: &Value) -> Result<(), String> {
+    let bytes = extract_invoke_body_bytes(envelope_response)?;
+
+    let mut stdout = std::io::stdout().lock();
+    stdout.write_all(&bytes).map_err(|e| e.to_string())?;
+    stdout.flush().map_err(|e| e.to_string())
+}
+
+fn extract_invoke_body_bytes(envelope_response: &Value) -> Result<Vec<u8>, String> {
+    let body_b64 = envelope_response
+        .get("response")
+        .and_then(|r| r.get("bodyB64"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing response.bodyB64 in invoke output".to_string())?;
+
+    base64::engine::general_purpose::STANDARD
+        .decode(body_b64)
+        .map_err(|e| format!("invalid base64 bodyB64: {}", e))
 }
 
 fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), String> {

@@ -1227,8 +1227,7 @@ fn env_flag_enabled(name: &str) -> bool {
 }
 
 fn vault_disk_logs_disabled() -> bool {
-    env_flag_enabled("AIVAULT_DISABLE_DISK_LOGS")
-        || env_flag_enabled("MOLDABLE_DISABLE_DISK_LOGS")
+    env_flag_enabled("AIVAULT_DISABLE_DISK_LOGS") || env_flag_enabled("MOLDABLE_DISABLE_DISK_LOGS")
 }
 
 fn normalize_aliases(aliases: Vec<String>) -> Vec<String> {
