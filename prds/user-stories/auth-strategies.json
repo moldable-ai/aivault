@@ -128,6 +128,42 @@
       "tests": [
         "oauth_setup_plan_builds_external_consent_url"
       ]
+    },
+    {
+      "id": "ev-broker-auth-token-in-path-injection-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_token_in_path_injection"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-multi-header-injection-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_multi_header_injection"
+      ]
+    },
+    {
+      "id": "ev-e2e-auth-oauth2-refresh-and-cache-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local_tls.rs",
+      "tests": [
+        "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+      ]
+    },
+    {
+      "id": "ev-e2e-auth-oauth2-client-credentials-exchange-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local_tls.rs",
+      "tests": [
+        "e2e_oauth2_client_credentials_exchanges_token_writes_back_and_reuses_cache"
+      ]
     }
   ],
   "sections": [
@@ -262,20 +298,26 @@
         {
           "slug": "auth-oauth2-refresh-and-cache",
           "story": "As an operator, I want oauth2 credentials to refresh and cache access tokens automatically, so callers get bearer auth without running consent or refresh logic.",
-          "partial": true,
-          "gapReason": "Current broker oauth2 behavior is stubbed: it does not call tokenEndpoint to mint real access tokens, and it does not persist refreshed access tokens back into the vault secret material.",
           "evidenceLinks": [
-            "ev-broker-auth-oauth2-refresh-and-cache-test"
+            "ev-e2e-auth-oauth2-refresh-and-cache-test"
           ],
           "trace": {
-            "proofLevel": "runtime",
+            "proofLevel": "e2e",
             "entrypoints": [
               {
-                "file": "src/broker/runtime.rs",
-                "symbol": "Broker::execute_envelope"
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
               }
             ],
             "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              },
               {
                 "file": "src/broker/helpers.rs",
                 "symbol": "apply_auth"
@@ -284,20 +326,25 @@
             "guards": [
               {
                 "file": "src/broker/runtime.rs",
-                "symbol": "Broker::ensure_proxy_token"
+                "symbol": "Broker::ensure_operator"
               }
             ],
-            "stateEffects": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
             "userSurface": [
               {
-                "file": "src/broker.rs",
-                "symbol": "PlannedRequest"
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
               }
             ],
             "assertions": [
               {
-                "evidenceId": "ev-broker-auth-oauth2-refresh-and-cache-test",
-                "test": "story_auth_oauth2_refresh_and_cache"
+                "evidenceId": "ev-e2e-auth-oauth2-refresh-and-cache-test",
+                "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
               }
             ]
           }
@@ -469,20 +516,26 @@
         {
           "slug": "auth-oauth2-client-credentials-grant",
           "story": "As an operator, I want oauth2 client_credentials credentials to mint bearer tokens without refresh tokens, so machine-to-machine providers can be proxied with the same broker contract.",
-          "partial": true,
-          "gapReason": "Current broker oauth2 client_credentials behavior is stubbed: it does not call tokenEndpoint to mint real access tokens, and it does not persist refreshed access tokens back into the vault secret material.",
           "evidenceLinks": [
-            "ev-broker-auth-oauth2-client-credentials-grant-test"
+            "ev-e2e-auth-oauth2-client-credentials-exchange-test"
           ],
           "trace": {
-            "proofLevel": "runtime",
+            "proofLevel": "e2e",
             "entrypoints": [
               {
-                "file": "src/broker/runtime.rs",
-                "symbol": "Broker::execute_envelope"
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
               }
             ],
             "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              },
               {
                 "file": "src/broker/helpers.rs",
                 "symbol": "apply_auth"
@@ -491,20 +544,25 @@
             "guards": [
               {
                 "file": "src/broker/runtime.rs",
-                "symbol": "Broker::ensure_proxy_token"
+                "symbol": "Broker::ensure_operator"
               }
             ],
-            "stateEffects": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
             "userSurface": [
               {
-                "file": "src/broker.rs",
-                "symbol": "PlannedRequest"
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
               }
             ],
             "assertions": [
               {
-                "evidenceId": "ev-broker-auth-oauth2-client-credentials-grant-test",
-                "test": "story_auth_oauth2_client_credentials_grant"
+                "evidenceId": "ev-e2e-auth-oauth2-client-credentials-exchange-test",
+                "test": "e2e_oauth2_client_credentials_exchanges_token_writes_back_and_reuses_cache"
               }
             ]
           }
@@ -512,42 +570,40 @@
         {
           "slug": "auth-oauth2-scopes-applied",
           "story": "As an operator, I want configured oauth2 scopes included in token grant behavior, so provider-required scope sets are applied deterministically.",
-          "partial": true,
-          "gapReason": "Scopes are only represented in the broker's stubbed oauth2 token strings today; real token endpoint requests are not implemented yet.",
           "evidenceLinks": [
-            "ev-broker-auth-oauth2-scopes-applied-test"
+            "ev-e2e-auth-oauth2-refresh-and-cache-test"
           ],
           "trace": {
-            "proofLevel": "runtime",
+            "proofLevel": "e2e",
             "entrypoints": [
               {
-                "file": "src/broker/runtime.rs",
-                "symbol": "Broker::execute_envelope"
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
               }
             ],
             "runtime": [
               {
-                "file": "src/broker/helpers.rs",
-                "symbol": "apply_auth"
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
               }
             ],
             "guards": [
               {
                 "file": "src/broker/runtime.rs",
-                "symbol": "Broker::ensure_proxy_token"
+                "symbol": "Broker::ensure_operator"
               }
             ],
             "stateEffects": [],
             "userSurface": [
               {
-                "file": "src/broker.rs",
-                "symbol": "PlannedRequest"
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
               }
             ],
             "assertions": [
               {
-                "evidenceId": "ev-broker-auth-oauth2-scopes-applied-test",
-                "test": "story_auth_oauth2_scopes_applied"
+                "evidenceId": "ev-e2e-auth-oauth2-refresh-and-cache-test",
+                "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
               }
             ]
           }
@@ -719,26 +775,181 @@
         {
           "slug": "auth-token-in-path-injection",
           "story": "As an operator, I want broker-managed auth that injects a secret token into the URL path (via a deterministic template), so token-in-path APIs like Telegram Bot can be proxied without exposing tokens to callers.",
-          "evidenceLinks": [],
-          "gapReason": "Broker auth injection only supports headers and query parameters today; the broker does not rewrite request paths to inject secrets."
+          "evidenceLinks": [
+            "ev-broker-auth-token-in-path-injection-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-token-in-path-injection-test",
+                "test": "story_auth_token_in_path_injection"
+              }
+            ]
+          }
         },
         {
           "slug": "auth-multi-secret-multi-header-injection",
           "story": "As an operator, I want a single credential to carry multiple named secret values and inject them into multiple headers deterministically, so providers that require two keys (e.g. Datadog API key + app key) can be proxied.",
-          "evidenceLinks": [],
-          "gapReason": "Broker secret material and auth injection currently assume a single secret value per credential strategy; multi-value secrets and multi-header injection are not implemented."
+          "evidenceLinks": [
+            "ev-broker-auth-multi-header-injection-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-multi-header-injection-test",
+                "test": "story_auth_multi_header_injection"
+              }
+            ]
+          }
         },
         {
           "slug": "auth-oauth2-token-endpoint-exchange",
           "story": "As an operator, I want oauth2 refresh_token and client_credentials grants to perform a real HTTPS token exchange against tokenEndpoint, so broker-injected bearer tokens are valid upstream credentials.",
-          "evidenceLinks": [],
-          "gapReason": "AuthStrategy::OAuth2 currently synthesizes placeholder bearer strings and does not call tokenEndpoint."
+          "evidenceLinks": [
+            "ev-e2e-auth-oauth2-refresh-and-cache-test",
+            "ev-e2e-auth-oauth2-client-credentials-exchange-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_auth_strategy"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-auth-oauth2-refresh-and-cache-test",
+                "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+              },
+              {
+                "evidenceId": "ev-e2e-auth-oauth2-client-credentials-exchange-test",
+                "test": "e2e_oauth2_client_credentials_exchanges_token_writes_back_and_reuses_cache"
+              }
+            ]
+          }
         },
         {
           "slug": "auth-oauth2-persist-updated-tokens",
           "story": "As an operator, I want refreshed oauth2 access tokens (and their expiry) written back into vault secret material atomically, so subsequent proxy calls reuse cached tokens without re-refreshing.",
-          "evidenceLinks": [],
-          "gapReason": "The broker runtime has no write-back path to persist refreshed access tokens into the vault secret value."
+          "evidenceLinks": [
+            "ev-e2e-auth-oauth2-refresh-and-cache-test",
+            "ev-e2e-auth-oauth2-client-credentials-exchange-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-auth-oauth2-refresh-and-cache-test",
+                "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+              },
+              {
+                "evidenceId": "ev-e2e-auth-oauth2-client-credentials-exchange-test",
+                "test": "e2e_oauth2_client_credentials_exchanges_token_writes_back_and_reuses_cache"
+              }
+            ]
+          }
         }
       ]
     }

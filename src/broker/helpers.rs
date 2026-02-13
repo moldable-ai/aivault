@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::path::Path;
 
@@ -75,14 +75,68 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
     let pattern = pattern.trim().to_ascii_lowercase();
     let host = host.trim().to_ascii_lowercase();
 
-    if let Some(suffix) = pattern.strip_prefix("*.") {
-        if host == suffix {
+    let (host_name, host_port) = split_authority_like(&host);
+    let (pattern_name, pattern_port) = split_authority_like(&pattern);
+
+    if let Some(suffix) = pattern_name.strip_prefix("*.") {
+        if host_name == suffix {
             return false;
         }
-        return host.ends_with(&format!(".{}", suffix));
+        if !host_name.ends_with(&format!(".{}", suffix)) {
+            return false;
+        }
+        if let Some(pp) = pattern_port {
+            return host_port == Some(pp);
+        }
+        return true;
     }
 
-    host == pattern
+    if host_name != pattern_name {
+        return false;
+    }
+    if let Some(pp) = pattern_port {
+        return host_port == Some(pp);
+    }
+    true
+}
+
+fn split_authority_like(value: &str) -> (String, Option<u16>) {
+    // Best-effort parse for either an upstream authority (host[:port]) or a wildcard host pattern.
+    // Wildcard patterns are not valid URLs, so we parse those manually.
+    let trimmed = value.trim().to_ascii_lowercase();
+    if trimmed.starts_with("*.") {
+        let (host, port) = split_port_suffix(trimmed);
+        return (host, port);
+    }
+
+    // For normal authorities, prefer URL parsing to handle IPv6.
+    if let Ok(parsed) = reqwest::Url::parse(&format!("https://{trimmed}/")) {
+        let host = parsed
+            .host_str()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        return (host, parsed.port());
+    }
+
+    split_port_suffix(trimmed)
+}
+
+fn split_port_suffix(value: String) -> (String, Option<u16>) {
+    let trimmed = value.trim().to_string();
+    // Ignore IPv6 bracket authorities here (those should be handled by URL parsing above).
+    if trimmed.contains(']') {
+        return (trimmed, None);
+    }
+    let Some((left, right)) = trimmed.rsplit_once(':') else {
+        return (trimmed, None);
+    };
+    if right.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(port) = right.parse::<u16>() {
+            return (left.to_string(), Some(port));
+        }
+    }
+    (trimmed, None)
 }
 
 pub(super) fn is_ssrf_blocked_host(host: &str) -> bool {
@@ -302,11 +356,7 @@ pub(super) fn sanitize_headers(
 ) -> BrokerResult<Vec<Header>> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();
-    let credential_auth_header = match auth {
-        AuthStrategy::Header { header_name, .. } => Some(header_name.to_ascii_lowercase()),
-        AuthStrategy::Hmac { header_name, .. } => Some(header_name.to_ascii_lowercase()),
-        _ => None,
-    };
+    let managed = auth_managed_header_names(auth);
 
     for header in headers {
         let name = header.name.trim().to_ascii_lowercase();
@@ -318,11 +368,7 @@ pub(super) fn sanitize_headers(
             continue;
         }
 
-        if is_auth_class_header(&name)
-            || credential_auth_header
-                .as_deref()
-                .is_some_and(|expected| expected == name)
-        {
+        if is_auth_class_header(&name) || managed.contains(&name) {
             return Err(BrokerError::new(
                 ErrorCode::PolicyViolation,
                 "caller-supplied auth headers are not allowed",
@@ -343,6 +389,25 @@ pub(super) fn sanitize_headers(
     }
 
     Ok(out)
+}
+
+fn auth_managed_header_names(auth: &AuthStrategy) -> HashSet<String> {
+    let mut out = HashSet::new();
+    match auth {
+        AuthStrategy::Header { header_name, .. } => {
+            out.insert(header_name.trim().to_ascii_lowercase());
+        }
+        AuthStrategy::Hmac { header_name, .. } => {
+            out.insert(header_name.trim().to_ascii_lowercase());
+        }
+        AuthStrategy::MultiHeader(templates) => {
+            for t in templates {
+                out.insert(t.header_name.trim().to_ascii_lowercase());
+            }
+        }
+        _ => {}
+    }
+    out
 }
 
 fn is_reserved_header(name: &str) -> bool {
@@ -373,9 +438,9 @@ pub(super) fn apply_auth(
     secret: Option<&SecretMaterial>,
     headers: &mut Vec<Header>,
     query: &mut Vec<(String, String)>,
+    path: &mut String,
     envelope_mode: bool,
     method: &str,
-    path: &str,
 ) -> BrokerResult<()> {
     match auth {
         AuthStrategy::Header {
@@ -395,6 +460,65 @@ pub(super) fn apply_auth(
                 name: header_name.to_ascii_lowercase(),
                 value: value_template.replace("{{secret}}", secret),
             });
+        }
+        AuthStrategy::Path { prefix_template } => {
+            let secret = match secret {
+                Some(SecretMaterial::String(value)) => value,
+                _ => {
+                    return Err(BrokerError::new(
+                        ErrorCode::VaultUnavailable,
+                        "missing string secret for path auth",
+                    ));
+                }
+            };
+
+            // Refuse to embed obviously dangerous characters in the path.
+            if secret.contains('/') || secret.contains('?') || secret.contains('#') {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth secret contains invalid characters",
+                ));
+            }
+            if prefix_template.matches("{{secret}}").count() != 1 {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth prefixTemplate must contain exactly one {{secret}}",
+                ));
+            }
+
+            let static_prefix = prefix_template
+                .split("{{secret}}")
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            if !static_prefix.trim().is_empty() && path.starts_with(static_prefix.trim()) {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "caller-supplied path includes broker-managed auth prefix",
+                ));
+            }
+
+            let rendered = prefix_template.replace("{{secret}}", secret);
+            if rendered.contains('?') || rendered.contains('#') {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth prefixTemplate cannot include query or fragment",
+                ));
+            }
+            if rendered.trim().is_empty() || !rendered.starts_with('/') {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth prefixTemplate must start with '/'",
+                ));
+            }
+
+            let prefix = rendered.trim_end_matches('/');
+            let tail = path.trim_start_matches('/');
+            *path = if tail.is_empty() {
+                prefix.to_string()
+            } else {
+                format!("{}/{}", prefix, tail)
+            };
         }
         AuthStrategy::Query { param_name } => {
             let secret = match secret {
@@ -420,6 +544,36 @@ pub(super) fn apply_auth(
 
             query.push((param_name.clone(), secret.clone()));
         }
+        AuthStrategy::MultiHeader(templates) => {
+            let fields = match secret {
+                Some(SecretMaterial::Fields(fields)) => fields,
+                _ => {
+                    return Err(BrokerError::new(
+                        ErrorCode::VaultUnavailable,
+                        "missing multi-field secret for multi-header auth",
+                    ));
+                }
+            };
+
+            let mut seen = HashSet::new();
+            for template in templates {
+                let name = template.header_name.trim().to_ascii_lowercase();
+                if name.is_empty() {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-header auth requires non-empty headerName",
+                    ));
+                }
+                if !seen.insert(name.clone()) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-header auth cannot inject duplicate header names",
+                    ));
+                }
+                let value = render_multi_header_template(&template.value_template, fields)?;
+                headers.push(Header { name, value });
+            }
+        }
         AuthStrategy::Basic => {
             let (username, password) = match secret {
                 Some(SecretMaterial::Basic { username, password }) => (username, password),
@@ -440,7 +594,7 @@ pub(super) fn apply_auth(
         AuthStrategy::OAuth2 {
             grant_type,
             token_endpoint,
-            scopes,
+            scopes: _,
         } => {
             if !oauth_grant_is_supported(grant_type) {
                 return Err(BrokerError::new(
@@ -450,11 +604,8 @@ pub(super) fn apply_auth(
             }
             let oauth = match secret {
                 Some(SecretMaterial::OAuth2 {
-                    client_id,
-                    client_secret,
                     access_token,
                     access_token_expires_at_ms,
-                    refresh_token,
                     ..
                 }) => {
                     if access_token.as_deref().is_some_and(|_| {
@@ -462,39 +613,11 @@ pub(super) fn apply_auth(
                             .is_some_and(|expires| expires > Utc::now().timestamp_millis())
                     }) {
                         access_token.clone().unwrap_or_default()
-                    } else if grant_type.eq_ignore_ascii_case("client_credentials") {
-                        if client_id.trim().is_empty() || client_secret.trim().is_empty() {
-                            return Err(BrokerError::new(
-                                ErrorCode::VaultUnavailable,
-                                "missing oauth2 client credentials",
-                            ));
-                        }
-                        if scopes.is_empty() {
-                            format!("refreshed:client_credentials:{}", client_id)
-                        } else {
-                            format!(
-                                "refreshed:client_credentials:{}:scopes={}",
-                                client_id,
-                                scopes.join(" ")
-                            )
-                        }
                     } else {
-                        if refresh_token.trim().is_empty() {
-                            return Err(BrokerError::new(
-                                ErrorCode::VaultUnavailable,
-                                "missing oauth2 refresh token",
-                            ));
-                        }
-                        if scopes.is_empty() {
-                            format!("refreshed:{}:{}", grant_type, refresh_token)
-                        } else {
-                            format!(
-                                "refreshed:{}:{}:scopes={}",
-                                grant_type,
-                                refresh_token,
-                                scopes.join(" ")
-                            )
-                        }
+                        return Err(BrokerError::new(
+                            ErrorCode::OauthRefreshRequired,
+                            format!("oauth2 access token missing or expired for {}", token_endpoint),
+                        ));
                     }
                 }
                 _ => {
@@ -573,6 +696,42 @@ pub(super) fn apply_auth(
         }
     }
     Ok(())
+}
+
+fn render_multi_header_template(
+    template: &str,
+    fields: &HashMap<String, String>,
+) -> BrokerResult<String> {
+    // Minimal `{{field}}` template renderer, fail-closed on missing fields.
+    let mut out = String::new();
+    let mut rest = template;
+    while let Some(start) = rest.find("{{") {
+        let (before, after_start) = rest.split_at(start);
+        out.push_str(before);
+        let Some(end) = after_start.find("}}") else {
+            return Err(BrokerError::new(
+                ErrorCode::PolicyViolation,
+                "invalid multi-header template (missing '}}')",
+            ));
+        };
+        let key = after_start[2..end].trim();
+        if key.is_empty() {
+            return Err(BrokerError::new(
+                ErrorCode::PolicyViolation,
+                "invalid multi-header template (empty placeholder)",
+            ));
+        }
+        let value = fields.get(key).ok_or_else(|| {
+            BrokerError::new(
+                ErrorCode::VaultUnavailable,
+                format!("missing secret field '{}' for multi-header auth", key),
+            )
+        })?;
+        out.push_str(value);
+        rest = &after_start[(end + 2)..];
+    }
+    out.push_str(rest);
+    Ok(out)
 }
 
 pub(super) fn parse_passthrough_path(path: &str) -> BrokerResult<(&str, &str)> {

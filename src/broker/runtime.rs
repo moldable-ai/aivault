@@ -28,6 +28,42 @@ impl Broker {
         &self.audit
     }
 
+    pub fn resolve_credential_for_capability(
+        &self,
+        capability_id: &str,
+        request_credential: Option<&str>,
+        token_credential: Option<&str>,
+    ) -> BrokerResult<Credential> {
+        let capability = self
+            .capabilities
+            .get(capability_id)
+            .ok_or_else(|| BrokerError::new(ErrorCode::CapabilityNotFound, "capability not found"))?
+            .clone();
+        self.resolve_credential_for_request(&capability, request_credential, token_credential)
+    }
+
+    pub fn upsert_secret_material(
+        &mut self,
+        credential_id: &str,
+        secret: SecretMaterial,
+    ) -> BrokerResult<()> {
+        let credential_id = credential_id.trim();
+        if credential_id.is_empty() {
+            return Err(BrokerError::new(
+                ErrorCode::InvalidRequest,
+                "credential id required",
+            ));
+        }
+        if !self.credentials.contains_key(credential_id) {
+            return Err(BrokerError::new(
+                ErrorCode::CredentialNotFound,
+                "credential not found",
+            ));
+        }
+        self.secrets.insert(credential_id.to_string(), secret);
+        Ok(())
+    }
+
     pub fn build_caller_env(base_url: &str, token: &str) -> CallerEnv {
         CallerEnv {
             aivault_base_url: base_url.to_string(),
@@ -92,6 +128,8 @@ impl Broker {
             .as_ref()
             .and_then(|r| r.provider(provider).cloned());
 
+        let requested_hosts = input.hosts.clone();
+        let requested_hosts_present = requested_hosts.is_some();
         let auth_strategy = input
             .auth
             .or_else(|| provider_defaults.as_ref().map(|p| p.auth.clone()))
@@ -103,8 +141,8 @@ impl Broker {
             })?;
         self.validate_auth_strategy(&auth_strategy)?;
 
-        let hosts = input
-            .hosts
+        let hosts = requested_hosts
+            .clone()
             .or_else(|| provider_defaults.as_ref().map(|p| p.hosts.clone()))
             .ok_or_else(|| {
                 BrokerError::new(
@@ -114,6 +152,18 @@ impl Broker {
             })?;
 
         let hosts = normalize_hosts(hosts)?;
+        if let (Some(defaults), true) = (provider_defaults.as_ref(), requested_hosts_present) {
+            // Registry providers may allow per-tenant host binding, but bound hosts must match
+            // the registry's allowed host patterns (fail-closed).
+            for host in &hosts {
+                if !defaults.hosts.iter().any(|pattern| host_matches(pattern, host)) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "credential host is not allowed by registry provider host policy",
+                    ));
+                }
+            }
+        }
         self.validate_credential_hosts(&hosts)?;
 
         let credential = Credential {
@@ -141,7 +191,7 @@ impl Broker {
         capability: Capability,
     ) -> BrokerResult<()> {
         self.ensure_operator(auth)?;
-        self.validate_capability(&capability)?;
+        self.validate_capability(&capability, self.cfg.core_exact_hosts_only)?;
         if self.capabilities.contains_key(&capability.id) {
             return Err(BrokerError::new(
                 ErrorCode::InvalidRequest,
@@ -176,7 +226,7 @@ impl Broker {
         capability: Capability,
     ) -> BrokerResult<()> {
         self.ensure_operator(auth)?;
-        self.validate_capability(&capability)?;
+        self.validate_capability(&capability, self.cfg.core_exact_hosts_only)?;
         self.capabilities.insert(capability.id.clone(), capability);
         Ok(())
     }
@@ -281,14 +331,15 @@ impl Broker {
         self.enforce_capability_request_size_limit(&capability.id, &body_mode)?;
         let mut headers = sanitize_headers(&envelope.request.headers, &credential.auth)?;
         apply_broker_managed_body_headers(&mut headers, &body_mode);
+        let mut upstream_path = normalized_path;
         apply_auth(
             &credential.auth,
             self.secrets.get(&credential.id),
             &mut headers,
             &mut query,
+            &mut upstream_path,
             true,
             &method,
-            &normalized_path,
         )?;
 
         let planned = PlannedRequest {
@@ -297,7 +348,7 @@ impl Broker {
             host,
             scheme: "https".to_string(),
             method,
-            path: normalized_path,
+            path: upstream_path,
             headers,
             query,
             body_mode,
@@ -378,14 +429,15 @@ impl Broker {
         self.enforce_upstream_target_rules("https", &upstream_host, upstream_port)?;
 
         let mut headers = sanitize_headers(&headers, &credential.auth)?;
+        let mut upstream_path = normalized_path;
         apply_auth(
             &credential.auth,
             self.secrets.get(&credential.id),
             &mut headers,
             &mut query,
+            &mut upstream_path,
             false,
             &method,
-            &normalized_path,
         )?;
 
         let planned = PlannedRequest {
@@ -394,7 +446,7 @@ impl Broker {
             host: host.clone(),
             scheme: "https".to_string(),
             method,
-            path: normalized_path,
+            path: upstream_path,
             headers,
             query,
             body_mode: RequestBodyMode::Empty,
@@ -531,9 +583,13 @@ impl Broker {
                 header_name: "authorization".to_string(),
                 value_template: "Bearer {{secret}}".to_string(),
             }),
+            "path" => Ok(AuthStrategy::Path {
+                prefix_template: "/bot{{secret}}".to_string(),
+            }),
             "query" => Ok(AuthStrategy::Query {
                 param_name: "api_key".to_string(),
             }),
+            "multi-header" | "multi_header" => Ok(AuthStrategy::MultiHeader(Vec::new())),
             "basic" => Ok(AuthStrategy::Basic),
             "oauth2" => Ok(AuthStrategy::OAuth2 {
                 grant_type: "refresh_token".to_string(),
@@ -710,16 +766,19 @@ impl Broker {
         credential: &Credential,
         capability: &Capability,
     ) -> BrokerResult<String> {
-        let allowed: Vec<String> = capability
+        let allow_pattern = capability
             .allow
             .hosts
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or_default();
+
+        // Capability allow.hosts may be a wildcard pattern (registry templates); the effective
+        // upstream authority is always the credential-bound host instance.
+        let allowed: Vec<String> = credential
+            .hosts
             .iter()
-            .filter(|host| {
-                credential
-                    .hosts
-                    .iter()
-                    .any(|ch| host.eq_ignore_ascii_case(ch))
-            })
+            .filter(|candidate| host_matches(allow_pattern, candidate))
             .cloned()
             .collect();
 
@@ -781,7 +840,7 @@ impl Broker {
         Ok(())
     }
 
-    fn validate_capability(&self, capability: &Capability) -> BrokerResult<()> {
+    fn validate_capability(&self, capability: &Capability, exact_hosts_only: bool) -> BrokerResult<()> {
         if capability.id.trim().is_empty() || capability.provider.trim().is_empty() {
             return Err(BrokerError::new(
                 ErrorCode::InvalidRequest,
@@ -807,7 +866,7 @@ impl Broker {
         }
 
         for host in &capability.allow.hosts {
-            validate_host_pattern(host, self.cfg.core_exact_hosts_only)?;
+            validate_host_pattern(host, exact_hosts_only)?;
         }
 
         Ok(())
@@ -895,6 +954,57 @@ impl Broker {
                 ));
             }
         }
+        if let AuthStrategy::Path { prefix_template } = auth {
+            let trimmed = prefix_template.trim();
+            if trimmed.is_empty() || !trimmed.starts_with('/') {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth prefixTemplate must start with '/'",
+                ));
+            }
+            if trimmed.contains('?') || trimmed.contains('#') {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth prefixTemplate cannot include query or fragment",
+                ));
+            }
+            if trimmed.matches("{{secret}}").count() != 1 {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "path auth prefixTemplate must contain exactly one {{secret}}",
+                ));
+            }
+        }
+        if let AuthStrategy::MultiHeader(templates) = auth {
+            if templates.is_empty() {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "multi-header auth must include at least one header template",
+                ));
+            }
+            let mut seen = std::collections::HashSet::new();
+            for t in templates {
+                let name = t.header_name.trim().to_ascii_lowercase();
+                if name.is_empty() {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-header auth requires non-empty headerName",
+                    ));
+                }
+                if !seen.insert(name) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-header auth cannot include duplicate header names",
+                    ));
+                }
+                if t.value_template.trim().is_empty() {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "multi-header auth requires non-empty valueTemplate",
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -902,7 +1012,8 @@ impl Broker {
         &mut self,
         capability: Capability,
     ) -> BrokerResult<()> {
-        self.validate_capability(&capability)?;
+        // Registry templates may use wildcard host patterns for per-tenant SaaS providers.
+        self.validate_capability(&capability, false)?;
         self.capabilities.insert(capability.id.clone(), capability);
         Ok(())
     }

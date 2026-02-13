@@ -1,0 +1,52 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "trello",
+  "auth": {
+    "multi_header": [
+      {
+        "header_name": "authorization",
+        "value_template": "OAuth oauth_consumer_key=\"{{key}}\", oauth_token=\"{{token}}\""
+      }
+    ]
+  },
+  "hosts": ["api.trello.com"],
+  "capabilities": [
+    {
+      "id": "trello/members",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/members"]
+      }
+    },
+    {
+      "id": "trello/boards",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/boards"]
+      }
+    },
+    {
+      "id": "trello/lists",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/1/lists"]
+      }
+    },
+    {
+      "id": "trello/cards",
+      "provider": "trello",
+      "allow": {
+        "hosts": ["api.trello.com"],
+        "methods": ["GET", "POST"],
+        "pathPrefixes": ["/1/cards"]
+      }
+    }
+  ]
+}
+

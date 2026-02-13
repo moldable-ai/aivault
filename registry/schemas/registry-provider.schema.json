@@ -34,6 +34,21 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["prefix_template"],
+              "properties": {
+                "prefix_template": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["query"],
           "properties": {
             "query": {
@@ -42,6 +57,26 @@
               "required": ["param_name"],
               "properties": {
                 "param_name": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["multi_header"],
+          "properties": {
+            "multi_header": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["header_name", "value_template"],
+                "properties": {
+                  "header_name": { "type": "string", "minLength": 1 },
+                  "value_template": { "type": "string", "minLength": 1 }
+                }
               }
             }
           }

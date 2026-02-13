@@ -18,8 +18,11 @@ pub enum ScopeKind {
 #[derive(Debug, Clone, ValueEnum)]
 pub enum AuthKind {
     Header,
+    Path,
     Query,
+    MultiHeader,
     Basic,
+    #[value(name = "oauth2", alias = "o-auth2")]
     OAuth2,
     AwsSigv4,
     Hmac,
@@ -348,6 +351,12 @@ pub enum CredentialCommand {
         aws_region: Option<String>,
         #[arg(long)]
         hmac_algorithm: Option<String>,
+        #[arg(long)]
+        path_prefix_template: Option<String>,
+        /// Repeatable auth header injection templates for multi-header auth.
+        /// Format: NAME=TEMPLATE (templates can reference secret fields like {{api_key}}).
+        #[arg(long)]
+        auth_header: Vec<String>,
     },
     List,
     Delete {

@@ -156,24 +156,42 @@ fn story_vault_credential_id_uniqueness() {
 
 #[test]
 fn story_vault_credential_provider_resolution_overrides() {
-    let mut broker = Broker::default_with_registry(Some(openai_registry()));
+    let registry = Registry::from_templates(vec![ProviderTemplate {
+        provider: "zendesk".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "authorization".to_string(),
+            value_template: "Bearer {{secret}}".to_string(),
+        },
+        hosts: vec!["*.zendesk.com".to_string()],
+        capabilities: vec![Capability {
+            id: "zendesk/tickets".to_string(),
+            provider: "zendesk".to_string(),
+            allow: AllowPolicy {
+                hosts: vec!["*.zendesk.com".to_string()],
+                methods: vec!["GET".to_string()],
+                path_prefixes: vec!["/api/v2".to_string()],
+            },
+        }],
+    }])
+    .unwrap();
+    let mut broker = Broker::default_with_registry(Some(registry));
     let credential = broker
         .create_credential(
             &operator(),
             CredentialInput {
-                id: "openai-override".to_string(),
-                provider: "openai".to_string(),
+                id: "zendesk-override".to_string(),
+                provider: "zendesk".to_string(),
                 auth: Some(AuthStrategy::Header {
                     header_name: "x-api-key".to_string(),
                     value_template: "{{secret}}".to_string(),
                 }),
-                hosts: Some(vec!["api.custom-openai.example".to_string()]),
+                hosts: Some(vec!["acme.zendesk.com".to_string()]),
             },
             SecretMaterial::String("sk-test".to_string()),
         )
         .unwrap();
 
-    assert_eq!(credential.hosts, vec!["api.custom-openai.example"]);
+    assert_eq!(credential.hosts, vec!["acme.zendesk.com"]);
     assert!(matches!(
         credential.auth,
         AuthStrategy::Header { ref header_name, .. } if header_name == "x-api-key"
@@ -217,6 +235,43 @@ fn story_vault_host_pattern_core_exact_match() {
         )
         .unwrap_err();
     assert_eq!(err.error, ErrorCode::PolicyViolation);
+}
+
+#[test]
+fn story_vault_per_tenant_host_binding_with_registry() {
+    let registry = Registry::from_templates(vec![ProviderTemplate {
+        provider: "zendesk".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "authorization".to_string(),
+            value_template: "Bearer {{secret}}".to_string(),
+        },
+        hosts: vec!["*.zendesk.com".to_string()],
+        capabilities: vec![Capability {
+            id: "zendesk/tickets".to_string(),
+            provider: "zendesk".to_string(),
+            allow: AllowPolicy {
+                hosts: vec!["*.zendesk.com".to_string()],
+                methods: vec!["GET".to_string()],
+                path_prefixes: vec!["/api/v2/tickets".to_string()],
+            },
+        }],
+    }])
+    .unwrap();
+
+    let mut broker = Broker::default_with_registry(Some(registry));
+    let credential = broker
+        .create_credential(
+            &operator(),
+            CredentialInput {
+                id: "zd-acme".to_string(),
+                provider: "zendesk".to_string(),
+                auth: None,
+                hosts: Some(vec!["acme.zendesk.com".to_string()]),
+            },
+            SecretMaterial::String("sk".to_string()),
+        )
+        .unwrap();
+    assert_eq!(credential.hosts, vec!["acme.zendesk.com"]);
 }
 
 #[test]
@@ -1198,6 +1253,7 @@ fn story_token_operator_secret_crud_isolated_from_proxy() {
 fn story_auth_header_injection() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::Header {
             header_name: "authorization".to_string(),
@@ -1206,9 +1262,9 @@ fn story_auth_header_injection() {
         Some(&SecretMaterial::String("sk-test".to_string())),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "GET",
-        "/x",
     )
     .unwrap();
     assert_eq!(headers[0].value, "Bearer sk-test");
@@ -1218,6 +1274,7 @@ fn story_auth_header_injection() {
 fn story_auth_query_injection() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::Query {
             param_name: "api_key".to_string(),
@@ -1225,9 +1282,9 @@ fn story_auth_query_injection() {
         Some(&SecretMaterial::String("k".to_string())),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "GET",
-        "/x",
     )
     .unwrap();
     assert_eq!(query, vec![("api_key".to_string(), "k".to_string())]);
@@ -1237,6 +1294,7 @@ fn story_auth_query_injection() {
 fn story_auth_basic_injection() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::Basic,
         Some(&SecretMaterial::Basic {
@@ -1245,19 +1303,109 @@ fn story_auth_basic_injection() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "GET",
-        "/x",
     )
     .unwrap();
     assert!(headers[0].value.starts_with("Basic "));
 }
 
 #[test]
+fn story_auth_token_in_path_injection() {
+    let mut headers = Vec::new();
+    let mut query = Vec::new();
+    let mut path = "/sendMessage".to_string();
+    apply_auth(
+        &AuthStrategy::Path {
+            prefix_template: "/bot{{secret}}".to_string(),
+        },
+        Some(&SecretMaterial::String("123:abc".to_string())),
+        &mut headers,
+        &mut query,
+        &mut path,
+        true,
+        "POST",
+    )
+    .unwrap();
+    assert_eq!(path, "/bot123:abc/sendMessage");
+    assert!(headers.is_empty());
+    assert!(query.is_empty());
+
+    // Fail-closed if the caller tries to supply the broker-managed prefix directly.
+    let mut path = "/botattacker/sendMessage".to_string();
+    let err = apply_auth(
+        &AuthStrategy::Path {
+            prefix_template: "/bot{{secret}}".to_string(),
+        },
+        Some(&SecretMaterial::String("123:abc".to_string())),
+        &mut Vec::new(),
+        &mut Vec::new(),
+        &mut path,
+        true,
+        "POST",
+    )
+    .unwrap_err();
+    assert_eq!(err.error, ErrorCode::PolicyViolation);
+}
+
+#[test]
+fn story_auth_multi_header_injection() {
+    let mut headers = Vec::new();
+    let mut query = Vec::new();
+    let mut path = "/x".to_string();
+    apply_auth(
+        &AuthStrategy::MultiHeader(vec![
+            AuthHeaderTemplate {
+                header_name: "x-dd-api-key".to_string(),
+                value_template: "{{api_key}}".to_string(),
+            },
+            AuthHeaderTemplate {
+                header_name: "x-dd-app-key".to_string(),
+                value_template: "{{app_key}}".to_string(),
+            },
+        ]),
+        Some(&SecretMaterial::Fields(HashMap::from([
+            ("api_key".to_string(), "k1".to_string()),
+            ("app_key".to_string(), "k2".to_string()),
+        ]))),
+        &mut headers,
+        &mut query,
+        &mut path,
+        true,
+        "GET",
+    )
+    .unwrap();
+
+    assert_eq!(headers.len(), 2);
+    assert!(headers
+        .iter()
+        .any(|h| h.name == "x-dd-api-key" && h.value == "k1"));
+    assert!(headers
+        .iter()
+        .any(|h| h.name == "x-dd-app-key" && h.value == "k2"));
+
+    // Caller-supplied managed headers are rejected.
+    let err = sanitize_headers(
+        &[Header {
+            name: "x-dd-api-key".to_string(),
+            value: "attacker".to_string(),
+        }],
+        &AuthStrategy::MultiHeader(vec![AuthHeaderTemplate {
+            header_name: "x-dd-api-key".to_string(),
+            value_template: "{{api_key}}".to_string(),
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.error, ErrorCode::PolicyViolation);
+}
+
+#[test]
 fn story_auth_oauth2_refresh_and_cache() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
-    apply_auth(
+    let mut path = "/x".to_string();
+    let err = apply_auth(
         &AuthStrategy::OAuth2 {
             grant_type: "refresh_token".to_string(),
             token_endpoint: "https://oauth.example/token".to_string(),
@@ -1272,21 +1420,20 @@ fn story_auth_oauth2_refresh_and_cache() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/x",
     )
-    .unwrap();
-    assert!(headers[0]
-        .value
-        .contains("Bearer refreshed:refresh_token:rt"));
+    .unwrap_err();
+    assert_eq!(err.error, ErrorCode::OauthRefreshRequired);
 }
 
 #[test]
 fn story_auth_oauth2_client_credentials_grant() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
-    apply_auth(
+    let mut path = "/oauth/token".to_string();
+    let err = apply_auth(
         &AuthStrategy::OAuth2 {
             grant_type: "client_credentials".to_string(),
             token_endpoint: "https://oauth.example/token".to_string(),
@@ -1301,22 +1448,20 @@ fn story_auth_oauth2_client_credentials_grant() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/oauth/token",
     )
-    .unwrap();
-    assert_eq!(
-        headers[0].value,
-        "Bearer refreshed:client_credentials:cid".to_string()
-    );
+    .unwrap_err();
+    assert_eq!(err.error, ErrorCode::OauthRefreshRequired);
 }
 
 #[test]
 fn story_auth_oauth2_scopes_applied() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
-    apply_auth(
+    let mut path = "/oauth/token".to_string();
+    let err = apply_auth(
         &AuthStrategy::OAuth2 {
             grant_type: "client_credentials".to_string(),
             token_endpoint: "https://oauth.example/token".to_string(),
@@ -1331,12 +1476,12 @@ fn story_auth_oauth2_scopes_applied() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/oauth/token",
     )
-    .unwrap();
-    assert!(headers[0].value.contains("scopes=scope:a scope:b"));
+    .unwrap_err();
+    assert_eq!(err.error, ErrorCode::OauthRefreshRequired);
 }
 
 #[test]
@@ -1372,6 +1517,7 @@ fn story_auth_oauth2_consent_outside_broker() {
 fn story_auth_aws_sigv4_signing() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::AwsSigV4 {
             service: "s3".to_string(),
@@ -1384,9 +1530,9 @@ fn story_auth_aws_sigv4_signing() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/x",
     )
     .unwrap();
     assert!(headers[0]
@@ -1398,6 +1544,7 @@ fn story_auth_aws_sigv4_signing() {
 fn story_auth_aws_session_token_optional() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::AwsSigV4 {
             service: "s3".to_string(),
@@ -1410,9 +1557,9 @@ fn story_auth_aws_session_token_optional() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/x",
     )
     .unwrap();
     assert!(headers[0].value.contains("SessionToken=sts-token"));
@@ -1422,6 +1569,7 @@ fn story_auth_aws_session_token_optional() {
 fn story_auth_hmac_signing() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::Hmac {
             algorithm: "sha256".to_string(),
@@ -1433,9 +1581,9 @@ fn story_auth_hmac_signing() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/x",
     )
     .unwrap();
     assert!(headers[0].value.contains("sha256=sha256:sec:POST\n/x\n"));
@@ -1448,6 +1596,7 @@ fn story_auth_hmac_canonical_signature_input() {
         ("b".to_string(), "2".to_string()),
         ("a".to_string(), "1".to_string()),
     ];
+    let mut path = "/v1/messages".to_string();
     apply_auth(
         &AuthStrategy::Hmac {
             algorithm: "sha256".to_string(),
@@ -1459,9 +1608,9 @@ fn story_auth_hmac_canonical_signature_input() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/v1/messages",
     )
     .unwrap();
     assert!(headers[0]
@@ -1473,6 +1622,7 @@ fn story_auth_hmac_canonical_signature_input() {
 fn story_auth_mtls_client_cert() {
     let mut headers = Vec::new();
     let mut query = Vec::new();
+    let mut path = "/x".to_string();
     apply_auth(
         &AuthStrategy::Mtls,
         Some(&SecretMaterial::Mtls {
@@ -1481,9 +1631,9 @@ fn story_auth_mtls_client_cert() {
         }),
         &mut headers,
         &mut query,
+        &mut path,
         true,
         "POST",
-        "/x",
     )
     .unwrap();
     assert_eq!(headers[0].name, "x-client-cert-sha");
@@ -1904,6 +2054,7 @@ fn story_sec_host_punycode_normalization() {
 fn story_sec_query_auth_param_owned_by_broker() {
     let mut headers = Vec::new();
     let mut query = vec![("api_key".to_string(), "attacker".to_string())];
+    let mut path = "/v1/x".to_string();
     apply_auth(
         &AuthStrategy::Query {
             param_name: "api_key".to_string(),
@@ -1911,9 +2062,9 @@ fn story_sec_query_auth_param_owned_by_broker() {
         Some(&SecretMaterial::String("safe".to_string())),
         &mut headers,
         &mut query,
+        &mut path,
         false,
         "GET",
-        "/v1/x",
     )
     .unwrap();
     assert_eq!(query, vec![("api_key".to_string(), "safe".to_string())]);
@@ -1974,6 +2125,102 @@ fn story_sec_effective_host_intersection_fail_closed() {
         .unwrap_err();
     assert_eq!(err.error, ErrorCode::PolicyViolation);
     assert!(err.message.contains("effective host intersection is empty"));
+}
+
+#[test]
+fn story_reg_host_pattern_matching() {
+    let registry = Registry::from_templates(vec![ProviderTemplate {
+        provider: "zendesk".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "authorization".to_string(),
+            value_template: "Bearer {{secret}}".to_string(),
+        },
+        hosts: vec!["*.zendesk.com".to_string()],
+        capabilities: vec![Capability {
+            id: "zendesk/tickets".to_string(),
+            provider: "zendesk".to_string(),
+            allow: AllowPolicy {
+                hosts: vec!["*.zendesk.com".to_string()],
+                methods: vec!["GET".to_string()],
+                path_prefixes: vec!["/api/v2/tickets".to_string()],
+            },
+        }],
+    }])
+    .unwrap();
+
+    let mut broker = Broker::default_with_registry(Some(registry));
+    broker
+        .create_credential(
+            &operator(),
+            CredentialInput {
+                id: "zd-acme".to_string(),
+                provider: "zendesk".to_string(),
+                auth: None,
+                hosts: Some(vec!["acme.zendesk.com".to_string()]),
+            },
+            SecretMaterial::String("sk-zd".to_string()),
+        )
+        .unwrap();
+
+    let token = mint_token(&mut broker, vec!["zendesk/tickets"], Some("zd-acme"), 60_000);
+    let planned = broker
+        .execute_envelope(
+            &RequestAuth::Proxy(token.token),
+            ProxyEnvelope {
+                capability: "zendesk/tickets".to_string(),
+                credential: Some("zd-acme".to_string()),
+                request: ProxyEnvelopeRequest {
+                    method: "GET".to_string(),
+                    path: "/api/v2/tickets/1".to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            loopback_ip(),
+        )
+        .unwrap();
+    assert_eq!(planned.host, "acme.zendesk.com");
+}
+
+#[test]
+fn story_reg_per_tenant_host_binding() {
+    let registry = Registry::from_templates(vec![ProviderTemplate {
+        provider: "shopify".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "x-shopify-access-token".to_string(),
+            value_template: "{{secret}}".to_string(),
+        },
+        hosts: vec!["*.myshopify.com".to_string()],
+        capabilities: vec![Capability {
+            id: "shopify/orders".to_string(),
+            provider: "shopify".to_string(),
+            allow: AllowPolicy {
+                hosts: vec!["*.myshopify.com".to_string()],
+                methods: vec!["GET".to_string()],
+                path_prefixes: vec!["/admin/api".to_string()],
+            },
+        }],
+    }])
+    .unwrap();
+
+    let mut broker = Broker::default_with_registry(Some(registry));
+    let err = broker
+        .create_credential(
+            &operator(),
+            CredentialInput {
+                id: "shop-bad".to_string(),
+                provider: "shopify".to_string(),
+                auth: None,
+                hosts: Some(vec!["evil.com".to_string()]),
+            },
+            SecretMaterial::String("sk".to_string()),
+        )
+        .unwrap_err();
+    assert_eq!(err.error, ErrorCode::PolicyViolation);
 }
 
 #[test]

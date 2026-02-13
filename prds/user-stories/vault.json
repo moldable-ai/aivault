@@ -139,6 +139,33 @@
       "tests": [
         "default_file_provider_keeps_kek_out_of_vault_dir_for_canonical_install_when_forced"
       ]
+    },
+    {
+      "id": "ev-app-vault-multi-field-secret-parsing-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "multi_header_secret_parses_as_fields"
+      ]
+    },
+    {
+      "id": "ev-e2e-vault-oauth-secret-writeback-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local_tls.rs",
+      "tests": [
+        "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-per-tenant-host-binding-with-registry-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_per_tenant_host_binding_with_registry"
+      ]
     }
   ],
   "sections": [
@@ -380,14 +407,83 @@
         {
           "slug": "vault-secret-material-multi-field",
           "story": "As an operator, I want a standard way to store multi-field secret material (multiple named values) for a single credential, so providers requiring multiple keys can be supported without splitting one logical credential into many.",
-          "evidenceLinks": [],
-          "gapReason": "Vault secrets can store arbitrary bytes, but the broker secret material model and CLI flows do not define or enforce a standard multi-field secret shape for auth injection."
+          "evidenceLinks": [
+            "ev-app-vault-multi-field-secret-parsing-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "secret_material_from_bytes"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "SecretMaterial"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-app-vault-multi-field-secret-parsing-test",
+                "test": "multi_header_secret_parses_as_fields"
+              }
+            ]
+          }
         },
         {
           "slug": "vault-broker-auth-secret-writeback",
           "story": "As an operator, I want broker-side auth flows (like oauth2 token refresh) to write updated access tokens and expiry back into vault secret material atomically, so token refresh can be baked into proxy execution without external orchestration.",
-          "evidenceLinks": [],
-          "gapReason": "Broker runtime currently loads secrets into memory at invocation time and has no persistence/write-back integration to update vault secret values after auth refresh."
+          "evidenceLinks": [
+            "ev-e2e-vault-oauth-secret-writeback-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-vault-oauth-secret-writeback-test",
+                "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+              }
+            ]
+          }
         }
       ]
     },
@@ -491,8 +587,48 @@
         {
           "slug": "vault-per-tenant-host-binding-with-registry",
           "story": "As an operator, I want per-tenant APIs (Shopify, Zendesk, Jira, Supabase, Mailchimp) to bind a specific upstream host at credential creation while still using registry-derived capability policy, so multi-tenant hostnames work without weakening host authorization.",
-          "evidenceLinks": [],
-          "gapReason": "Registry-backed providers currently derive hosts from compiled-in registry templates and require exact host intersection; there is no host pattern matching or safe host instance binding for registry providers."
+          "evidenceLinks": [
+            "ev-broker-vault-per-tenant-host-binding-with-registry-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::select_effective_host"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-per-tenant-host-binding-with-registry-test",
+                "test": "story_vault_per_tenant_host_binding_with_registry"
+              }
+            ]
+          }
         }
       ]
     },

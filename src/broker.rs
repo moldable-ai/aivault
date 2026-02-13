@@ -19,6 +19,7 @@ pub enum ErrorCode {
     CredentialAmbiguous,
     VaultUnavailable,
     AuthFailed,
+    OauthRefreshRequired,
     UpstreamUnreachable,
     TokenInvalid,
     InvalidRequest,
@@ -53,14 +54,33 @@ pub type BrokerResult<T> = Result<T, BrokerError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub struct AuthHeaderTemplate {
+    pub header_name: String,
+    pub value_template: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AuthStrategy {
     Header {
         header_name: String,
         value_template: String,
     },
+    /// Broker-managed path rewriting with secret injection (e.g. Telegram Bot API token-in-path).
+    ///
+    /// Callers supply the logical upstream path without the secret-bearing prefix; the broker
+    /// prepends a rendered prefix to the outgoing path after policy checks.
+    Path {
+        /// Template that must include exactly one `{{secret}}` placeholder.
+        prefix_template: String,
+    },
     Query {
         param_name: String,
     },
+    /// Inject multiple headers derived from a multi-field secret payload.
+    ///
+    /// Templates may reference fields using `{{fieldName}}` placeholders.
+    MultiHeader(Vec<AuthHeaderTemplate>),
     Basic,
     OAuth2 {
         grant_type: String,
@@ -83,6 +103,7 @@ pub enum AuthStrategy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretMaterial {
     String(String),
+    Fields(HashMap<String, String>),
     Basic {
         username: String,
         password: String,

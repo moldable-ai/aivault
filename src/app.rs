@@ -418,6 +418,8 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             aws_service,
             aws_region,
             hmac_algorithm,
+            path_prefix_template,
+            auth_header,
         } => {
             let id = id.trim().to_string();
             if id.is_empty() {
@@ -451,6 +453,11 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 return Err("--workspace-id is required when --group-id is provided".to_string());
             }
 
+            let mut auth_headers = Vec::new();
+            for raw in auth_header {
+                auth_headers.push(parse_key_value_pair(&raw, "--auth-header")?);
+            }
+
             let auth = match auth {
                 Some(auth_kind) => build_auth_strategy(
                     auth_kind,
@@ -464,6 +471,8 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                         aws_service,
                         aws_region,
                         hmac_algorithm,
+                        path_prefix_template,
+                        auth_headers,
                     },
                 ),
                 None => provider_defaults
@@ -1250,10 +1259,244 @@ pub(crate) fn run_capability_envelope(
         )
         .map_err(|e| e.to_string())?;
 
-    let planned = broker
-        .execute_envelope(&RequestAuth::Proxy(token.token), envelope, client_ip)
-        .map_err(|e| e.to_string())?;
+    let planned = match broker.execute_envelope(&RequestAuth::Proxy(token.token.clone()), envelope.clone(), client_ip) {
+        Ok(planned) => planned,
+        Err(err) if err.error == crate::broker::ErrorCode::OauthRefreshRequired => {
+            // Refresh oauth2 secrets within the trusted vault boundary, then retry planning once.
+            refresh_oauth2_for_envelope(
+                vault,
+                store,
+                &mut broker,
+                &envelope,
+                &token,
+                workspace_id,
+                group_id,
+            )?;
+            broker
+                .execute_envelope(&RequestAuth::Proxy(token.token), envelope, client_ip)
+                .map_err(|e| e.to_string())?
+        }
+        Err(err) => return Err(err.to_string()),
+    };
     execute_planned_http_request(&broker, &planned)
+}
+
+fn refresh_oauth2_for_envelope(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    broker: &mut Broker,
+    envelope: &ProxyEnvelope,
+    token: &crate::broker::ProxyToken,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> Result<(), String> {
+    let credential = broker
+        .resolve_credential_for_capability(
+            &envelope.capability,
+            envelope.credential.as_deref(),
+            token.credential.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let AuthStrategy::OAuth2 { .. } = credential.auth else {
+        return Ok(());
+    };
+
+    let client = build_http_client_with_dev_overrides()?;
+    let refreshed = refresh_oauth2_and_writeback(
+        vault,
+        store,
+        &credential.id,
+        workspace_id,
+        group_id,
+        &client,
+    )?;
+    broker
+        .upsert_secret_material(&credential.id, refreshed)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn refresh_oauth2_and_writeback(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    credential_id: &str,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+    client: &Client,
+) -> Result<SecretMaterial, String> {
+    let stored = store
+        .credentials()
+        .iter()
+        .find(|c| c.id == credential_id)
+        .ok_or_else(|| format!("credential '{}' not found in broker store", credential_id))?;
+
+    let AuthStrategy::OAuth2 {
+        grant_type,
+        token_endpoint,
+        scopes,
+    } = &stored.auth
+    else {
+        return Err("credential is not oauth2".to_string());
+    };
+
+    let secret_bytes = resolve_secret_ref_for_context(
+        vault,
+        &stored.secret_ref,
+        workspace_id,
+        group_id,
+        Some("broker.auth.oauth2.refresh"),
+        Some("aivault-cli"),
+    )?;
+    let material = secret_material_from_bytes(&stored.auth, secret_bytes.clone())?;
+
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let skew_ms = 30_000i64;
+    if let SecretMaterial::OAuth2 {
+        client_id: _,
+        client_secret: _,
+        refresh_token: _,
+        access_token: Some(_),
+        access_token_expires_at_ms: Some(expires_at),
+    } = &material
+    {
+        if *expires_at > now_ms + skew_ms {
+            return Ok(material);
+        }
+    }
+
+    let parsed = SecretRef::parse(&stored.secret_ref)?;
+    let secret_id = parsed.secret_id;
+
+    let SecretMaterial::OAuth2 {
+        client_id,
+        client_secret,
+        refresh_token,
+        access_token: _,
+        access_token_expires_at_ms: _,
+    } = material
+    else {
+        return Err("oauth2 secret must be JSON with clientId/clientSecret/refreshToken".to_string());
+    };
+
+    if client_id.trim().is_empty() || client_secret.trim().is_empty() {
+        return Err("missing oauth2 client credentials".to_string());
+    }
+
+    let token_url = reqwest::Url::parse(token_endpoint)
+        .map_err(|_| "invalid oauth2 tokenEndpoint url".to_string())?;
+    if token_url.scheme() != "https" {
+        return Err("oauth2 tokenEndpoint must use https".to_string());
+    }
+    let token_host = token_url
+        .host_str()
+        .ok_or_else(|| "oauth2 tokenEndpoint host is required".to_string())?
+        .to_string();
+    let token_port = token_url.port();
+    if token_port.is_some_and(|p| p != 443) && !env_flag_true("AIVAULT_DEV_ALLOW_NON_DEFAULT_PORTS")
+    {
+        return Err("oauth2 tokenEndpoint non-default port not allowed".to_string());
+    }
+    let token_authority = if let Some(port) = token_port {
+        format!("{}:{}", token_host, port)
+    } else {
+        token_host.clone()
+    };
+    if !stored
+        .hosts
+        .iter()
+        .any(|pattern| crate::broker::host_matches(pattern, &token_authority))
+    {
+        return Err("oauth2 tokenEndpoint host is not allowed by credential hosts".to_string());
+    }
+
+    let mut params: Vec<(&str, String)> = Vec::new();
+    params.push(("client_id", client_id.clone()));
+    if grant_type.eq_ignore_ascii_case("client_credentials") {
+        params.push(("grant_type", "client_credentials".to_string()));
+    } else {
+        if refresh_token.trim().is_empty() {
+            return Err("missing oauth2 refresh token".to_string());
+        }
+        params.push(("grant_type", "refresh_token".to_string()));
+        params.push(("refresh_token", refresh_token.clone()));
+    }
+    if !scopes.is_empty() {
+        let scope = scopes
+            .iter()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !scope.is_empty() {
+            params.push(("scope", scope));
+        }
+    }
+
+    let response = client
+        .post(token_url)
+        .basic_auth(client_id.clone(), Some(client_secret.clone()))
+        .form(&params)
+        .send()
+        .map_err(|e| format!("oauth2 token exchange failed: {}", format_reqwest_error(&e)))?;
+
+    let status = response.status().as_u16();
+    let body_bytes = response.bytes().map_err(|e| e.to_string())?.to_vec();
+    let body_text = String::from_utf8_lossy(&body_bytes).to_string();
+    if !(200..300).contains(&status) {
+        return Err(format!(
+            "oauth2 token endpoint returned {}: {}",
+            status, body_text
+        ));
+    }
+    let json: serde_json::Value =
+        serde_json::from_slice(&body_bytes).map_err(|_| "oauth2 token response must be JSON".to_string())?;
+    let access_token = json
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "oauth2 token response missing access_token".to_string())?
+        .to_string();
+    let expires_in = json
+        .get("expires_in")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| "oauth2 token response missing expires_in".to_string())?;
+    let access_token_expires_at_ms = chrono::Utc::now().timestamp_millis() + (expires_in * 1000);
+    let refresh_token = json
+        .get("refresh_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or(refresh_token);
+
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OAuth2SecretWrite {
+        client_id: String,
+        client_secret: String,
+        #[serde(default)]
+        refresh_token: String,
+        access_token: Option<String>,
+        access_token_expires_at_ms: Option<i64>,
+    }
+
+    let updated = OAuth2SecretWrite {
+        client_id: client_id.clone(),
+        client_secret: client_secret.clone(),
+        refresh_token: refresh_token.clone(),
+        access_token: Some(access_token.clone()),
+        access_token_expires_at_ms: Some(access_token_expires_at_ms),
+    };
+    let updated_bytes = serde_json::to_vec(&updated).map_err(|e| e.to_string())?;
+    vault
+        .rotate_secret_value(&secret_id, &updated_bytes)
+        .map_err(|e| e.to_string())?;
+
+    Ok(SecretMaterial::OAuth2 {
+        client_id,
+        client_secret,
+        refresh_token,
+        access_token: Some(access_token),
+        access_token_expires_at_ms: Some(access_token_expires_at_ms),
+    })
 }
 
 fn maybe_run_capability_envelope(
@@ -1406,6 +1649,8 @@ struct AuthBuildOptions {
     aws_service: Option<String>,
     aws_region: Option<String>,
     hmac_algorithm: Option<String>,
+    path_prefix_template: Option<String>,
+    auth_headers: Vec<(String, String)>,
 }
 
 fn build_auth_strategy(auth: AuthKind, options: AuthBuildOptions) -> AuthStrategy {
@@ -1418,9 +1663,24 @@ fn build_auth_strategy(auth: AuthKind, options: AuthBuildOptions) -> AuthStrateg
                 .value_template
                 .unwrap_or_else(|| "Bearer {{secret}}".to_string()),
         },
+        AuthKind::Path => AuthStrategy::Path {
+            prefix_template: options
+                .path_prefix_template
+                .unwrap_or_else(|| "/bot{{secret}}".to_string()),
+        },
         AuthKind::Query => AuthStrategy::Query {
             param_name: options.query_param.unwrap_or_else(|| "api_key".to_string()),
         },
+        AuthKind::MultiHeader => AuthStrategy::MultiHeader(
+            options
+                .auth_headers
+                .into_iter()
+                .map(|(header_name, value_template)| crate::broker::AuthHeaderTemplate {
+                    header_name,
+                    value_template,
+                })
+                .collect(),
+        ),
         AuthKind::Basic => AuthStrategy::Basic,
         AuthKind::OAuth2 => AuthStrategy::OAuth2 {
             grant_type: options
@@ -1508,8 +1768,9 @@ fn load_runtime_broker_for_context(
         };
         let secret = secret_material_from_bytes(&stored.auth, secret)?;
 
-        let is_registry_provider = registry_lookup.provider(&stored.provider).is_some();
-        // For registry-backed providers, ignore persisted auth/hosts overrides and re-derive from
+        let registry_provider = registry_lookup.provider(&stored.provider).cloned();
+        let is_registry_provider = registry_provider.is_some();
+        // For registry-backed providers, ignore persisted auth overrides and re-derive from
         // compiled-in registry templates to prevent policy tampering via broker.json edits.
         let input = CredentialInput {
             id: stored.id.clone(),
@@ -1519,8 +1780,18 @@ fn load_runtime_broker_for_context(
             } else {
                 Some(stored.auth.clone())
             },
-            hosts: if is_registry_provider {
-                None
+            // Hosts are still credential-bound (per-tenant SaaS). For registry providers, only
+            // accept host bindings that match the registry's allowed host patterns; otherwise
+            // fail-open to canonical registry hosts (tamper resistance).
+            hosts: if let Some(provider) = registry_provider.as_ref() {
+                let allowed = !stored.hosts.is_empty()
+                    && stored.hosts.iter().all(|host| {
+                        provider
+                            .hosts
+                            .iter()
+                            .any(|pattern| crate::broker::host_matches(pattern, host))
+                    });
+                allowed.then(|| stored.hosts.clone())
             } else {
                 Some(stored.hosts.clone())
             },
@@ -1663,8 +1934,33 @@ fn secret_material_from_bytes(auth: &AuthStrategy, raw: Vec<u8>) -> Result<Secre
     let as_utf8 = || String::from_utf8(raw.clone()).map_err(|_| "secret must be utf-8".to_string());
 
     match auth {
-        AuthStrategy::Header { .. } | AuthStrategy::Query { .. } => {
+        AuthStrategy::Header { .. } | AuthStrategy::Query { .. } | AuthStrategy::Path { .. } => {
             Ok(SecretMaterial::String(as_utf8()?))
+        }
+        AuthStrategy::MultiHeader(_) => {
+            let value: serde_json::Value =
+                serde_json::from_slice(&raw).map_err(|_| "multi-header secret must be JSON".to_string())?;
+            let obj = value
+                .as_object()
+                .ok_or_else(|| "multi-header secret must be a JSON object".to_string())?;
+            let mut fields = HashMap::new();
+            for (k, v) in obj {
+                let k = k.trim();
+                if k.is_empty() {
+                    continue;
+                }
+                let Some(vs) = v.as_str() else {
+                    return Err(format!(
+                        "multi-header secret field '{}' must be a string value",
+                        k
+                    ));
+                };
+                fields.insert(k.to_string(), vs.to_string());
+            }
+            if fields.is_empty() {
+                return Err("multi-header secret must include at least one field".to_string());
+            }
+            Ok(SecretMaterial::Fields(fields))
         }
         AuthStrategy::Basic => {
             let parsed: BasicSecret = serde_json::from_slice(&raw)
@@ -2061,6 +2357,21 @@ mod tests {
             .get("exchangeOutsideBroker")
             .and_then(|v| v.as_bool())
             .unwrap());
+    }
+
+    #[test]
+    fn multi_header_secret_parses_as_fields() {
+        let auth = AuthStrategy::MultiHeader(vec![crate::broker::AuthHeaderTemplate {
+            header_name: "x-api-key".to_string(),
+            value_template: "{{api_key}}".to_string(),
+        }]);
+        let raw = br#"{"api_key":"k1","app_key":"k2"}"#.to_vec();
+        let parsed = super::secret_material_from_bytes(&auth, raw).expect("secret parse should work");
+        let crate::broker::SecretMaterial::Fields(fields) = parsed else {
+            panic!("expected SecretMaterial::Fields");
+        };
+        assert_eq!(fields.get("api_key").map(String::as_str), Some("k1"));
+        assert_eq!(fields.get("app_key").map(String::as_str), Some("k2"));
     }
 
     #[test]

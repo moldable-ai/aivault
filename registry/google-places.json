@@ -1,0 +1,41 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "google-places",
+  "auth": {
+    "header": {
+      "header_name": "x-goog-api-key",
+      "value_template": "{{secret}}"
+    }
+  },
+  "hosts": ["places.googleapis.com"],
+  "capabilities": [
+    {
+      "id": "google-places/search-text",
+      "provider": "google-places",
+      "allow": {
+        "hosts": ["places.googleapis.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/places:searchText"]
+      }
+    },
+    {
+      "id": "google-places/details",
+      "provider": "google-places",
+      "allow": {
+        "hosts": ["places.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/v1/places"]
+      }
+    },
+    {
+      "id": "google-places/autocomplete",
+      "provider": "google-places",
+      "allow": {
+        "hosts": ["places.googleapis.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/v1/places:autocomplete"]
+      }
+    }
+  ]
+}
+

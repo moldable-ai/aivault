@@ -83,6 +83,24 @@
       "tests": [
         "story_reg_json_only_provider_extensibility"
       ]
+    },
+    {
+      "id": "ev-broker-reg-host-pattern-matching-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_host_pattern_matching"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-per-tenant-host-binding-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_per_tenant_host_binding"
+      ]
     }
   ],
   "sections": [
@@ -519,14 +537,93 @@
         {
           "slug": "reg-per-tenant-host-binding",
           "story": "As an operator, I want registry-backed providers to support per-tenant host binding (store/site/subdomain/project) while keeping registry policy canonical and immutable, so multi-tenant SaaS APIs can be added without custom provider code.",
-          "evidenceLinks": [],
-          "gapReason": "Registry-backed credentials currently derive hosts strictly from compiled-in registry templates, and the broker selects hosts by exact string intersection rather than host pattern matching."
+          "evidenceLinks": [
+            "ev-broker-reg-per-tenant-host-binding-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::select_effective_host"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-per-tenant-host-binding-test",
+                "test": "story_reg_per_tenant_host_binding"
+              }
+            ]
+          }
         },
         {
           "slug": "reg-host-pattern-matching",
           "story": "As a security reviewer, I want wildcard host patterns in registry policy to be matched deterministically against user-bound exact hosts (without allowing arbitrary redirection), so per-tenant hostnames are supported safely.",
-          "evidenceLinks": [],
-          "gapReason": "The broker's effective host selection currently uses exact equality checks; host pattern matching (e.g. *.zendesk.com) is not applied during planning/execution."
+          "evidenceLinks": [
+            "ev-broker-reg-host-pattern-matching-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "host_matches"
+              },
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::select_effective_host"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-host-pattern-matching-test",
+                "test": "story_reg_host_pattern_matching"
+              }
+            ]
+          }
         }
       ]
     }

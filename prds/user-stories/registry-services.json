@@ -128,6 +128,132 @@
             "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
             "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
           }
+        },
+        {
+          "slug": "regsvc-mistral",
+          "story": "As an operator, I want Mistral capabilities (chat completions, embeddings, FIM, agents, files, fine-tuning, moderations, OCR, models) available in the built-in registry, so agents can access Mistral APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-groq",
+          "story": "As an operator, I want Groq capabilities (chat completions, responses, audio, embeddings, files, fine-tuning, batches, models) available in the built-in registry with OpenAI-compatible paths, so agents can access Groq APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-cohere",
+          "story": "As an operator, I want Cohere capabilities (chat, embed, rerank, classify, tokenize, models, connectors, datasets, embed-jobs, fine-tuning) available in the built-in registry, so agents can access Cohere APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-perplexity",
+          "story": "As an operator, I want Perplexity capabilities (chat completions, responses, search, embeddings) available in the built-in registry, so agents can access Perplexity APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-fireworks",
+          "story": "As an operator, I want Fireworks AI capabilities (chat completions, completions, embeddings, image generation, audio, rerank) available in the built-in registry, so agents can access Fireworks APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-together",
+          "story": "As an operator, I want Together AI capabilities (chat completions, completions, embeddings, images, rerank, models, fine-tuning, files, audio) available in the built-in registry, so agents can access Together AI APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-huggingface",
+          "story": "As an operator, I want Hugging Face Inference capabilities (model inference, OpenAI-compatible chat, models) available in the built-in registry with dual-host support, so agents can access Hugging Face APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-stability",
+          "story": "As an operator, I want Stability AI capabilities (image generation, upscale, edit, control, video, 3D, engines) available in the built-in registry, so agents can access Stability AI APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-assemblyai",
+          "story": "As an operator, I want AssemblyAI capabilities (transcript, upload, real-time streaming, LLM gateway) available in the built-in registry with multi-host support, so agents can access AssemblyAI APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
         }
       ]
     },
@@ -533,7 +659,7 @@
     {
       "id": "regsvc-planned-remaining",
       "group": "Registry Services",
-      "title": "Planned (Remaining Waves 2-6)",
+      "title": "Planned (Remaining Waves 2-5)",
       "stories": [
         { "slug": "regsvc-mailchimp", "story": "As an operator, I want Mailchimp available in the built-in registry, so campaigns and audience APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "Requires per-tenant host binding ({dc}.api.mailchimp.com); registry JSON does not exist yet." },
         { "slug": "regsvc-sentry", "story": "As an operator, I want Sentry available in the built-in registry, so issues and events APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
@@ -549,16 +675,7 @@
         { "slug": "regsvc-jira", "story": "As an operator, I want Jira/Atlassian available in the built-in registry, so issue tracker APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "Requires per-tenant host binding ({site}.atlassian.net)." },
         { "slug": "regsvc-supabase", "story": "As an operator, I want Supabase available in the built-in registry, so BaaS APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "Requires per-tenant host binding ({project}.supabase.co)." },
         { "slug": "regsvc-pinecone", "story": "As an operator, I want Pinecone available in the built-in registry, so vector DB APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-algolia", "story": "As an operator, I want Algolia available in the built-in registry, so search APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "Requires multiple header secrets (app id + api key); multi-header injection not implemented." },
-        { "slug": "regsvc-mistral", "story": "As an operator, I want Mistral available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-groq", "story": "As an operator, I want Groq available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-cohere", "story": "As an operator, I want Cohere available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-perplexity", "story": "As an operator, I want Perplexity available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-fireworks", "story": "As an operator, I want Fireworks AI available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-together", "story": "As an operator, I want Together AI available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-huggingface", "story": "As an operator, I want Hugging Face Inference available in the built-in registry, so AI APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-stability", "story": "As an operator, I want Stability AI available in the built-in registry, so AI image APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." },
-        { "slug": "regsvc-assemblyai", "story": "As an operator, I want AssemblyAI available in the built-in registry, so transcription APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "No registry provider JSON exists yet." }
+        { "slug": "regsvc-algolia", "story": "As an operator, I want Algolia available in the built-in registry, so search APIs can be proxied with near-zero policy authoring.", "evidenceLinks": [], "gapReason": "Requires multiple header secrets (app id + api key); multi-header injection not implemented." }
       ]
     }
   ],
@@ -574,7 +691,10 @@
         "regsvc-github", "regsvc-stripe", "regsvc-resend",
         "regsvc-sendgrid", "regsvc-postmark", "regsvc-mailgun",
         "regsvc-shopify", "regsvc-square", "regsvc-quickbooks", "regsvc-xero",
-        "regsvc-x", "regsvc-youtube", "regsvc-spotify", "regsvc-telegram", "regsvc-reddit"
+        "regsvc-x", "regsvc-youtube", "regsvc-spotify", "regsvc-telegram", "regsvc-reddit",
+        "regsvc-mistral", "regsvc-groq", "regsvc-cohere", "regsvc-perplexity",
+        "regsvc-fireworks", "regsvc-together", "regsvc-huggingface",
+        "regsvc-stability", "regsvc-assemblyai"
       ],
       "references": ["src/registry.rs", "tests/e2e_cli_local.rs"]
     },

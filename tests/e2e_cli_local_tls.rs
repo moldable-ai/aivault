@@ -28,6 +28,7 @@ struct CapturedRequest {
 #[derive(Clone)]
 struct ListenerState {
     requests: Arc<Mutex<Vec<CapturedRequest>>>,
+    oauth_issued: Arc<Mutex<u32>>,
 }
 
 async fn echo_handler(
@@ -59,6 +60,18 @@ async fn echo_handler(
         .lock()
         .expect("lock captured requests")
         .push(captured);
+
+    if uri.path() == "/oauth/token" {
+        // Minimal oauth2 token endpoint stub for e2e tests.
+        let mut issued = state.oauth_issued.lock().expect("lock oauth counter");
+        *issued += 1;
+        let token = format!("at-{}", *issued);
+        return Json(serde_json::json!({
+            "access_token": token,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        }));
+    }
 
     Json(serde_json::json!({
         "method": method.as_str(),
@@ -99,6 +112,7 @@ impl LocalTlsEchoServer {
         let requests = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
         let state = ListenerState {
             requests: Arc::clone(&requests),
+            oauth_issued: Arc::new(Mutex::new(0)),
         };
         let handle = axum_server::Handle::new();
         let handle_for_thread = handle.clone();
@@ -521,6 +535,181 @@ fn e2e_local_tls_response_size_policy_blocks_large_response() {
         1,
         "upstream request should still occur before response policy check"
     );
+}
+
+#[test]
+fn e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+
+    // Secret payload is JSON (stored encrypted in vault) for oauth2 credentials.
+    let secret_id = create_secret(
+        &dir,
+        &envs,
+        "OAUTH_SECRET",
+        r#"{"clientId":"cid","clientSecret":"csec","refreshToken":"rt","accessToken":null,"accessTokenExpiresAtMs":0}"#,
+    );
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "oauth-cred",
+            "--provider",
+            "oauth",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "oauth2",
+            "--grant-type",
+            "refresh_token",
+            "--token-endpoint",
+            &format!("https://{}/oauth/token", upstream_authority),
+            "--scope",
+            "s1",
+            "--host",
+            &upstream_authority,
+        ],
+        &envs,
+    );
+
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "oauth/test",
+            "--credential",
+            "oauth-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/users",
+        ],
+        &envs,
+    );
+
+    let response1 = run_ok_json(&dir, &["invoke", "oauth/test", "--path", "/v1/users"], &envs);
+    assert_eq!(response1["response"]["status"].as_u64(), Some(200));
+    let upstream1 = &response1["response"]["json"];
+    let auth1 = upstream1["headers"]["authorization"]
+        .as_str()
+        .expect("upstream should receive authorization");
+    assert_eq!(auth1, "Bearer at-1");
+
+    let response2 = run_ok_json(&dir, &["invoke", "oauth/test", "--path", "/v1/users"], &envs);
+    assert_eq!(response2["response"]["status"].as_u64(), Some(200));
+    let upstream2 = &response2["response"]["json"];
+    let auth2 = upstream2["headers"]["authorization"]
+        .as_str()
+        .expect("upstream should receive authorization");
+    assert_eq!(auth2, "Bearer at-1");
+
+    let captured = server.captured_requests();
+    let token_calls = captured
+        .iter()
+        .filter(|req| req.path.starts_with("/oauth/token"))
+        .count();
+    assert_eq!(token_calls, 1, "expected oauth token endpoint called once");
+    let token_req = captured
+        .iter()
+        .find(|req| req.path.starts_with("/oauth/token"))
+        .expect("expected captured token endpoint request");
+    assert!(
+        token_req
+            .headers
+            .get("authorization")
+            .map(|v| v.starts_with("Basic "))
+            .unwrap_or(false),
+        "expected token endpoint request to use HTTP Basic auth"
+    );
+    assert!(
+        token_req.body.contains("scope=s1"),
+        "expected token endpoint request body to include scope"
+    );
+}
+
+#[test]
+fn e2e_oauth2_client_credentials_exchanges_token_writes_back_and_reuses_cache() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+
+    let secret_id = create_secret(
+        &dir,
+        &envs,
+        "OAUTH_CC_SECRET",
+        r#"{"clientId":"cid","clientSecret":"csec","refreshToken":"","accessToken":null,"accessTokenExpiresAtMs":0}"#,
+    );
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "oauth-cc-cred",
+            "--provider",
+            "oauth",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "oauth2",
+            "--grant-type",
+            "client_credentials",
+            "--token-endpoint",
+            &format!("https://{}/oauth/token", upstream_authority),
+            "--host",
+            &upstream_authority,
+        ],
+        &envs,
+    );
+
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "oauth/cc",
+            "--credential",
+            "oauth-cc-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/users",
+        ],
+        &envs,
+    );
+
+    let response1 = run_ok_json(&dir, &["invoke", "oauth/cc", "--path", "/v1/users"], &envs);
+    assert_eq!(response1["response"]["status"].as_u64(), Some(200));
+    let upstream1 = &response1["response"]["json"];
+    let auth1 = upstream1["headers"]["authorization"]
+        .as_str()
+        .expect("upstream should receive authorization");
+    assert_eq!(auth1, "Bearer at-1");
+
+    let response2 = run_ok_json(&dir, &["invoke", "oauth/cc", "--path", "/v1/users"], &envs);
+    assert_eq!(response2["response"]["status"].as_u64(), Some(200));
+    let upstream2 = &response2["response"]["json"];
+    let auth2 = upstream2["headers"]["authorization"]
+        .as_str()
+        .expect("upstream should receive authorization");
+    assert_eq!(auth2, "Bearer at-1");
+
+    let captured = server.captured_requests();
+    let token_calls = captured
+        .iter()
+        .filter(|req| req.path.starts_with("/oauth/token"))
+        .count();
+    assert_eq!(token_calls, 1, "expected oauth token endpoint called once");
 }
 
 #[test]
