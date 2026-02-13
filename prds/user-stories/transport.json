@@ -1,0 +1,752 @@
+{
+  "schemaVersion": 2,
+  "domain": "transport",
+  "title": "Transport Modes",
+  "evidence": [
+    {
+      "id": "ev-broker-transport-envelope-upstream-derived-from-policy-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_envelope_upstream_derived_from_policy"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-passthrough-base-url-swap-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_passthrough_base_url_swap"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-passthrough-capability-inference-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_passthrough_capability_inference"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-passthrough-token-scope-evaluation-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_passthrough_token_scope_evaluation"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-passthrough-host-derived-from-capability-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_passthrough_host_derived_from_capability"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-passthrough-credential-segment-extraction-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_passthrough_credential_segment_extraction"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-websocket-connect-frame-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_websocket_connect_frame"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-websocket-reject-target-url-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_websocket_reject_target_url"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-websocket-upstream-derived-from-capability-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_websocket_upstream_derived_from_capability"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-websocket-upgrade-method-enforced-as-get-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_websocket_upgrade_method_enforced_as_get"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-structured-broker-errors-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_structured_broker_errors"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-error-code-enumeration-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_error_code_enumeration"
+      ]
+    },
+    {
+      "id": "ev-broker-transport-response-header-filtering-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_response_header_filtering"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "transport-envelope",
+      "group": "Transport",
+      "title": "Envelope Mode",
+      "stories": [
+        {
+          "slug": "transport-envelope-upstream-derived-from-policy",
+          "story": "As a security reviewer, I want envelope mode upstream host and scheme derived from policy instead of caller input, so URL spoofing is blocked by design.",
+          "evidenceLinks": [
+            "ev-broker-transport-envelope-upstream-derived-from-policy-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-envelope-upstream-derived-from-policy-test",
+                "test": "story_transport_envelope_upstream_derived_from_policy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "transport-passthrough",
+      "group": "Transport",
+      "title": "Passthrough Mode",
+      "stories": [
+        {
+          "slug": "transport-passthrough-base-url-swap",
+          "story": "As an app developer, I want passthrough mode to support a base URL swap from upstream APIs to /v/{credential}/..., so existing SDKs and generated code need minimal changes.",
+          "evidenceLinks": [
+            "ev-broker-transport-passthrough-base-url-swap-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-passthrough-base-url-swap-test",
+                "test": "story_transport_passthrough_base_url_swap"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-passthrough-capability-inference",
+          "story": "As a broker, I want passthrough requests matched by method and path against provider capabilities, so requests without a direct capability id are still enforced by policy.",
+          "evidenceLinks": [
+            "ev-broker-transport-passthrough-capability-inference-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-passthrough-capability-inference-test",
+                "test": "story_transport_passthrough_capability_inference"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-passthrough-token-scope-evaluation",
+          "story": "As a security reviewer, I want passthrough mode filtered by proxy token capability scope and optionally labeled by the most specific matched pathPrefix, so authorization and audit remain deterministic.",
+          "evidenceLinks": [
+            "ev-broker-transport-passthrough-token-scope-evaluation-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-passthrough-token-scope-evaluation-test",
+                "test": "story_transport_passthrough_token_scope_evaluation"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-passthrough-host-derived-from-capability",
+          "story": "As a security reviewer, I want passthrough upstream host selection derived from matched capability allow.hosts instead of caller headers or URL data, so host spoof attempts fail by design.",
+          "evidenceLinks": [
+            "ev-broker-transport-passthrough-host-derived-from-capability-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-passthrough-host-derived-from-capability-test",
+                "test": "story_transport_passthrough_host_derived_from_capability"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-passthrough-credential-segment-extraction",
+          "story": "As a broker implementer, I want passthrough credential extraction from /v/{credential}/... to validate both credential and trailing upstream path segments, so malformed routes fail closed.",
+          "evidenceLinks": [
+            "ev-broker-transport-passthrough-credential-segment-extraction-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "parse_passthrough_path"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-passthrough-credential-segment-extraction-test",
+                "test": "story_transport_passthrough_credential_segment_extraction"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "transport-websocket",
+      "group": "Transport",
+      "title": "WebSocket Mode",
+      "stories": [
+        {
+          "slug": "transport-websocket-connect-frame",
+          "story": "As a caller, I want to connect with a capability plus path frame and have the broker relay frames bidirectionally, so realtime provider APIs work through the same policy engine.",
+          "evidenceLinks": [
+            "ev-broker-transport-websocket-connect-frame-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-websocket-connect-frame-test",
+                "test": "story_transport_websocket_connect_frame"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-websocket-reject-target-url",
+          "story": "As a security reviewer, I want WebSocket connect frames that include targetUrl rejected with policy_violation, so callers cannot inject upstream destinations.",
+          "evidenceLinks": [
+            "ev-broker-transport-websocket-reject-target-url-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-websocket-reject-target-url-test",
+                "test": "story_transport_websocket_reject_target_url"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-websocket-upstream-derived-from-capability",
+          "story": "As a security reviewer, I want websocket upstream host and scheme derived from capability policy, so connect frames cannot choose arbitrary destinations.",
+          "evidenceLinks": [
+            "ev-broker-transport-websocket-upstream-derived-from-capability-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-websocket-upstream-derived-from-capability-test",
+                "test": "story_transport_websocket_upstream_derived_from_capability"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-websocket-upgrade-method-enforced-as-get",
+          "story": "As a security reviewer, I want websocket connect enforcement to treat upgrades as GET against capability methods, so websocket permissions align with HTTP policy semantics.",
+          "evidenceLinks": [
+            "ev-broker-transport-websocket-upgrade-method-enforced-as-get-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_ws_connect"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-websocket-upgrade-method-enforced-as-get-test",
+                "test": "story_transport_websocket_upgrade_method_enforced_as_get"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "transport-errors",
+      "group": "Transport",
+      "title": "Error Contract",
+      "stories": [
+        {
+          "slug": "transport-structured-broker-errors",
+          "story": "As a caller runtime, I want structured broker error codes for policy, credential, token, auth, and upstream failures, so automation can react without string parsing.",
+          "evidenceLinks": [
+            "ev-broker-transport-structured-broker-errors-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::forward_response"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-structured-broker-errors-test",
+                "test": "story_transport_structured_broker_errors"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-error-code-enumeration",
+          "story": "As a caller runtime, I want the core broker error code set serialized consistently, so clients can branch on stable machine-readable failure types.",
+          "evidenceLinks": [
+            "ev-broker-transport-error-code-enumeration-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::forward_response"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-error-code-enumeration-test",
+                "test": "story_transport_error_code_enumeration"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-response-header-filtering",
+          "story": "As a caller runtime, I want hop-by-hop, framing, and websocket-managed upstream response headers filtered out while application headers are preserved, so proxy responses stay standards-compliant and predictable.",
+          "evidenceLinks": [
+            "ev-broker-transport-response-header-filtering-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::forward_response"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::forward_response"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-response-header-filtering-test",
+                "test": "story_transport_response_header_filtering"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

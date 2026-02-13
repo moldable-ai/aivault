@@ -1,0 +1,518 @@
+{
+  "schemaVersion": 2,
+  "domain": "proxy-envelope",
+  "title": "Envelope Proxy Contract",
+  "evidence": [
+    {
+      "id": "ev-broker-env-caller-env-vars-contract-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_caller_env_vars_contract"
+      ]
+    },
+    {
+      "id": "ev-broker-env-required-request-fields-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_required_request_fields"
+      ]
+    },
+    {
+      "id": "ev-broker-env-reject-unknown-fields-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_reject_unknown_fields"
+      ]
+    },
+    {
+      "id": "ev-broker-env-reject-caller-url-field-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_reject_caller_url_field"
+      ]
+    },
+    {
+      "id": "ev-broker-env-single-body-mode-enforcement-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_single_body_mode_enforcement"
+      ]
+    },
+    {
+      "id": "ev-broker-env-credential-resolution-order-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_credential_resolution_order"
+      ]
+    },
+    {
+      "id": "ev-broker-env-streaming-response-forwarding-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_streaming_response_forwarding"
+      ]
+    },
+    {
+      "id": "ev-broker-env-multipart-content-type-owned-by-broker-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_multipart_content_type_owned_by_broker"
+      ]
+    },
+    {
+      "id": "ev-broker-env-broker-resolution-chain-e2e-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_env_broker_resolution_chain_e2e"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "env-caller-contract",
+      "group": "Proxy Envelope",
+      "title": "Caller Contract And Request Validation",
+      "stories": [
+        {
+          "slug": "env-caller-env-vars-contract",
+          "story": "As a caller runtime, I want to provide AIVAULT_BASE_URL and AIVAULT_TOKEN to executing code, so callers can proxy requests without receiving credential material.",
+          "evidenceLinks": [
+            "ev-broker-env-caller-env-vars-contract-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-caller-env-vars-contract-test",
+                "test": "story_env_caller_env_vars_contract"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-required-request-fields",
+          "story": "As a broker, I want envelope requests to require capability, request.method, and request.path, so policy checks run on a minimal deterministic shape.",
+          "evidenceLinks": [
+            "ev-broker-env-required-request-fields-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-required-request-fields-test",
+                "test": "story_env_required_request_fields"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-reject-unknown-fields",
+          "story": "As a security reviewer, I want core envelope parsing to reject unknown fields, so callers cannot smuggle unsupported parameters that bypass policy.",
+          "evidenceLinks": [
+            "ev-broker-env-reject-unknown-fields-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-reject-unknown-fields-test",
+                "test": "story_env_reject_unknown_fields"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-reject-caller-url-field",
+          "story": "As a security reviewer, I want request.url rejected with policy_violation, so callers cannot override upstream host or scheme in envelope mode.",
+          "evidenceLinks": [
+            "ev-broker-env-reject-caller-url-field-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-reject-caller-url-field-test",
+                "test": "story_env_reject_caller_url_field"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-single-body-mode-enforcement",
+          "story": "As a broker, I want at most one body mode among body, multipart, and bodyFilePath, so ambiguous request composition fails closed.",
+          "evidenceLinks": [
+            "ev-broker-env-single-body-mode-enforcement-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "resolve_body_mode"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-single-body-mode-enforcement-test",
+                "test": "story_env_single_body_mode_enforcement"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-credential-resolution-order",
+          "story": "As a runtime integrator, I want credential resolution to follow request credential, token credential, single-provider default, then ambiguity error, so account selection is deterministic.",
+          "evidenceLinks": [
+            "ev-broker-env-credential-resolution-order-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-credential-resolution-order-test",
+                "test": "story_env_credential_resolution_order"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-multipart-content-type-owned-by-broker",
+          "story": "As a security reviewer, I want multipart Content-Type generated by the broker and caller-provided values overridden, so multipart boundaries cannot be spoofed by callers.",
+          "evidenceLinks": [
+            "ev-broker-env-multipart-content-type-owned-by-broker-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_broker_managed_body_headers"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_envelope"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-multipart-content-type-owned-by-broker-test",
+                "test": "story_env_multipart_content_type_owned_by_broker"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "env-broker-resolution-chain-e2e",
+          "story": "As a runtime integrator, I want the ordered broker resolution chain validated end to end from envelope parse through capability and credential resolution to auditable planned request output, so behavior remains deterministic across refactors.",
+          "evidenceLinks": [
+            "ev-broker-env-broker-resolution-chain-e2e-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-broker-resolution-chain-e2e-test",
+                "test": "story_env_broker_resolution_chain_e2e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "env-response-contract",
+      "group": "Proxy Envelope",
+      "title": "Proxy Response Behavior",
+      "stories": [
+        {
+          "slug": "env-streaming-response-forwarding",
+          "story": "As a caller, I want upstream status, allowed headers, and streaming response bytes forwarded without full buffering, so SSE and chunked APIs work transparently through the broker.",
+          "evidenceLinks": [
+            "ev-broker-env-streaming-response-forwarding-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::parse_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-env-streaming-response-forwarding-test",
+                "test": "story_env_streaming_response_forwarding"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

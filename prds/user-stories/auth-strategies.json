@@ -1,0 +1,716 @@
+{
+  "schemaVersion": 2,
+  "domain": "auth-strategies",
+  "title": "Credential Auth Strategies",
+  "evidence": [
+    {
+      "id": "ev-broker-auth-header-injection-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_header_injection"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-query-injection-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_query_injection"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-basic-injection-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_basic_injection"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-oauth2-refresh-and-cache-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_oauth2_refresh_and_cache"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-aws-sigv4-signing-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_aws_sigv4_signing"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-hmac-signing-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_hmac_signing"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-mtls-client-cert-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_mtls_client_cert"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-unknown-type-fails-closed-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_unknown_type_fails_closed"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-oauth2-client-credentials-grant-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_oauth2_client_credentials_grant"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-oauth2-scopes-applied-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_oauth2_scopes_applied"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-aws-session-token-optional-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_aws_session_token_optional"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-hmac-canonical-signature-input-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_hmac_canonical_signature_input"
+      ]
+    },
+    {
+      "id": "ev-broker-auth-oauth2-consent-outside-broker-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_auth_oauth2_consent_outside_broker"
+      ]
+    },
+    {
+      "id": "ev-app-auth-oauth2-setup-tooling-flow-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "oauth_setup_plan_builds_external_consent_url"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "auth-core-strategies",
+      "group": "Auth",
+      "title": "Built-In Authentication Strategies",
+      "stories": [
+        {
+          "slug": "auth-header-injection",
+          "story": "As an operator, I want header-based auth templates to inject secret-derived values server-side, so API-key providers work without exposing keys to callers.",
+          "evidenceLinks": [
+            "ev-broker-auth-header-injection-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-header-injection-test",
+                "test": "story_auth_header_injection"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-query-injection",
+          "story": "As an operator, I want query-parameter auth strategies with broker-controlled parameter insertion, so legacy APIs can be used without caller-owned auth values.",
+          "evidenceLinks": [
+            "ev-broker-auth-query-injection-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-query-injection-test",
+                "test": "story_auth_query_injection"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-basic-injection",
+          "story": "As an operator, I want HTTP Basic auth derived from stored username and password secret material, so basic-auth services can be proxied through the same contract.",
+          "evidenceLinks": [
+            "ev-broker-auth-basic-injection-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-basic-injection-test",
+                "test": "story_auth_basic_injection"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-oauth2-refresh-and-cache",
+          "story": "As an operator, I want oauth2 credentials to refresh and cache access tokens automatically, so callers get bearer auth without running consent or refresh logic.",
+          "evidenceLinks": [
+            "ev-broker-auth-oauth2-refresh-and-cache-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-oauth2-refresh-and-cache-test",
+                "test": "story_auth_oauth2_refresh_and_cache"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-aws-sigv4-signing",
+          "story": "As an operator, I want aws-sigv4 signing using credential secrets and configured service/region, so AWS API requests are authenticated by the broker.",
+          "evidenceLinks": [
+            "ev-broker-auth-aws-sigv4-signing-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-aws-sigv4-signing-test",
+                "test": "story_auth_aws_sigv4_signing"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-hmac-signing",
+          "story": "As an operator, I want HMAC signing strategies with configurable algorithms and signature headers, so webhook and payment APIs can be authenticated through policy.",
+          "evidenceLinks": [
+            "ev-broker-auth-hmac-signing-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-hmac-signing-test",
+                "test": "story_auth_hmac_signing"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-mtls-client-cert",
+          "story": "As an operator, I want mTLS credentials to present client certificates from vault-managed material, so enterprise APIs requiring client cert auth are supported.",
+          "evidenceLinks": [
+            "ev-broker-auth-mtls-client-cert-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-mtls-client-cert-test",
+                "test": "story_auth_mtls_client_cert"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-unknown-type-fails-closed",
+          "story": "As a security reviewer, I want unknown auth types rejected by default, so unsupported credential configs cannot bypass policy with undefined behavior.",
+          "evidenceLinks": [
+            "ev-broker-auth-unknown-type-fails-closed-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-unknown-type-fails-closed-test",
+                "test": "story_auth_unknown_type_fails_closed"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-oauth2-client-credentials-grant",
+          "story": "As an operator, I want oauth2 client_credentials credentials to mint bearer tokens without refresh tokens, so machine-to-machine providers can be proxied with the same broker contract.",
+          "evidenceLinks": [
+            "ev-broker-auth-oauth2-client-credentials-grant-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-oauth2-client-credentials-grant-test",
+                "test": "story_auth_oauth2_client_credentials_grant"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-oauth2-scopes-applied",
+          "story": "As an operator, I want configured oauth2 scopes included in token grant behavior, so provider-required scope sets are applied deterministically.",
+          "evidenceLinks": [
+            "ev-broker-auth-oauth2-scopes-applied-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-oauth2-scopes-applied-test",
+                "test": "story_auth_oauth2_scopes_applied"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-aws-session-token-optional",
+          "story": "As an operator, I want aws-sigv4 to include sessionToken when present, so assumed-role credentials work without custom auth code.",
+          "evidenceLinks": [
+            "ev-broker-auth-aws-session-token-optional-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-aws-session-token-optional-test",
+                "test": "story_auth_aws_session_token_optional"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-hmac-canonical-signature-input",
+          "story": "As an operator, I want HMAC signing to use a deterministic canonical input shape across method, path, and query, so signatures are interoperable and testable.",
+          "evidenceLinks": [
+            "ev-broker-auth-hmac-canonical-signature-input-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-hmac-canonical-signature-input-test",
+                "test": "story_auth_hmac_canonical_signature_input"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-oauth2-consent-outside-broker",
+          "story": "As a security reviewer, I want authorization_code OAuth consent and code exchange rejected inside broker credential execution paths, so interactive consent remains outside the broker trust boundary.",
+          "evidenceLinks": [
+            "ev-broker-auth-oauth2-consent-outside-broker-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_auth_strategy"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "BrokerError"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-auth-oauth2-consent-outside-broker-test",
+                "test": "story_auth_oauth2_consent_outside_broker"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-oauth2-setup-tooling-flow",
+          "story": "As an operator, I want a CLI setup helper that builds an OAuth consent URL and explicitly marks code exchange as outside-broker workflow, so OAuth onboarding is guided without weakening broker boundaries.",
+          "evidenceLinks": [
+            "ev-app-auth-oauth2-setup-tooling-flow-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_oauth"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "build_oauth_setup_plan"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "pct_encode"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/cli.rs",
+                "symbol": "OauthCommand"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-app-auth-oauth2-setup-tooling-flow-test",
+                "test": "oauth_setup_plan_builds_external_consent_url"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

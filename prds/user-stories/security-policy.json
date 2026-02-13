@@ -1,0 +1,1007 @@
+{
+  "schemaVersion": 2,
+  "domain": "security-policy",
+  "title": "Policy Enforcement And Threat Mitigations",
+  "evidence": [
+    {
+      "id": "ev-broker-sec-fail-closed-empty-policy-inputs-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_fail_closed_empty_policy_inputs"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-path-normalization-traversal-rejection-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_path_normalization_traversal_rejection"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-scheme-port-ssrf-guards-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_scheme_port_ssrf_guards"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-redirect-auth-exfiltration-guard-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_redirect_auth_exfiltration_guard"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-reserved-and-auth-class-header-controls-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_reserved_and_auth_class_header_controls"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-host-matching-rules-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_host_matching_rules"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-query-auth-param-owned-by-broker-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_query_auth_param_owned_by_broker"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-effective-host-intersection-fail-closed-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_effective_host_intersection_fail_closed"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-reserved-header-normative-minimum-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_reserved_header_normative_minimum"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-path-prefix-root-explicit-allow-all-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_path_prefix_root_explicit_allow_all"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-host-wildcard-dot-boundary-rules-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_host_wildcard_dot_boundary_rules"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-body-file-path-host-constrained-egress-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_body_file_path_host_constrained_egress"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-broker-call-audit-records-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_broker_call_audit_records"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-stolen-proxy-token-limited-by-scope-and-ttl-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_stolen_proxy_token_limited_by_scope_and_ttl"
+      ]
+    },
+    {
+      "id": "ev-broker-sec-host-punycode-normalization-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_sec_host_punycode_normalization"
+      ]
+    },
+    {
+      "id": "ev-vault-sec-secrets-not-in-caller-accessible-files-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/mod.rs",
+      "tests": [
+        "secret_files_are_not_plaintext_and_use_restrictive_permissions"
+      ]
+    },
+    {
+      "id": "ev-broker-adv-capability-rate-and-size-limits-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_adv_capability_rate_and_size_limits"
+      ]
+    },
+    {
+      "id": "ev-broker-adv-response-body-filtering-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_adv_response_body_filtering"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-policy-core",
+      "group": "Security",
+      "title": "Fail-Closed Policy Enforcement",
+      "stories": [
+        {
+          "slug": "sec-fail-closed-empty-policy-inputs",
+          "story": "As a security reviewer, I want missing or empty hosts, methods, and pathPrefixes treated as invalid input, so policy defaults never silently expand to allow-all behavior.",
+          "evidenceLinks": [
+            "ev-broker-sec-fail-closed-empty-policy-inputs-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-fail-closed-empty-policy-inputs-test",
+                "test": "story_sec_fail_closed_empty_policy_inputs"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-path-normalization-traversal-rejection",
+          "story": "As a security reviewer, I want path normalization with traversal rejection, so callers cannot escape allowed path prefixes using encoded or relative path tricks.",
+          "evidenceLinks": [
+            "ev-broker-sec-path-normalization-traversal-rejection-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "normalize_path_and_query"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-path-normalization-traversal-rejection-test",
+                "test": "story_sec_path_normalization_traversal_rejection"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-scheme-port-ssrf-guards",
+          "story": "As an operator, I want core policy to enforce https or wss, default ports, and SSRF deny lists for private, link-local, loopback, and metadata targets, so brokered auth cannot reach unsafe internal destinations by default.",
+          "evidenceLinks": [
+            "ev-broker-sec-scheme-port-ssrf-guards-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-scheme-port-ssrf-guards-test",
+                "test": "story_sec_scheme_port_ssrf_guards"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-redirect-auth-exfiltration-guard",
+          "story": "As a security reviewer, I want redirect handling that either blocks redirects or re-validates each hop with auth stripping on host changes, so redirect chains cannot exfiltrate credentials.",
+          "evidenceLinks": [
+            "ev-broker-sec-redirect-auth-exfiltration-guard-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-redirect-auth-exfiltration-guard-test",
+                "test": "story_sec_redirect_auth_exfiltration_guard"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-reserved-and-auth-class-header-controls",
+          "story": "As a security reviewer, I want reserved headers stripped and caller-supplied auth-class headers rejected for managed credentials, so header smuggling cannot override broker-injected authentication.",
+          "evidenceLinks": [
+            "ev-broker-sec-reserved-and-auth-class-header-controls-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "sanitize_headers"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-reserved-and-auth-class-header-controls-test",
+                "test": "story_sec_reserved_and_auth_class_header_controls"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-host-matching-rules",
+          "story": "As a security reviewer, I want exact host matching and explicit wildcard semantics with no implicit suffix matching, so typosquatted hosts do not pass policy checks.",
+          "evidenceLinks": [
+            "ev-broker-sec-host-matching-rules-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "host_matches"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-host-matching-rules-test",
+                "test": "story_sec_host_matching_rules"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-query-auth-param-owned-by-broker",
+          "story": "As a security reviewer, I want query-auth parameters controlled by the broker by rejecting envelope requests that include auth params and overriding passthrough auth params, so caller input cannot inject credential values.",
+          "evidenceLinks": [
+            "ev-broker-sec-query-auth-param-owned-by-broker-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-query-auth-param-owned-by-broker-test",
+                "test": "story_sec_query_auth_param_owned_by_broker"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-effective-host-intersection-fail-closed",
+          "story": "As a security reviewer, I want effective hosts computed as the intersection of credential hosts and capability allow.hosts and rejected when empty, so policy cannot expand beyond intended host ceilings.",
+          "evidenceLinks": [
+            "ev-broker-sec-effective-host-intersection-fail-closed-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::select_effective_host"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-effective-host-intersection-fail-closed-test",
+                "test": "story_sec_effective_host_intersection_fail_closed"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-reserved-header-normative-minimum",
+          "story": "As a security reviewer, I want the normative reserved header minimum enforced (auth, host, hop-by-hop, framing, and sec-websocket-*), so caller-controlled transport metadata cannot bypass broker controls.",
+          "evidenceLinks": [
+            "ev-broker-sec-reserved-header-normative-minimum-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "sanitize_headers"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-reserved-header-normative-minimum-test",
+                "test": "story_sec_reserved_header_normative_minimum"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-path-prefix-root-explicit-allow-all",
+          "story": "As an operator, I want allow-all paths represented explicitly with pathPrefixes [\"/\"], so permissive path policy remains intentional and empty arrays stay invalid.",
+          "evidenceLinks": [
+            "ev-broker-sec-path-prefix-root-explicit-allow-all-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "normalize_path_and_query"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-path-prefix-root-explicit-allow-all-test",
+                "test": "story_sec_path_prefix_root_explicit_allow_all"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-host-wildcard-dot-boundary-rules",
+          "story": "As a security reviewer, I want wildcard host matching constrained by dot-boundary semantics and apex non-match, so wildcard support does not allow accidental suffix spoofing.",
+          "evidenceLinks": [
+            "ev-broker-sec-host-wildcard-dot-boundary-rules-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "host_matches"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-host-wildcard-dot-boundary-rules-test",
+                "test": "story_sec_host_wildcard_dot_boundary_rules"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-body-file-path-host-constrained-egress",
+          "story": "As a security reviewer, I want bodyFilePath forwarding constrained by capability host policy, so local file upload paths cannot bypass host allow-lists for exfiltration.",
+          "evidenceLinks": [
+            "ev-broker-sec-body-file-path-host-constrained-egress-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-body-file-path-host-constrained-egress-test",
+                "test": "story_sec_body_file_path_host_constrained_egress"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-host-punycode-normalization",
+          "story": "As a security reviewer, I want host comparisons normalized to lowercase for punycode hostnames, so host allow-list evaluation is deterministic for internationalized domains.",
+          "evidenceLinks": [
+            "ev-broker-sec-host-punycode-normalization-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "host_matches"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "normalize_hosts"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "validate_host_pattern"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-host-punycode-normalization-test",
+                "test": "story_sec_host_punycode_normalization"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-secrets-not-in-caller-accessible-files",
+          "story": "As a security reviewer, I want vault secret files stored encrypted with restrictive filesystem permissions, so provider secrets are not available as caller-readable plaintext files.",
+          "evidenceLinks": [
+            "ev-vault-sec-secrets-not-in-caller-accessible-files-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::create_secret"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::write_secret"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::get_kek"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::write_secret"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/vault/store.rs",
+                "symbol": "SecretMeta"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-sec-secrets-not-in-caller-accessible-files-test",
+                "test": "secret_files_are_not_plaintext_and_use_restrictive_permissions"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "adv-capability-rate-and-size-limits",
+          "story": "As an operator, I want per-capability rate and request size limits enforced by the broker, so abusive or oversized traffic is constrained before reaching upstream providers.",
+          "evidenceLinks": [
+            "ev-broker-adv-capability-rate-and-size-limits-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::enforce_capability_rate_limit"
+              },
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::enforce_capability_request_size_limit"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::set_capability_advanced_policy"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "BrokerError"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-adv-capability-rate-and-size-limits-test",
+                "test": "story_adv_capability_rate_and_size_limits"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "adv-response-body-filtering",
+          "story": "As an operator, I want per-capability response body filtering and response size limits, so sensitive substrings can be redacted and oversized upstream responses can be blocked.",
+          "evidenceLinks": [
+            "ev-broker-adv-response-body-filtering-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::forward_response_for_capability"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::forward_response_for_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::set_capability_advanced_policy"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "ForwardedResponse"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-adv-response-body-filtering-test",
+                "test": "story_adv_response_body_filtering"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sec-audit-and-token-risk",
+      "group": "Security",
+      "title": "Auditability And Stolen Token Blast Radius",
+      "stories": [
+        {
+          "slug": "sec-broker-call-audit-records",
+          "story": "As an operator, I want each broker call auditable with capability, resolved credential, upstream host, timestamp, and caller context, so incident investigations can reconstruct what happened.",
+          "evidenceLinks": [
+            "ev-broker-sec-broker-call-audit-records-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-broker-call-audit-records-test",
+                "test": "story_sec_broker_call_audit_records"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-stolen-proxy-token-limited-by-scope-and-ttl",
+          "story": "As a security reviewer, I want short-lived scoped proxy tokens and local-only broker defaults, so token theft across executions has constrained impact.",
+          "evidenceLinks": [
+            "ev-broker-sec-stolen-proxy-token-limited-by-scope-and-ttl-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-sec-stolen-proxy-token-limited-by-scope-and-ttl-test",
+                "test": "story_sec_stolen_proxy_token_limited_by_scope_and_ttl"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

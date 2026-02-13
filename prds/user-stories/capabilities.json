@@ -1,0 +1,515 @@
+{
+  "schemaVersion": 2,
+  "domain": "capabilities",
+  "title": "Capability Definitions And Matching",
+  "evidence": [
+    {
+      "id": "ev-capability-store-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/capabilities.rs",
+      "tests": [
+        "resolve_prefers_consumer_specific_binding_then_general_binding",
+        "resolve_prefers_team_then_workspace_then_global",
+        "remove_deletes_exact_binding_key",
+        "upsert_and_save_roundtrip_preserves_bindings"
+      ]
+    },
+    {
+      "id": "ev-capability-cli-code",
+      "kind": "code",
+      "automated": false,
+      "file": "src/app.rs",
+      "references": [
+        "run_capabilities",
+        "resolve_binding_value"
+      ]
+    },
+    {
+      "id": "ev-broker-cap-provider-binding-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_cap_provider_binding"
+      ]
+    },
+    {
+      "id": "ev-broker-cap-id-uniqueness-with-overlap-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_cap_id_uniqueness_with_overlap"
+      ]
+    },
+    {
+      "id": "ev-broker-cap-core-single-upstream-host-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_cap_core_single_upstream_host"
+      ]
+    },
+    {
+      "id": "ev-broker-cap-method-and-path-prefix-contract-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_cap_method_and_path_prefix_contract"
+      ]
+    },
+    {
+      "id": "ev-broker-cap-user-defined-capabilities-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_cap_user_defined_capabilities"
+      ]
+    },
+    {
+      "id": "ev-capabilities-cap-foundation-secretref-override-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/capabilities.rs",
+      "tests": [
+        "resolve_uses_latest_secret_ref_override_for_same_binding_key"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "cap-core-model",
+      "group": "Capabilities",
+      "title": "Capability Data Model",
+      "stories": [
+        {
+          "slug": "cap-provider-binding",
+          "story": "As an implementer, I want capabilities bound to providers instead of individual credentials, so multiple accounts can share one provider capability set.",
+          "evidenceLinks": [
+            "ev-broker-cap-provider-binding-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-cap-provider-binding-test",
+                "test": "story_cap_provider_binding"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-id-uniqueness-with-overlap",
+          "story": "As an operator, I want capability ids unique per broker while allowing overlapping path prefixes, so policy can be precise without forcing artificial namespace constraints.",
+          "evidenceLinks": [
+            "ev-broker-cap-id-uniqueness-with-overlap-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-cap-id-uniqueness-with-overlap-test",
+                "test": "story_cap_id_uniqueness_with_overlap"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-core-single-upstream-host",
+          "story": "As a security reviewer, I want core capabilities to require exactly one host in allow.hosts, so upstream host selection is deterministic and spoof-resistant.",
+          "evidenceLinks": [
+            "ev-broker-cap-core-single-upstream-host-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-cap-core-single-upstream-host-test",
+                "test": "story_cap_core_single_upstream_host"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-method-and-path-prefix-contract",
+          "story": "As an operator, I want capabilities to declare explicit methods and path prefixes, so callers can only perform constrained operations for each capability id.",
+          "evidenceLinks": [
+            "ev-broker-cap-method-and-path-prefix-contract-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-cap-method-and-path-prefix-contract-test",
+                "test": "story_cap_method_and_path_prefix_contract"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cap-custom",
+      "group": "Capabilities",
+      "title": "Custom Capabilities",
+      "stories": [
+        {
+          "slug": "cap-user-defined-capabilities",
+          "story": "As an operator, I want to define custom capabilities for non-registry providers using the same capability schema, so private APIs use the same enforcement model.",
+          "evidenceLinks": [
+            "ev-broker-cap-user-defined-capabilities-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_capability"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-cap-user-defined-capabilities-test",
+                "test": "story_cap_user_defined_capabilities"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cap-foundation",
+      "group": "Extracted Foundation",
+      "title": "Imported Capability Binding Runtime",
+      "stories": [
+        {
+          "slug": "cap-foundation-bind-and-unbind-by-scope",
+          "story": "As an operator, I want to bind and unbind a capability to a secret reference for a given scope and optional consumer, so runtime consumers can resolve credentials by policy instead of hardcoded refs.",
+          "evidenceLinks": [
+            "ev-capability-store-tests",
+            "ev-capability-cli-code"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capabilities"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::upsert"
+              },
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::remove"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "SecretRef::parse"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::save"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-capability-store-tests",
+                "test": "resolve_prefers_consumer_specific_binding_then_general_binding"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-foundation-resolution-precedence",
+          "story": "As a runtime integrator, I want capability resolution to prefer team over workspace over global scope and consumer-specific over generic bindings, so the most specific valid credential is selected consistently.",
+          "evidenceLinks": [
+            "ev-capability-store-tests"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capabilities"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::resolve"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::list"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-capability-store-tests",
+                "test": "resolve_prefers_consumer_specific_binding_then_general_binding"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-foundation-store-roundtrip",
+          "story": "As an operator, I want capability bindings persisted and reloaded from capabilities.json without data loss, so policy survives process restarts.",
+          "evidenceLinks": [
+            "ev-capability-store-tests"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capabilities"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::save"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::load"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-capability-store-tests",
+                "test": "resolve_prefers_consumer_specific_binding_then_general_binding"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-foundation-secretref-override",
+          "story": "As an operator, I want rebinding the same capability scope and consumer key to replace secretRef deterministically, so explicit overrides take effect without stale resolution.",
+          "evidenceLinks": [
+            "ev-capabilities-cap-foundation-secretref-override-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::upsert"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::resolve"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityScope::normalize"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityStore::upsert"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/capabilities.rs",
+                "symbol": "CapabilityBinding"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-capabilities-cap-foundation-secretref-override-test",
+                "test": "resolve_uses_latest_secret_ref_override_for_same_binding_key"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

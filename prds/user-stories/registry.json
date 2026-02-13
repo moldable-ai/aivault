@@ -1,0 +1,463 @@
+{
+  "schemaVersion": 2,
+  "domain": "registry",
+  "title": "Provider Registry",
+  "evidence": [
+    {
+      "id": "ev-broker-reg-optional-conformance-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_optional_conformance"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-provider-based-capability-activation-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_provider_based_capability_activation"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-capability-shape-without-credential-field-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_capability_shape_without_credential_field"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-runtime-immutability-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_runtime_immutability"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-no-secret-material-in-registry-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_no_secret_material_in_registry"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-custom-provider-explicit-auth-hosts-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_custom_provider_explicit_auth_hosts"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-custom-capabilities-same-schema-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_custom_capabilities_same_schema"
+      ]
+    },
+    {
+      "id": "ev-broker-reg-json-only-provider-extensibility-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_reg_json_only_provider_extensibility"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "reg-optional-model",
+      "group": "Registry",
+      "title": "Registry Activation And Scope",
+      "stories": [
+        {
+          "slug": "reg-optional-conformance",
+          "story": "As an implementer, I want registry support to remain optional while keeping core credential and capability behavior conforming, so minimal deployments can ship without bundled provider data.",
+          "evidenceLinks": [
+            "ev-broker-reg-optional-conformance-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-optional-conformance-test",
+                "test": "story_reg_optional_conformance"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-provider-based-capability-activation",
+          "story": "As an operator, I want provider registry capabilities activated when a credential provider matches a registry entry, so common providers work with near-zero policy authoring.",
+          "evidenceLinks": [
+            "ev-broker-reg-provider-based-capability-activation-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-provider-based-capability-activation-test",
+                "test": "story_reg_provider_based_capability_activation"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-capability-shape-without-credential-field",
+          "story": "As a runtime integrator, I want registry capability entries stored without credential ids, so credentials are bound dynamically at runtime instead of hardcoded in registry data.",
+          "evidenceLinks": [
+            "ev-broker-reg-capability-shape-without-credential-field-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-capability-shape-without-credential-field-test",
+                "test": "story_reg_capability_shape_without_credential_field"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "reg-integrity",
+      "group": "Registry",
+      "title": "Registry Integrity And Custom Provider Flow",
+      "stories": [
+        {
+          "slug": "reg-runtime-immutability",
+          "story": "As a security reviewer, I want runtime registry data immutable to executing code, so provider host and auth policies cannot be tampered with during execution.",
+          "evidenceLinks": [
+            "ev-broker-reg-runtime-immutability-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "Registry::providers"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-runtime-immutability-test",
+                "test": "story_reg_runtime_immutability"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-no-secret-material-in-registry",
+          "story": "As an operator, I want registry files to contain templates and capability metadata but no credential secrets, so secret storage remains keyed by credential id in vault storage.",
+          "evidenceLinks": [
+            "ev-broker-reg-no-secret-material-in-registry-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "Registry::provider"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-no-secret-material-in-registry-test",
+                "test": "story_reg_no_secret_material_in_registry"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-custom-provider-explicit-auth-hosts",
+          "story": "As an operator, I want non-registry providers to require explicit auth and host configuration on credential creation, so unknown providers cannot activate with implicit policy.",
+          "evidenceLinks": [
+            "ev-broker-reg-custom-provider-explicit-auth-hosts-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-custom-provider-explicit-auth-hosts-test",
+                "test": "story_reg_custom_provider_explicit_auth_hosts"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-custom-capabilities-same-schema",
+          "story": "As an operator, I want custom capabilities created via API or CLI to use the same provider-bound schema as registry capabilities, so enforcement remains uniform across built-in and custom providers.",
+          "evidenceLinks": [
+            "ev-broker-reg-custom-capabilities-same-schema-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-custom-capabilities-same-schema-test",
+                "test": "story_reg_custom_capabilities_same_schema"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-json-only-provider-extensibility",
+          "story": "As an implementer, I want to add providers through JSON registry payloads without Rust code changes, so provider catalog growth stays data-driven.",
+          "evidenceLinks": [
+            "ev-broker-reg-json-only-provider-extensibility-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "Registry::from_json_str"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_or_replace_capability_from_registry"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-reg-json-only-provider-extensibility-test",
+                "test": "story_reg_json_only_provider_extensibility"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

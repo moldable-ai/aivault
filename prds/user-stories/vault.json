@@ -1,0 +1,775 @@
+{
+  "schemaVersion": 2,
+  "domain": "vault",
+  "title": "Credential And Vault Secret Model",
+  "evidence": [
+    {
+      "id": "ev-vault-runtime-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/mod.rs",
+      "tests": [
+        "env_provider_create_and_resolve_secret",
+        "system_secrets_are_persisted_as_system_managed",
+        "team_scoped_resolution_enforces_attachments_for_global",
+        "passphrase_unlocks_and_locks",
+        "load_auto_initializes_default_file_provider_in_override_dir",
+        "update_secret_meta_changes_name_and_aliases",
+        "rotate_secret_value_increments_version_and_keeps_id",
+        "revoke_secret_clears_ciphertext_and_blocks_resolution",
+        "team_and_workspace_scope_resolution_matrix_and_detach",
+        "create_secret_rejects_duplicate_global_name_or_alias",
+        "update_secret_rejects_duplicate_global_name_or_alias",
+        "find_global_secret_ref_by_name_is_deterministic_for_legacy_conflicts",
+        "rotate_master_key_rewraps_existing_ciphertext",
+        "store_kek_file_sets_restrictive_permissions",
+        "set_audit_enabled_false_stops_new_audit_writes"
+      ]
+    },
+    {
+      "id": "ev-vault-crypto-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/crypto.rs",
+      "tests": [
+        "derive_kek_from_passphrase_is_deterministic_for_same_inputs",
+        "derive_kek_from_passphrase_changes_when_salt_changes",
+        "aead_rejects_tampered_ciphertext_or_aad"
+      ]
+    },
+    {
+      "id": "ev-vault-audit-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/audit.rs",
+      "tests": [
+        "read_audit_events_before_orders_newest_first_across_rotated_files",
+        "read_audit_events_before_respects_cursor_and_limit",
+        "append_audit_event_rotates_when_file_exceeds_limit"
+      ]
+    },
+    {
+      "id": "ev-vault-cli-code",
+      "kind": "code",
+      "automated": false,
+      "file": "src/app.rs",
+      "references": [
+        "run_init",
+        "run_secrets",
+        "run_status"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-credential-provider-binding-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_credential_provider_binding"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-credential-multi-account-disambiguation-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_credential_multi_account_disambiguation"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-credential-provider-resolution-overrides-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_credential_provider_resolution_overrides"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-secret-slot-isolation-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_secret_slot_isolation"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-credential-id-uniqueness-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_credential_id_uniqueness"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-host-pattern-core-exact-match-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_host_pattern_core_exact_match"
+      ]
+    },
+    {
+      "id": "ev-broker-vault-provider-activation-default-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_vault_provider_activation_default"
+      ]
+    },
+    {
+      "id": "ev-vault-foundation-secret-files-encrypted-and-restrictive-permissions-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/mod.rs",
+      "tests": [
+        "secret_files_are_not_plaintext_and_use_restrictive_permissions"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "vault-credentials",
+      "group": "Vault Core",
+      "title": "Credential Identity And Provider Resolution",
+      "stories": [
+        {
+          "slug": "vault-credential-provider-binding",
+          "story": "As an operator, I want each credential to bind an account id to a provider id, so capability and auth defaults resolve consistently.",
+          "evidenceLinks": [
+            "ev-broker-vault-credential-provider-binding-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-credential-provider-binding-test",
+                "test": "story_vault_credential_provider_binding"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-credential-multi-account-disambiguation",
+          "story": "As a runtime integrator, I want multiple credentials for one provider to be first-class and disambiguated by credential id, so work and personal accounts remain isolated.",
+          "evidenceLinks": [
+            "ev-broker-vault-credential-multi-account-disambiguation-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-credential-multi-account-disambiguation-test",
+                "test": "story_vault_credential_multi_account_disambiguation"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-credential-provider-resolution-overrides",
+          "story": "As an operator, I want registry defaults applied by provider with credential-level auth or host overrides, so provider templates are reusable while per-account exceptions stay explicit.",
+          "evidenceLinks": [
+            "ev-broker-vault-credential-provider-resolution-overrides-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-credential-provider-resolution-overrides-test",
+                "test": "story_vault_credential_provider_resolution_overrides"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-secret-slot-isolation",
+          "story": "As a security reviewer, I want secret storage keyed strictly by credential id with no aliasing, so one credential cannot read another credential's secret material.",
+          "evidenceLinks": [
+            "ev-broker-vault-secret-slot-isolation-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-secret-slot-isolation-test",
+                "test": "story_vault_secret_slot_isolation"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-credential-id-uniqueness",
+          "story": "As an operator, I want credential creation to reject duplicate credential ids, so credential secret slots remain unambiguous and non-conflicting.",
+          "evidenceLinks": [
+            "ev-broker-vault-credential-id-uniqueness-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-credential-id-uniqueness-test",
+                "test": "story_vault_credential_id_uniqueness"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "vault-host-model",
+      "group": "Vault Core",
+      "title": "Host Pattern Constraints",
+      "stories": [
+        {
+          "slug": "vault-host-pattern-core-exact-match",
+          "story": "As an operator, I want exact-host matching as the core behavior and wildcard hosts rejected for core conformance, so host authorization stays deterministic and fail-closed.",
+          "evidenceLinks": [
+            "ev-broker-vault-host-pattern-core-exact-match-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-host-pattern-core-exact-match-test",
+                "test": "story_vault_host_pattern_core_exact_match"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-provider-activation-default",
+          "story": "As an operator, I want one credential per provider to activate all capabilities for that provider by default, so common setup is one command and no per-capability wiring.",
+          "evidenceLinks": [
+            "ev-broker-vault-provider-activation-default-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_operator"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::create_credential"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-vault-provider-activation-default-test",
+                "test": "story_vault_provider_activation_default"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "vault-foundation",
+      "group": "Extracted Foundation",
+      "title": "Imported Vault Runtime Behaviors",
+      "stories": [
+        {
+          "slug": "vault-foundation-envelope-encryption-at-rest",
+          "story": "As an operator, I want secret values encrypted at rest with envelope encryption, so vault files alone do not expose plaintext values.",
+          "evidenceLinks": [
+            "ev-vault-runtime-tests",
+            "ev-vault-crypto-tests"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_secrets"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::create_secret"
+              },
+              {
+                "file": "src/vault/crypto.rs",
+                "symbol": "aead_encrypt_xchacha20poly1305"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::create_secret"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-runtime-tests",
+                "test": "env_provider_create_and_resolve_secret"
+              },
+              {
+                "evidenceId": "ev-vault-crypto-tests",
+                "test": "derive_kek_from_passphrase_is_deterministic_for_same_inputs"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-provider-init-lock-rotate",
+          "story": "As an operator, I want provider initialization, lock and unlock, and master-key rotation flows to behave deterministically, so key lifecycle is manageable without secret data loss.",
+          "evidenceLinks": [
+            "ev-vault-runtime-tests",
+            "ev-vault-cli-code"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_init"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::init"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::unlock"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::lock"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_master_key"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_master_key"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-runtime-tests",
+                "test": "env_provider_create_and_resolve_secret"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-secret-metadata-lifecycle",
+          "story": "As an operator, I want create, update, rotate, and revoke operations to preserve secret metadata semantics and stable secret references, so downstream integrations stay durable.",
+          "evidenceLinks": [
+            "ev-vault-runtime-tests",
+            "ev-vault-cli-code"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_secrets"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::create_secret"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::update_secret_meta"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::revoke_secret"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-runtime-tests",
+                "test": "env_provider_create_and_resolve_secret"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-team-scope-resolution",
+          "story": "As a runtime integrator, I want secret resolution to enforce global, workspace, and team scope rules plus explicit team attachments, so access control is predictable per execution context.",
+          "evidenceLinks": [
+            "ev-vault-runtime-tests"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_for_team"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_for_team"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::attach_secret_to_team"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_resolved_value"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-runtime-tests",
+                "test": "env_provider_create_and_resolve_secret"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-audit-ordering-and-retention",
+          "story": "As an operator, I want audit events returned in newest-first order with bounded file rotation, so investigations are practical without unbounded disk growth.",
+          "evidenceLinks": [
+            "ev-vault-audit-tests"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "read_audit_events_before"
+              },
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "print_json"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-audit-tests",
+                "test": "read_audit_events_before_orders_newest_first_across_rotated_files"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-secret-files-encrypted-and-restrictive-permissions",
+          "story": "As an operator, I want persisted secret records to avoid plaintext values and enforce restrictive filesystem permissions, so local at-rest exposure from casual file reads is reduced.",
+          "evidenceLinks": [
+            "ev-vault-foundation-secret-files-encrypted-and-restrictive-permissions-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::create_secret"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::write_secret"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::get_kek"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::write_secret"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/vault/store.rs",
+                "symbol": "SecretMeta"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-foundation-secret-files-encrypted-and-restrictive-permissions-test",
+                "test": "secret_files_are_not_plaintext_and_use_restrictive_permissions"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

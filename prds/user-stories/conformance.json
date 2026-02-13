@@ -1,0 +1,338 @@
+{
+  "schemaVersion": 2,
+  "domain": "conformance",
+  "title": "Conformance Levels And Success Criteria",
+  "evidence": [
+    {
+      "id": "ev-broker-conf-core-level-minimum-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_core_level_minimum"
+      ]
+    },
+    {
+      "id": "ev-broker-conf-registry-level-optional-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_registry_level_optional"
+      ]
+    },
+    {
+      "id": "ev-broker-conf-oauth2-level-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_oauth2_level"
+      ]
+    },
+    {
+      "id": "ev-broker-conf-websocket-level-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_websocket_level"
+      ]
+    },
+    {
+      "id": "ev-broker-conf-signing-level-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_signing_level"
+      ]
+    },
+    {
+      "id": "ev-broker-conf-mtls-level-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_mtls_level"
+      ]
+    },
+    {
+      "id": "ev-broker-conf-success-criteria-zero-trust-outcomes-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_conf_success_criteria_zero_trust_outcomes"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "conf-levels",
+      "group": "Conformance",
+      "title": "Additive Conformance Levels",
+      "stories": [
+        {
+          "slug": "conf-core-level-minimum",
+          "story": "As an implementer, I want a clearly testable Core conformance level that includes credentials, capabilities, envelope and passthrough transport, policy enforcement, SSRF controls, and localhost defaults, so secure baseline adoption is straightforward.",
+          "evidenceLinks": [
+            "ev-broker-conf-core-level-minimum-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-core-level-minimum-test",
+                "test": "story_conf_core_level_minimum"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "conf-registry-level-optional",
+          "story": "As an implementer, I want registry support defined as an optional additive level, so deployments can adopt built-in provider catalogs without changing core behavior.",
+          "evidenceLinks": [
+            "ev-broker-conf-registry-level-optional-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-registry-level-optional-test",
+                "test": "story_conf_registry_level_optional"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "conf-oauth2-level",
+          "story": "As an implementer, I want oauth2 refresh and caching packaged as a dedicated conformance level, so token lifecycle complexity can be delivered independently from core proxy semantics.",
+          "evidenceLinks": [
+            "ev-broker-conf-oauth2-level-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-oauth2-level-test",
+                "test": "story_conf_oauth2_level"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "conf-websocket-level",
+          "story": "As an implementer, I want WebSocket proxy behavior captured as a dedicated conformance level, so realtime support can evolve without destabilizing HTTP-only deployments.",
+          "evidenceLinks": [
+            "ev-broker-conf-websocket-level-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-websocket-level-test",
+                "test": "story_conf_websocket_level"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "conf-signing-level",
+          "story": "As an implementer, I want aws-sigv4 and hmac bundled under a signing conformance level, so advanced signing support can be validated independently.",
+          "evidenceLinks": [
+            "ev-broker-conf-signing-level-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-signing-level-test",
+                "test": "story_conf_signing_level"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "conf-mtls-level",
+          "story": "As an implementer, I want mTLS defined as an additive conformance level, so client-certificate integrations can be verified explicitly.",
+          "evidenceLinks": [
+            "ev-broker-conf-mtls-level-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-mtls-level-test",
+                "test": "story_conf_mtls_level"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "conf-outcomes",
+      "group": "Conformance",
+      "title": "User Outcomes",
+      "stories": [
+        {
+          "slug": "conf-success-criteria-zero-trust-outcomes",
+          "story": "As an operator, I want conformance validated against zero-trust outcomes including per-provider activation, capability isolation, custom provider support, URL spoofing resistance, and localhost defaults, so compliance maps to user-visible security guarantees.",
+          "evidenceLinks": [
+            "ev-broker-conf-success-criteria-zero-trust-outcomes-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::conformance_levels"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-conf-success-criteria-zero-trust-outcomes-test",
+                "test": "story_conf_success_criteria_zero_trust_outcomes"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

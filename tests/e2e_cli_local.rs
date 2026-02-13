@@ -1,0 +1,589 @@
+use std::process::{Command, Output};
+
+use serde_json::Value;
+use tempfile::{NamedTempFile, TempDir};
+
+fn run_aivault(dir: &TempDir, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_aivault"))
+        .env("AIVAULT_DIR", dir.path())
+        .args(args)
+        .output()
+        .expect("failed to run aivault binary")
+}
+
+fn run_ok_json(dir: &TempDir, args: &[&str]) -> Value {
+    let output = run_aivault(dir, args);
+    assert!(
+        output.status.success(),
+        "command failed: aivault {}\nstdout:\n{}\nstderr:\n{}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
+}
+
+fn run_err_text(dir: &TempDir, args: &[&str]) -> String {
+    let output = run_aivault(dir, args);
+    assert!(
+        !output.status.success(),
+        "command unexpectedly succeeded: aivault {}\nstdout:\n{}\nstderr:\n{}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
+fn create_secret(dir: &TempDir, name: &str, value: &str) -> String {
+    let created = run_ok_json(
+        dir,
+        &[
+            "secrets", "create", "--name", name, "--value", value, "--scope", "global",
+        ],
+    );
+    created["secretId"]
+        .as_str()
+        .expect("secretId should be present")
+        .to_string()
+}
+
+fn create_header_credential(
+    dir: &TempDir,
+    credential_id: &str,
+    provider: &str,
+    secret_ref: &str,
+    host: &str,
+) {
+    run_ok_json(
+        dir,
+        &[
+            "credential",
+            "create",
+            credential_id,
+            "--provider",
+            provider,
+            "--secret-ref",
+            secret_ref,
+            "--auth",
+            "header",
+            "--host",
+            host,
+        ],
+    );
+}
+
+fn create_capability(
+    dir: &TempDir,
+    capability_id: &str,
+    credential_id: &str,
+    methods: &[&str],
+    paths: &[&str],
+) {
+    let mut args = vec![
+        "capability",
+        "create",
+        capability_id,
+        "--credential",
+        credential_id,
+    ];
+    for method in methods {
+        args.push("--method");
+        args.push(method);
+    }
+    for path in paths {
+        args.push("--path");
+        args.push(path);
+    }
+    run_ok_json(dir, &args);
+}
+
+#[test]
+fn e2e_describe_and_aliases_return_capability_shape() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_DESCRIBE_SECRET", "sk-local-describe");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-describe-cred",
+        "local-describe-provider",
+        &secret_ref,
+        "postman-echo.com",
+    );
+    create_capability(
+        &dir,
+        "local/describe",
+        "local-describe-cred",
+        &["GET"],
+        &["/v1/users"],
+    );
+
+    for subcommand in ["describe", "args", "shape", "inspect"] {
+        let output = run_ok_json(&dir, &["capability", subcommand, "local/describe"]);
+        assert_eq!(
+            output["capability"].as_str(),
+            Some("local/describe"),
+            "unexpected capability name for alias {subcommand}"
+        );
+        assert_eq!(
+            output["call"]["defaults"]["method"].as_str(),
+            Some("GET"),
+            "default method missing for alias {subcommand}"
+        );
+    }
+}
+
+#[test]
+fn e2e_invoke_requires_method_when_capability_allows_multiple_methods() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_MULTI_METHOD_SECRET", "sk-local-methods");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-methods-cred",
+        "local-methods-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/multi-method",
+        "local-methods-cred",
+        &["GET", "POST"],
+        &["/v1/users"],
+    );
+
+    let err = run_err_text(
+        &dir,
+        &["invoke", "local/multi-method", "--path", "/v1/users"],
+    );
+    assert!(
+        err.contains("--method is required because capability allows multiple methods"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_requires_path_when_capability_allows_multiple_paths() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_MULTI_PATH_SECRET", "sk-local-paths");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-paths-cred",
+        "local-paths-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/multi-path",
+        "local-paths-cred",
+        &["GET"],
+        &["/v1/a", "/v1/b"],
+    );
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "capability",
+            "invoke",
+            "local/multi-path",
+            "--method",
+            "GET",
+        ],
+    );
+    assert!(
+        err.contains("--path is required because capability allows multiple path prefixes"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_rejects_mixed_payload_and_manual_flags() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_MIXED_PAYLOAD_SECRET", "sk-local-mix");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-mixed-cred",
+        "local-mixed-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/mixed",
+        "local-mixed-cred",
+        &["GET"],
+        &["/v1/items"],
+    );
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/mixed",
+            "--request",
+            r#"{"method":"GET","path":"/v1/items"}"#,
+            "--path",
+            "/v1/items",
+        ],
+    );
+    assert!(
+        err.contains("do not mix --request/--request-file with manual request flags"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_rejects_request_and_request_file_together() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_REQ_FILE_SECRET", "sk-local-req-file");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-req-file-cred",
+        "local-req-file-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/req-file",
+        "local-req-file-cred",
+        &["GET"],
+        &["/v1/items"],
+    );
+
+    let file = NamedTempFile::new().expect("temp request file");
+    std::fs::write(file.path(), r#"{"method":"GET","path":"/v1/items"}"#)
+        .expect("write request file");
+    let request_file = file.path().to_string_lossy().to_string();
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/req-file",
+            "--request",
+            r#"{"method":"GET","path":"/v1/items"}"#,
+            "--request-file",
+            &request_file,
+        ],
+    );
+    assert!(
+        err.contains("provide only one of --request or --request-file"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_rejects_multiple_body_modes() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_MULTI_BODY_SECRET", "sk-local-bodies");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-bodies-cred",
+        "local-bodies-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/bodies",
+        "local-bodies-cred",
+        &["POST"],
+        &["/v1/items"],
+    );
+
+    let file = NamedTempFile::new().expect("temp body file");
+    std::fs::write(file.path(), "payload").expect("write body file");
+    let body_file_path = file.path().to_string_lossy().to_string();
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/bodies",
+            "--method",
+            "POST",
+            "--path",
+            "/v1/items",
+            "--body",
+            "hello",
+            "--body-file-path",
+            &body_file_path,
+        ],
+    );
+    assert!(
+        err.contains("only one of --body, --body-file-path, or multipart flags is allowed"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_request_file_shape_parses_then_enforces_ssrf_guard() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_SSRF_SECRET", "sk-local-ssrf");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-ssrf-cred",
+        "local-ssrf-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(&dir, "local/ssrf", "local-ssrf-cred", &["GET"], &["/safe"]);
+
+    let file = NamedTempFile::new().expect("temp request file");
+    std::fs::write(file.path(), r#"{"method":"GET","path":"/safe"}"#).expect("write request file");
+    let request_file = file.path().to_string_lossy().to_string();
+
+    let err = run_err_text(
+        &dir,
+        &["invoke", "local/ssrf", "--request-file", &request_file],
+    );
+    assert!(
+        err.contains("upstream host blocked by SSRF guard"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_rejects_request_payload_capability_mismatch() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_CAP_MISMATCH_SECRET", "sk-local-cap-mismatch");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-cap-mismatch-cred",
+        "local-cap-mismatch-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/expected",
+        "local-cap-mismatch-cred",
+        &["GET"],
+        &["/v1/items"],
+    );
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/expected",
+            "--request",
+            r#"{"capability":"local/other","request":{"method":"GET","path":"/v1/items","headers":[]}}"#,
+        ],
+    );
+    assert!(
+        err.contains("does not match command capability"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_invoke_aliases_have_consistent_behavior() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_ALIAS_SECRET", "sk-local-alias");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-alias-cred",
+        "local-alias-provider",
+        &secret_ref,
+        "localhost",
+    );
+    create_capability(
+        &dir,
+        "local/alias",
+        "local-alias-cred",
+        &["GET"],
+        &["/v1/items"],
+    );
+
+    for args in [
+        vec!["invoke", "local/alias", "--path", "/v1/items"],
+        vec!["capability", "invoke", "local/alias", "--path", "/v1/items"],
+        vec!["capability", "call", "local/alias", "--path", "/v1/items"],
+    ] {
+        let err = run_err_text(&dir, &args);
+        assert!(
+            err.contains("upstream host blocked by SSRF guard"),
+            "unexpected error output for {:?}: {}",
+            args,
+            err
+        );
+    }
+}
+
+#[test]
+fn e2e_credential_create_rejects_duplicate_id() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_a = create_secret(&dir, "LOCAL_DUP_CRED_A", "sk-a");
+    let secret_b = create_secret(&dir, "LOCAL_DUP_CRED_B", "sk-b");
+    let secret_ref_a = format!("vault:secret:{secret_a}");
+    let secret_ref_b = format!("vault:secret:{secret_b}");
+
+    create_header_credential(
+        &dir,
+        "duplicate-cred",
+        "dup-provider",
+        &secret_ref_a,
+        "postman-echo.com",
+    );
+    let err = run_err_text(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "duplicate-cred",
+            "--provider",
+            "dup-provider",
+            "--secret-ref",
+            &secret_ref_b,
+            "--auth",
+            "header",
+            "--host",
+            "postman-echo.com",
+        ],
+    );
+    assert!(
+        err.contains("already exists"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_capability_create_rejects_duplicate_id() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_DUP_CAP_SECRET", "sk-local-dup-cap");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "dup-cap-cred",
+        "dup-cap-provider",
+        &secret_ref,
+        "postman-echo.com",
+    );
+
+    create_capability(
+        &dir,
+        "duplicate/cap",
+        "dup-cap-cred",
+        &["GET"],
+        &["/v1/users"],
+    );
+    let err = run_err_text(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "duplicate/cap",
+            "--credential",
+            "dup-cap-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/users",
+        ],
+    );
+    assert!(
+        err.contains("already exists"),
+        "unexpected error output: {}",
+        err
+    );
+}
+
+#[test]
+fn e2e_capability_delete_removes_policy_record() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_DELETE_POLICY_SECRET", "sk-local-del");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "local-delete-cred",
+        "local-delete-provider",
+        &secret_ref,
+        "postman-echo.com",
+    );
+    create_capability(
+        &dir,
+        "local/delete-policy",
+        "local-delete-cred",
+        &["GET"],
+        &["/v1/users"],
+    );
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "policy",
+            "set",
+            "--capability",
+            "local/delete-policy",
+            "--max-response-body-bytes",
+            "128",
+        ],
+    );
+
+    let deleted = run_ok_json(&dir, &["capability", "delete", "local/delete-policy"]);
+    assert_eq!(deleted["removedCapability"].as_bool(), Some(true));
+    assert_eq!(deleted["removedPolicy"].as_bool(), Some(true));
+
+    let listed = run_ok_json(&dir, &["capability", "list"]);
+    let policies = listed["policies"]
+        .as_array()
+        .expect("policies should be an array");
+    assert!(
+        policies.is_empty(),
+        "policies should be empty after deleting capability, got {:?}",
+        policies
+    );
+}
+
+#[test]
+fn e2e_invoke_fails_when_credential_is_deleted_after_capability_creation() {
+    let dir = TempDir::new().expect("temp dir");
+    let secret_id = create_secret(&dir, "LOCAL_DELETED_CRED_SECRET", "sk-local-del-cred");
+    let secret_ref = format!("vault:secret:{secret_id}");
+    create_header_credential(
+        &dir,
+        "deleted-cred",
+        "deleted-provider",
+        &secret_ref,
+        "postman-echo.com",
+    );
+    create_capability(
+        &dir,
+        "local/deleted-cred",
+        "deleted-cred",
+        &["GET"],
+        &["/v1/users"],
+    );
+
+    let deleted = run_ok_json(&dir, &["credential", "delete", "deleted-cred"]);
+    assert_eq!(deleted["removed"].as_bool(), Some(true));
+
+    let err = run_err_text(
+        &dir,
+        &["invoke", "local/deleted-cred", "--path", "/v1/users"],
+    );
+    assert!(
+        err.contains("no credential for capability provider"),
+        "unexpected error output: {}",
+        err
+    );
+}
