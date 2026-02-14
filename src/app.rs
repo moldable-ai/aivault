@@ -328,7 +328,7 @@ fn run_setup_launchd(dry_run: bool) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = dry_run;
-        return Err("launchd setup is only available on macOS".to_string());
+        Err("launchd setup is only available on macOS".to_string())
     }
 
     #[cfg(target_os = "macos")]
@@ -497,11 +497,11 @@ WantedBy=multi-user.target
                 std::fs::write(&unit_path, unit.as_bytes()).map_err(|e| e.to_string())?;
             }
 
-            run_cmd(dry_run, "systemctl", &vec!["daemon-reload".into()])?;
+            run_cmd(dry_run, "systemctl", &["daemon-reload".into()])?;
             run_cmd(
                 dry_run,
                 "systemctl",
-                &vec!["enable".into(), "--now".into(), unit_name.into()],
+                &["enable".into(), "--now".into(), unit_name.into()],
             )?;
 
             println!("Installed systemd unit: {}", unit_path.display());
