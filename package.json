@@ -16,6 +16,8 @@
     "test:e2e:local": "cargo test --test e2e_cli_local --test e2e_cli_local_tls",
     "test:e2e:network": "AIVAULT_E2E_NETWORK=1 cargo test --test e2e_cli_invoke",
     "test:all": "pnpm test && pnpm test:e2e",
+    "pre-commit": "pnpm format && git add -u && pnpm lint && pnpm check-types && pnpm test",
+    "prepare": "husky",
     "evidence": "node scripts/evidence-computed.js",
     "trace": "node scripts/evidence-computed.js --trace",
     "trace:json": "node scripts/evidence-computed.js --trace-json",
@@ -23,5 +25,8 @@
     "docs:dev": "cd docs && npx mintlify@latest dev",
     "docs:build": "cd docs && npx mintlify@latest build"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
 }

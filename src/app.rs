@@ -242,11 +242,7 @@ fn run_setup_agent_access(
                 .map_err(|e| format!("failed to run dseditgroup: {}", e))?;
             if !read_status.success() {
                 let args = vec!["-o".to_string(), "create".to_string(), group.to_string()];
-                run_cmd(
-                    dry_run,
-                    "dseditgroup",
-                    &args,
-                )?;
+                run_cmd(dry_run, "dseditgroup", &args)?;
             }
 
             // Add daemon and agent users to group (idempotent).
@@ -260,11 +256,7 @@ fn run_setup_agent_access(
                     "user".to_string(),
                     group.to_string(),
                 ];
-                run_cmd(
-                    dry_run,
-                    "dseditgroup",
-                    &args,
-                )?;
+                run_cmd(dry_run, "dseditgroup", &args)?;
             }
 
             // Create socket directory with setgid so the socket inherits group ownership.
@@ -278,11 +270,7 @@ fn run_setup_agent_access(
                 group.to_string(),
                 shared_dir.to_string_lossy().to_string(),
             ];
-            run_cmd(
-                dry_run,
-                "install",
-                &args,
-            )?;
+            run_cmd(dry_run, "install", &args)?;
         }
 
         #[cfg(all(unix, not(target_os = "macos")))]
@@ -301,11 +289,7 @@ fn run_setup_agent_access(
             // Add daemon and agent users to group.
             for user in [&daemon_user, agent_user].iter() {
                 let args = vec!["-aG".to_string(), group.to_string(), user.to_string()];
-                run_cmd(
-                    dry_run,
-                    "usermod",
-                    &args,
-                )?;
+                run_cmd(dry_run, "usermod", &args)?;
             }
 
             let args = vec![
@@ -318,19 +302,23 @@ fn run_setup_agent_access(
                 group.to_string(),
                 shared_dir.to_string_lossy().to_string(),
             ];
-            run_cmd(
-                dry_run,
-                "install",
-                &args,
-            )?;
+            run_cmd(dry_run, "install", &args)?;
         }
 
-        println!("Configured shared socket directory: {}", shared_dir.display());
-        println!("Added users to group '{}': {}, {}", group, daemon_user, agent_user);
+        println!(
+            "Configured shared socket directory: {}",
+            shared_dir.display()
+        );
+        println!(
+            "Added users to group '{}': {}, {}",
+            group, daemon_user, agent_user
+        );
         println!();
         println!("Next steps:");
         println!("  1. Start the shared daemon:  aivaultd --shared");
-        println!("  2. On the agent account, run: aivault invoke <capability> ... (no env vars needed)");
+        println!(
+            "  2. On the agent account, run: aivault invoke <capability> ... (no env vars needed)"
+        );
 
         Ok(())
     }
@@ -345,7 +333,8 @@ fn run_setup_launchd(dry_run: bool) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        let home = dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
+        let home =
+            dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
         let agents_dir = home.join("Library").join("LaunchAgents");
         let logs_dir = home.join(".aivault").join("logs");
         let label = "com.aivault.aivaultd.shared";
@@ -428,18 +417,27 @@ fn run_setup_launchd(dry_run: bool) -> Result<(), String> {
         if dry_run {
             run_cmd(dry_run, "launchctl", &bootout)?;
         } else {
-            let _ = std::process::Command::new("launchctl").args(&bootout).status();
+            let _ = std::process::Command::new("launchctl")
+                .args(&bootout)
+                .status();
         }
         if let Err(e) = run_cmd(dry_run, "launchctl", &bootstrap) {
             // Legacy fallback.
-            let load = vec!["load".into(), "-w".into(), plist_path.to_string_lossy().to_string()];
+            let load = vec![
+                "load".into(),
+                "-w".into(),
+                plist_path.to_string_lossy().to_string(),
+            ];
             run_cmd(dry_run, "launchctl", &load).map_err(|_| e)?;
         }
         let _ = run_cmd(dry_run, "launchctl", &enable);
         let _ = run_cmd(dry_run, "launchctl", &kickstart);
 
         println!("Installed launchd LaunchAgent: {}", plist_path.display());
-        println!("Daemon should be running on shared socket: {}", daemon::shared_socket_path().display());
+        println!(
+            "Daemon should be running on shared socket: {}",
+            daemon::shared_socket_path().display()
+        );
         Ok(())
     }
 }
@@ -1695,8 +1693,16 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
     }
 
     let has_payload = args.request.is_some() || args.request_file.is_some();
-    let has_method_or_path = args.method.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
-        || args.path.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let has_method_or_path = args
+        .method
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+        || args
+            .path
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
 
     let envelope = if has_payload {
         build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
@@ -2010,10 +2016,11 @@ fn lookup_capability_for_invoke(store: &BrokerStore, id: &str) -> Option<Capabil
     if id.is_empty() {
         return None;
     }
-    store
-        .find_capability(id)
-        .cloned()
-        .or_else(|| crate::registry::builtin_registry().ok().and_then(|r| r.capability(id)))
+    store.find_capability(id).cloned().or_else(|| {
+        crate::registry::builtin_registry()
+            .ok()
+            .and_then(|r| r.capability(id))
+    })
 }
 
 fn build_capability_call_envelope(
@@ -2227,11 +2234,15 @@ fn build_capability_call_envelope_without_local_capability(
     let method = method
         .map(|m| m.trim().to_string())
         .filter(|m| !m.is_empty())
-        .ok_or_else(|| "--method is required (capability policy not available locally)".to_string())?;
+        .ok_or_else(|| {
+            "--method is required (capability policy not available locally)".to_string()
+        })?;
     let path = path
         .map(|p| p.trim().to_string())
         .filter(|p| !p.is_empty())
-        .ok_or_else(|| "--path is required (capability policy not available locally)".to_string())?;
+        .ok_or_else(|| {
+            "--path is required (capability policy not available locally)".to_string()
+        })?;
 
     let headers = parse_headers(header)?;
     let multipart = parse_multipart_fields(multipart_field)?;
@@ -2810,11 +2821,7 @@ fn maybe_run_capability_envelope(
                         // If the shared socket directory exists, assume this machine is configured
                         // for shared-daemon cross-user access and fail closed (do not autostart a
                         // per-user daemon under the caller).
-                        if shared_socket
-                            .parent()
-                            .map(|p| p.exists())
-                            .unwrap_or(false)
-                        {
+                        if shared_socket.parent().map(|p| p.exists()).unwrap_or(false) {
                             return Err(format!(
                                 "aivaultd not running at shared socket '{}' (start it as the operator with `aivaultd --shared`)",
                                 shared_socket.display()

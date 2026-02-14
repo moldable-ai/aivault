@@ -221,14 +221,13 @@ pub fn serve(socket_path: &Path, once: bool) -> Result<(), String> {
         // Only chmod directories we consider "managed" (our default locations), or ones we just
         // created, or when explicitly configured. Avoid chmod'ing arbitrary existing directories
         // (e.g. /tmp) when users override the socket path.
-        let effective_dir_mode = socket_dir_mode_from_env()
-            .or_else(|| {
-                if is_managed_socket_parent(parent) || !parent_existed {
-                    Some(0o700)
-                } else {
-                    None
-                }
-            });
+        let effective_dir_mode = socket_dir_mode_from_env().or_else(|| {
+            if is_managed_socket_parent(parent) || !parent_existed {
+                Some(0o700)
+            } else {
+                None
+            }
+        });
         if let Some(mode) = effective_dir_mode {
             let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(mode));
         }

@@ -505,7 +505,11 @@ fn e2e_invoke_falls_back_to_shared_socket_when_autostart_disabled() {
         shared_sock_path.display().to_string(),
     ));
     envs.push(("AIVAULTD_AUTOSTART".to_string(), "0".to_string()));
-    let out = run_ok_json(&dir, &["invoke", "shared/echo", "--path", "/v1/echo"], &envs);
+    let out = run_ok_json(
+        &dir,
+        &["invoke", "shared/echo", "--path", "/v1/echo"],
+        &envs,
+    );
     assert_eq!(out["response"]["status"].as_u64(), Some(200));
     assert_eq!(out["planned"]["capability"].as_str(), Some("shared/echo"));
 
