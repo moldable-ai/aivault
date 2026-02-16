@@ -67,6 +67,8 @@
       "tests": [
         "secrets_create_pins_registry_claim_and_autoprovisions_single_secret_credential",
         "secrets_create_autoprovisions_multi_secret_registry_credential_via_composite_secret",
+        "secrets_import_reconciles_existing_registry_credential_secret_binding",
+        "runtime_derives_registry_credentials_from_vault_when_store_is_empty",
         "credential_create_rejects_provider_mismatch_for_pinned_secret",
         "runtime_credential_loading_skips_or_errors_on_pinned_secret_provider_mismatch",
         "capabilities_bind_rejects_pinned_secret_provider_mismatch"
@@ -1023,6 +1025,14 @@
               {
                 "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
                 "test": "secrets_create_autoprovisions_multi_secret_registry_credential_via_composite_secret"
+              },
+              {
+                "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
+                "test": "secrets_import_reconciles_existing_registry_credential_secret_binding"
+              },
+              {
+                "evidenceId": "ev-vault-registry-pinning-and-autoprovision-test",
+                "test": "runtime_derives_registry_credentials_from_vault_when_store_is_empty"
               }
             ]
           }

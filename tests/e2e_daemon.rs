@@ -516,3 +516,87 @@ fn e2e_invoke_falls_back_to_shared_socket_when_autostart_disabled() {
     let status = child.wait().expect("wait daemon");
     assert!(status.success(), "aivaultd did not exit cleanly");
 }
+
+#[test]
+fn e2e_restart_starts_daemon_for_configured_socket() {
+    let dir = TempDir::new().expect("temp dir");
+    let server = LocalTlsServer::start("daemon.restart");
+    let mut envs = server.env_pairs();
+
+    let created = run_ok_json(
+        &dir,
+        &[
+            "secrets",
+            "create",
+            "--name",
+            "DAEMON_RESTART_TOKEN",
+            "--value",
+            "sk-daemon-restart",
+            "--scope",
+            "global",
+        ],
+        &envs,
+    );
+    let secret_id = created["secretId"].as_str().unwrap().to_string();
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "restart-cred",
+            "--provider",
+            "restart-provider",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "header",
+            "--host",
+            "daemon.restart",
+        ],
+        &envs,
+    );
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "restart/echo",
+            "--credential",
+            "restart-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/echo",
+        ],
+        &envs,
+    );
+
+    let sock_path = dir.path().join("restart.sock");
+    envs.push((
+        "AIVAULTD_SOCKET".to_string(),
+        sock_path.display().to_string(),
+    ));
+    envs.push(("AIVAULTD_AUTOSTART".to_string(), "0".to_string()));
+
+    let restarted = run_ok_json(&dir, &["restart"], &envs);
+    assert_eq!(restarted["restarted"].as_bool(), Some(true));
+    assert_eq!(
+        restarted["socket"].as_str(),
+        Some(sock_path.to_string_lossy().as_ref())
+    );
+
+    let out = run_ok_json(
+        &dir,
+        &["invoke", "restart/echo", "--path", "/v1/echo"],
+        &envs,
+    );
+    assert_eq!(out["response"]["status"].as_u64(), Some(200));
+    assert_eq!(out["planned"]["capability"].as_str(), Some("restart/echo"));
+
+    let _ = Command::new("pkill")
+        .arg("-f")
+        .arg(format!("aivaultd --socket {}", sock_path.display()))
+        .status();
+}

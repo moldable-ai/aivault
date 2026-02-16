@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
 use std::io::Write;
 use std::net::IpAddr;
@@ -49,6 +49,7 @@ pub fn run(cli: Cli) -> Result<(), String> {
             },
         ),
         Command::Setup { command } => run_setup(command),
+        Command::Restart => run_restart_daemon(),
         // Everything else is "operator mode" and requires local vault access.
         other => {
             let vault = VaultRuntime::discover();
@@ -111,6 +112,7 @@ pub fn run(cli: Cli) -> Result<(), String> {
                     unreachable!("invoke handled earlier")
                 }
                 Command::Setup { .. } => unreachable!("setup handled earlier"),
+                Command::Restart => unreachable!("restart handled earlier"),
             }
         }
     }
@@ -128,6 +130,96 @@ fn run_setup(command: SetupCommand) -> Result<(), String> {
             daemon_user,
             dry_run,
         } => run_setup_systemd(&daemon_user, dry_run),
+    }
+}
+
+fn run_restart_daemon() -> Result<(), String> {
+    #[cfg(not(unix))]
+    {
+        return Err("restart requires a unix-like OS".to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        use std::process::{Command, Stdio};
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        let socket_path =
+            daemon::socket_path_from_env().unwrap_or_else(daemon::default_socket_path);
+        let socket = socket_path.display().to_string();
+
+        // Best-effort stop of a daemon already bound to this exact socket.
+        let pattern = format!("aivaultd --socket {}", socket);
+        if let Ok(status) = Command::new("pkill").arg("-f").arg(&pattern).status() {
+            if !status.success() && status.code() != Some(1) {
+                return Err(format!(
+                    "failed stopping existing aivaultd for '{}': exit {}",
+                    socket, status
+                ));
+            }
+        }
+
+        // Remove stale socket entry before restart.
+        if socket_path.exists() {
+            let _ = std::fs::remove_file(&socket_path);
+        }
+
+        let daemon_exe = resolve_aivaultd_exe_path()?;
+        let daemon_path = daemon_exe.display().to_string();
+        Command::new(&daemon_exe)
+            .arg("--socket")
+            .arg(&socket)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("failed to start aivaultd: {}", e))?;
+
+        // Confirm the daemon is accepting requests before returning.
+        let probe = DaemonRequest::ExecuteEnvelope {
+            envelope: ProxyEnvelope {
+                capability: "__aivault/health".to_string(),
+                credential: None,
+                request: ProxyEnvelopeRequest {
+                    method: "GET".to_string(),
+                    path: "/".to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            client_ip: "127.0.0.1".to_string(),
+            workspace_id: None,
+            group_id: None,
+        };
+
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            match daemon::client_execute_envelope_typed(&socket_path, probe.clone()) {
+                Ok(_) | Err(daemon::DaemonClientError::Remote(_)) => break,
+                Err(daemon::DaemonClientError::Connect(_)) => {}
+                Err(daemon::DaemonClientError::Protocol(err)) => {
+                    return Err(format!("daemon protocol error after restart: {}", err));
+                }
+            }
+
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "timed out waiting for aivaultd on '{}': daemon did not accept connections",
+                    socket
+                ));
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+
+        print_json(&serde_json::json!({
+            "restarted": true,
+            "socket": socket,
+            "daemonPath": daemon_path
+        }))
     }
 }
 
@@ -960,47 +1052,22 @@ fn credential_context_for_secret_scope(scope: &SecretScope) -> (Option<String>, 
     }
 }
 
-fn maybe_autoprovision_registry_credential(
+fn hosts_within_registry_policy(template: &ProviderTemplate, hosts: &[String]) -> bool {
+    !hosts.is_empty()
+        && hosts.iter().all(|host| {
+            template
+                .hosts
+                .iter()
+                .any(|pattern| crate::broker::host_matches(pattern, host))
+        })
+}
+
+fn registry_secret_ref_for_template_scope(
     vault: &VaultRuntime,
     template: &ProviderTemplate,
     scope: &SecretScope,
-) -> Result<(), String> {
-    if template.vault_secrets.is_empty() {
-        return Ok(());
-    }
-
-    // Completeness check: all provider-claimed secrets must exist in the same scope.
-    let secrets = vault.list_secrets().map_err(|e| e.to_string())?;
-    let mut by_name: HashMap<String, crate::vault::SecretMeta> = HashMap::new();
-    for meta in secrets {
-        if &meta.scope == scope {
-            by_name.insert(meta.name.clone(), meta);
-        }
-    }
-
-    let mut missing: Vec<String> = Vec::new();
-    for name in template.vault_secrets.keys() {
-        if !by_name.contains_key(name) {
-            missing.push(name.clone());
-        }
-    }
-
-    if !missing.is_empty() {
-        if missing.len() == 1 {
-            eprintln!(
-                "Waiting for {} to complete {} credential",
-                missing[0], template.provider
-            );
-        } else {
-            eprintln!(
-                "Waiting for {} to complete {} credential",
-                missing.join(", "),
-                template.provider
-            );
-        }
-        return Ok(());
-    }
-
+    by_name: &HashMap<String, crate::vault::SecretMeta>,
+) -> Result<String, String> {
     let needs_composite_secret = matches!(
         &template.auth,
         AuthStrategy::MultiHeader(_) | AuthStrategy::MultiQuery(_) | AuthStrategy::Basic
@@ -1072,36 +1139,177 @@ fn maybe_autoprovision_registry_credential(
         .to_string()
     };
 
+    Ok(secret_ref)
+}
+
+fn derive_registry_credentials_from_vault(
+    vault: &VaultRuntime,
+    store: Option<&BrokerStore>,
+) -> Result<Vec<StoredCredential>, String> {
+    let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
+    let mut providers = registry.providers();
+    providers.sort_by(|a, b| a.provider.cmp(&b.provider));
+
+    let mut secrets_by_scope: BTreeMap<
+        String,
+        (SecretScope, HashMap<String, crate::vault::SecretMeta>),
+    > = BTreeMap::new();
+    for meta in vault.list_secrets().map_err(|e| e.to_string())? {
+        if meta.revoked_at_ms.is_some() {
+            continue;
+        }
+        let key = meta.scope.to_display_string();
+        let entry = secrets_by_scope
+            .entry(key)
+            .or_insert_with(|| (meta.scope.clone(), HashMap::new()));
+        entry.1.insert(meta.name.clone(), meta);
+    }
+
+    let mut out = Vec::new();
+    for template in providers {
+        if template.vault_secrets.is_empty() {
+            continue;
+        }
+
+        for (scope, by_name) in secrets_by_scope.values() {
+            let complete = template
+                .vault_secrets
+                .keys()
+                .all(|secret_name| by_name.contains_key(secret_name));
+            if !complete {
+                continue;
+            }
+
+            let secret_ref =
+                registry_secret_ref_for_template_scope(vault, &template, scope, by_name)?;
+            let cred_id = credential_id_for_provider_scope(&template.provider, scope);
+            let (workspace_id, group_id) = credential_context_for_secret_scope(scope);
+
+            let mut hosts = template.hosts.clone();
+            if let Some(store) = store {
+                if let Some(existing) = store
+                    .credentials()
+                    .iter()
+                    .find(|c| c.id == cred_id && c.provider == template.provider)
+                {
+                    if hosts_within_registry_policy(&template, &existing.hosts) {
+                        hosts = existing.hosts.clone();
+                    }
+                }
+            }
+
+            out.push(StoredCredential {
+                id: cred_id,
+                provider: template.provider.clone(),
+                workspace_id,
+                group_id,
+                auth: template.auth.clone(),
+                hosts,
+                secret_ref,
+            });
+        }
+    }
+
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+fn maybe_autoprovision_registry_credential(
+    vault: &VaultRuntime,
+    template: &ProviderTemplate,
+    scope: &SecretScope,
+) -> Result<(), String> {
+    if template.vault_secrets.is_empty() {
+        return Ok(());
+    }
+
+    // Completeness check: all provider-claimed secrets must exist in the same scope.
+    let secrets = vault.list_secrets().map_err(|e| e.to_string())?;
+    let mut by_name: HashMap<String, crate::vault::SecretMeta> = HashMap::new();
+    for meta in secrets {
+        if &meta.scope == scope {
+            by_name.insert(meta.name.clone(), meta);
+        }
+    }
+
+    let mut missing: Vec<String> = Vec::new();
+    for name in template.vault_secrets.keys() {
+        if !by_name.contains_key(name) {
+            missing.push(name.clone());
+        }
+    }
+
+    if !missing.is_empty() {
+        if missing.len() == 1 {
+            eprintln!(
+                "Waiting for {} to complete {} credential",
+                missing[0], template.provider
+            );
+        } else {
+            eprintln!(
+                "Waiting for {} to complete {} credential",
+                missing.join(", "),
+                template.provider
+            );
+        }
+        return Ok(());
+    }
+
+    let secret_ref = registry_secret_ref_for_template_scope(vault, template, scope, &by_name)?;
+
     let mut store = BrokerStore::open_under(vault.paths().root_dir())?;
     let cred_id = credential_id_for_provider_scope(&template.provider, scope);
     let (workspace_id, group_id) = credential_context_for_secret_scope(scope);
 
-    let existed = store.credentials().iter().any(|c| c.id == cred_id);
-    if !existed {
-        store.upsert_credential(StoredCredential {
-            id: cred_id.clone(),
-            provider: template.provider.clone(),
-            workspace_id,
-            group_id,
-            auth: template.auth.clone(),
-            hosts: template.hosts.clone(),
-            secret_ref,
-        });
-        for cap in &template.capabilities {
-            store.upsert_capability(cap.clone());
+    let desired = StoredCredential {
+        id: cred_id.clone(),
+        provider: template.provider.clone(),
+        workspace_id,
+        group_id,
+        auth: template.auth.clone(),
+        hosts: template.hosts.clone(),
+        secret_ref,
+    };
+
+    let existing_credential = store
+        .credentials()
+        .iter()
+        .find(|c| c.id == cred_id)
+        .cloned();
+    let credential_created = existing_credential.is_none();
+    let credential_updated = existing_credential
+        .as_ref()
+        .is_some_and(|existing| existing != &desired);
+    if credential_created || credential_updated {
+        store.upsert_credential(desired);
+    }
+
+    let existing_capabilities = store.capabilities().to_vec();
+    let mut capabilities_synced = 0usize;
+    for cap in &template.capabilities {
+        let already_synced = existing_capabilities
+            .iter()
+            .any(|existing| existing.id == cap.id && existing == cap);
+        if !already_synced {
+            capabilities_synced += 1;
         }
+        store.upsert_capability(cap.clone());
+    }
+
+    if credential_created || credential_updated || capabilities_synced > 0 {
         store.save()?;
+    }
+    if credential_created {
         eprintln!(
             "Credential auto-provisioned: {} ({} capabilities enabled)",
             cred_id,
             template.capabilities.len()
         );
-    } else {
-        // Credential already exists; still ensure registry capabilities are present.
-        for cap in &template.capabilities {
-            store.upsert_capability(cap.clone());
-        }
-        store.save()?;
+    } else if credential_updated {
+        eprintln!(
+            "Credential auto-reconciled: {} (registry auth/hosts/secret binding refreshed)",
+            cred_id
+        );
     }
 
     Ok(())
@@ -1259,14 +1467,23 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             print_json(&credential)
         }
         CredentialCommand::List { verbose } => {
+            let mut merged: BTreeMap<String, StoredCredential> = BTreeMap::new();
+            for credential in store.credentials().iter().cloned() {
+                merged.insert(credential.id.clone(), credential);
+            }
+            for credential in derive_registry_credentials_from_vault(vault, Some(&store))? {
+                merged.insert(credential.id.clone(), credential);
+            }
+            let credentials: Vec<StoredCredential> = merged.into_values().collect();
+
             if verbose {
                 let payload = serde_json::json!({
-                    "credentials": store.credentials(),
+                    "credentials": credentials,
                     "path": vault.paths().root_dir().join("broker.json").display().to_string()
                 });
                 return print_json(&payload);
             }
-            crate::display::print_credentials_list(store.credentials());
+            crate::display::print_credentials_list(&credentials);
             Ok(())
         }
         CredentialCommand::Delete { id } => {
@@ -1367,11 +1584,34 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
         }
         CapabilityCommand::List { verbose } => {
             let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
-            let local_capabilities = store.capabilities();
-            let local_ids: std::collections::HashSet<&str> =
+            let registry_providers = registry.providers();
+            let derived_credentials = derive_registry_credentials_from_vault(vault, Some(&store))?;
+            let credentialed_providers: HashSet<String> = store
+                .credentials()
+                .iter()
+                .map(|c| c.provider.clone())
+                .chain(derived_credentials.into_iter().map(|c| c.provider))
+                .collect();
+
+            let mut local_map: BTreeMap<String, Capability> = BTreeMap::new();
+            for capability in store.capabilities() {
+                if let Some(canonical) = registry.capability(&capability.id) {
+                    local_map.insert(canonical.id.clone(), canonical);
+                } else {
+                    local_map.insert(capability.id.clone(), capability.clone());
+                }
+            }
+            for provider in &registry_providers {
+                if credentialed_providers.contains(&provider.provider) {
+                    for capability in &provider.capabilities {
+                        local_map.insert(capability.id.clone(), capability.clone());
+                    }
+                }
+            }
+            let local_capabilities: Vec<Capability> = local_map.into_values().collect();
+            let local_ids: HashSet<&str> =
                 local_capabilities.iter().map(|c| c.id.as_str()).collect();
 
-            let registry_providers = registry.providers();
             let mut registry_capabilities: Vec<Capability> = Vec::new();
             for provider in &registry_providers {
                 for cap in &provider.capabilities {
@@ -1393,7 +1633,7 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
             }
 
             crate::display::print_capabilities_list(
-                local_capabilities,
+                &local_capabilities,
                 &registry_capabilities,
                 &registry_providers,
             );
@@ -2979,8 +3219,91 @@ fn load_runtime_broker_for_context(
     let registry_lookup = registry.clone();
     let mut broker = Broker::new(cfg, Some(registry));
     let operator = RequestAuth::Operator("operator-cli".to_string());
+    let derived_registry_credentials = derive_registry_credentials_from_vault(vault, Some(store))?;
+    let derived_registry_credential_ids: HashSet<String> = derived_registry_credentials
+        .iter()
+        .map(|credential| credential.id.clone())
+        .collect();
+
+    for stored in &derived_registry_credentials {
+        if !credential_matches_context(stored, workspace_id, group_id) {
+            continue;
+        }
+
+        let is_requested = requested_credential_id
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty())
+            .is_some_and(|id| id == stored.id);
+
+        let secret_id = match SecretRef::parse(&stored.secret_ref) {
+            Ok(sr) => sr.secret_id,
+            Err(err) => {
+                if is_requested {
+                    return Err(err);
+                }
+                continue;
+            }
+        };
+        let secret_meta = match vault.get_secret_meta(&secret_id) {
+            Ok(m) => m,
+            Err(err) => {
+                if is_requested {
+                    return Err(err.to_string());
+                }
+                continue;
+            }
+        };
+        if let Some(pinned) = secret_meta.pinned_provider.as_deref() {
+            if pinned != stored.provider.as_str() {
+                let msg = format!(
+                    "credential '{}' provider '{}' cannot use secret pinned to provider '{}'",
+                    stored.id, stored.provider, pinned
+                );
+                if is_requested {
+                    return Err(msg);
+                }
+                continue;
+            }
+        }
+
+        let secret = resolve_secret_ref_for_context(
+            vault,
+            &stored.secret_ref,
+            workspace_id,
+            group_id,
+            Some("broker.credential.load"),
+            Some("aivault-cli"),
+        );
+        let secret = match secret {
+            Ok(secret) => secret,
+            Err(err) => {
+                if is_requested {
+                    return Err(err);
+                }
+                continue;
+            }
+        };
+        let secret = secret_material_from_bytes(&stored.auth, secret)?;
+
+        let input = CredentialInput {
+            id: stored.id.clone(),
+            provider: stored.provider.clone(),
+            // Registry-derived credentials are always canonicalized to registry auth.
+            auth: None,
+            // Hosts may be derived defaults or validated persisted overrides.
+            hosts: Some(stored.hosts.clone()),
+        };
+
+        broker
+            .create_credential(&operator, input, secret)
+            .map_err(|e| e.to_string())?;
+    }
 
     for stored in store.credentials() {
+        if derived_registry_credential_ids.contains(&stored.id) {
+            // Canonical registry credentials are derived from vault secrets at runtime.
+            continue;
+        }
         if !credential_matches_context(stored, workspace_id, group_id) {
             continue;
         }
@@ -4200,6 +4523,132 @@ mod tests {
         let v: serde_json::Value = serde_json::from_slice(&raw).unwrap();
         assert_eq!(v.get("key").and_then(|x| x.as_str()), Some("k-1"));
         assert_eq!(v.get("token").and_then(|x| x.as_str()), Some("t-1"));
+    }
+
+    #[test]
+    fn secrets_import_reconciles_existing_registry_credential_secret_binding() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+
+        super::run_secrets(
+            &vault,
+            SecretsCommand::Create {
+                name: "OPENAI_API_KEY".to_string(),
+                value: "sk-initial".to_string(),
+                scope: ScopeKind::Global,
+                workspace_id: None,
+                group_id: None,
+                alias: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let openai_secret = vault
+            .list_secrets()
+            .unwrap()
+            .into_iter()
+            .find(|m| m.name == "OPENAI_API_KEY")
+            .expect("openai secret should exist");
+
+        let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        let mut tampered = store
+            .credentials()
+            .iter()
+            .find(|c| c.id == "openai")
+            .cloned()
+            .expect("openai credential should be auto-provisioned");
+        tampered.secret_ref = "vault:secret:missing-secret-id".to_string();
+        store.upsert_credential(tampered);
+        store.save().unwrap();
+
+        // Canonical runtime resolution derives registry credentials from vault secrets, so the
+        // stale persisted secretRef does not break invocation.
+        let broker = load_runtime_broker_for_context(&vault, &store, None, None, None).unwrap();
+        assert!(broker.credentials().iter().any(|c| c.id == "openai"));
+
+        super::run_secrets(
+            &vault,
+            SecretsCommand::Import {
+                entry: vec!["OPENAI_API_KEY=sk-rotated".to_string()],
+                scope: ScopeKind::Global,
+                workspace_id: None,
+                group_id: None,
+            },
+        )
+        .unwrap();
+
+        let repaired_store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        let repaired = repaired_store
+            .credentials()
+            .iter()
+            .find(|c| c.id == "openai")
+            .expect("openai credential should still exist");
+        assert_eq!(
+            repaired.secret_ref,
+            SecretRef {
+                secret_id: openai_secret.secret_id
+            }
+            .to_string()
+        );
+
+        let broker =
+            load_runtime_broker_for_context(&vault, &repaired_store, None, None, None).unwrap();
+        assert!(broker.credentials().iter().any(|c| c.id == "openai"));
+    }
+
+    #[test]
+    fn runtime_derives_registry_credentials_from_vault_when_store_is_empty() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+
+        let meta = vault
+            .create_secret("OPENAI_API_KEY", b"sk-direct", SecretScope::Global, vec![])
+            .unwrap();
+        let _ = vault
+            .pin_secret_to_provider(&meta.secret_id, "openai")
+            .unwrap();
+
+        let store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        assert!(store.credentials().is_empty());
+
+        let mut broker = load_runtime_broker_for_context(&vault, &store, None, None, None).unwrap();
+        assert!(broker.credentials().iter().any(|c| c.id == "openai"));
+
+        let token = broker
+            .mint_proxy_token(
+                &crate::broker::RequestAuth::Operator("test".to_string()),
+                ProxyTokenMintRequest {
+                    capabilities: vec!["openai/transcription".to_string()],
+                    credential: Some("openai".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .unwrap();
+
+        let envelope = ProxyEnvelope {
+            capability: "openai/transcription".to_string(),
+            credential: Some("openai".to_string()),
+            request: ProxyEnvelopeRequest {
+                method: "POST".to_string(),
+                path: "/v1/audio/transcriptions".to_string(),
+                headers: Vec::new(),
+                body: None,
+                multipart: None,
+                multipart_files: Vec::new(),
+                body_file_path: None,
+                url: None,
+            },
+        };
+        let planned = broker
+            .execute_envelope(
+                &crate::broker::RequestAuth::Proxy(token.token),
+                envelope,
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(planned.credential, "openai");
+        assert_eq!(planned.host, "api.openai.com");
     }
 
     #[test]

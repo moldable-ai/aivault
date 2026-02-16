@@ -221,16 +221,7 @@ pub fn print_capabilities_list(
         return;
     }
 
-    if !local.is_empty() {
-        heading("Ready (credential configured)");
-        for cap in local {
-            println!("  {}", cap.id.bright_cyan());
-        }
-    }
     if !registry.is_empty() {
-        if !local.is_empty() {
-            separator();
-        }
         heading("Available (needs credential)");
 
         // Group registry capabilities by provider and show required vault secret names.
@@ -271,6 +262,17 @@ pub fn print_capabilities_list(
                     );
                 }
             }
+        }
+    }
+    if !local.is_empty() {
+        if !registry.is_empty() {
+            separator();
+        }
+        heading("Ready (credential configured)");
+        let mut sorted: Vec<&Capability> = local.iter().collect();
+        sorted.sort_by(|a, b| a.id.cmp(&b.id));
+        for cap in sorted {
+            println!("  {}", cap.id.bright_cyan());
         }
     }
     separator();

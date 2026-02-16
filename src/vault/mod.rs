@@ -1060,8 +1060,11 @@ impl VaultRuntime {
         Ok(SecretMeta::from(&rec))
     }
 
-    /// Resolve a secret ref to plaintext bytes. This is a privileged internal API.
-    pub(crate) fn resolve_secret_ref(
+    /// Resolve a secret ref to plaintext bytes.
+    ///
+    /// This is intentionally a privileged API: callers are expected to provide
+    /// their own authorization checks (or use `resolve_secret_ref_for_group`).
+    pub fn resolve_secret_ref(
         &self,
         secret_ref: &str,
         capability: Option<&str>,
@@ -1104,7 +1107,7 @@ impl VaultRuntime {
     /// - `workspace` scope: any group in the workspace can use it
     /// - `global` scope: only groups explicitly attached can use it
     /// - Any scope can be explicitly shared to a group via `attached_groups`
-    pub(crate) fn resolve_secret_ref_for_group(
+    pub fn resolve_secret_ref_for_group(
         &self,
         secret_ref: &str,
         workspace_id: &str,

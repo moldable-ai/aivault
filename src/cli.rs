@@ -131,6 +131,8 @@ pub enum Command {
         #[command(subcommand)]
         command: SetupCommand,
     },
+    /// Restart the local aivaultd daemon for the active socket
+    Restart,
 }
 
 #[derive(Debug, Subcommand)]
@@ -282,7 +284,7 @@ pub enum SecretsCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::Cli;
+    use super::{Cli, Command};
     use clap::error::ErrorKind;
     use clap::Parser;
 
@@ -308,6 +310,12 @@ mod tests {
         let err = Cli::try_parse_from(["aivault", "capabilities", "resolve", "--capability", "x"])
             .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+    }
+
+    #[test]
+    fn cli_parses_restart_command() {
+        let cli = Cli::try_parse_from(["aivault", "restart"]).expect("parse restart");
+        assert!(matches!(cli.command, Command::Restart));
     }
 }
 

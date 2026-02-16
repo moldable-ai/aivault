@@ -3,9 +3,11 @@
   "private": true,
   "scripts": {
     "build": "cargo build --all-targets --all-features",
+    "build:link": "cargo build --bins && mkdir -p \"$HOME/.local/bin\" && ln -sf \"$(pwd)/target/debug/aivault\" \"$HOME/.local/bin/aivault\" && ln -sf \"$(pwd)/target/debug/aivaultd\" \"$HOME/.local/bin/aivaultd\" && pnpm daemon:restart",
     "build:release": "cargo build --release --all-targets --all-features",
     "dev": "cargo run",
     "devd": "cargo run --bin aivaultd",
+    "daemon:restart": "pkill -f \"aivaultd --socket $HOME/.aivault/run/aivaultd.sock\" >/dev/null 2>&1 || true",
     "release:cli": "node scripts/release-cli.js",
     "format": "cargo fmt --all",
     "lint": "cargo clippy --all-targets --all-features -- -D warnings",

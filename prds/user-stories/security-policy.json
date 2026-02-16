@@ -241,7 +241,8 @@
       "tests": [
         "e2e_aivaultd_socket_is_required_when_env_is_set",
         "e2e_invoke_autostarts_aivaultd_when_not_running",
-        "e2e_invoke_via_aivaultd_unix_socket"
+        "e2e_invoke_via_aivaultd_unix_socket",
+        "e2e_restart_starts_daemon_for_configured_socket"
       ]
     },
     {
@@ -1225,6 +1226,46 @@
               {
                 "evidenceId": "ev-daemon-e2e-invoke-via-unix-socket-test",
                 "test": "e2e_aivaultd_socket_is_required_when_env_is_set"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-daemon-boundary-cli-restart-command",
+          "story": "As an operator, I want an explicit `aivault restart` command for the active socket, so I can safely refresh daemon state after upgrades or credential changes without manual process management.",
+          "evidenceLinks": [
+            "ev-daemon-e2e-invoke-via-unix-socket-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/cli.rs",
+                "symbol": "Command::Restart"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_restart_daemon"
+              },
+              {
+                "file": "src/daemon.rs",
+                "symbol": "serve"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_restart_daemon"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-daemon-e2e-invoke-via-unix-socket-test",
+                "test": "e2e_restart_starts_daemon_for_configured_socket"
               }
             ]
           }
