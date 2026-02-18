@@ -235,10 +235,25 @@ jobs:
         id: crates_state
         run: |
           set -euo pipefail
+          CRATE_NAME="aivault"
           VERSION="${{ needs.create-release.outputs.version }}"
-          STATUS="$(curl -sS -o /tmp/crates-response.json -w '%{http_code}' "https://crates.io/api/v1/crates/aivault/$VERSION")"
+          if [ "${#CRATE_NAME}" -eq 1 ]; then
+            INDEX_PATH="1/$CRATE_NAME"
+          elif [ "${#CRATE_NAME}" -eq 2 ]; then
+            INDEX_PATH="2/$CRATE_NAME"
+          elif [ "${#CRATE_NAME}" -eq 3 ]; then
+            INDEX_PATH="3/${CRATE_NAME:0:1}/$CRATE_NAME"
+          else
+            INDEX_PATH="${CRATE_NAME:0:2}/${CRATE_NAME:2:2}/$CRATE_NAME"
+          fi
+          INDEX_URL="https://index.crates.io/$INDEX_PATH"
+          STATUS="$(curl -sS -H "User-Agent: aivault-release-check (+https://github.com/${{ github.repository }})" -o /tmp/crates-index.jsonl -w '%{http_code}' "$INDEX_URL")"
           if [ "$STATUS" = "200" ]; then
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            if grep -F "\"vers\":\"$VERSION\"" /tmp/crates-index.jsonl >/dev/null; then
+              echo "already_published=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "already_published=false" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           if [ "$STATUS" = "404" ]; then
@@ -246,7 +261,7 @@ jobs:
             exit 0
           fi
           echo "Unexpected crates.io status code: $STATUS" >&2
-          cat /tmp/crates-response.json >&2 || true
+          cat /tmp/crates-index.jsonl >&2 || true
           exit 1
 
       - name: Publish crate to crates.io
