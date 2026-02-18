@@ -14,6 +14,8 @@ This checklist is the operator runbook for releasing the `aivault` CLI via GitHu
   - [ ] `APPLE_ID`: Apple ID email for notarization
   - [ ] `APPLE_PASSWORD`: Apple app-specific password for notarization
   - [ ] `APPLE_TEAM_ID`: Apple Developer Team ID
+- [ ] Add GitHub Actions secret for crates.io publishing:
+  - [ ] `CARGO_REGISTRY_TOKEN`: crates.io API token with publish permissions
 - [ ] Confirm Linux cosign keyless signing requirements:
   - [ ] GitHub Actions workflow has `permissions: id-token: write` (required for keyless signing via OIDC)
   - [ ] No additional secrets are required for Linux artifact signing (cosign keyless)
@@ -72,4 +74,3 @@ If a deployment image builds `aivault` from source instead of downloading a rele
 
 - [ ] Pin the git ref used for the build (tag or commit SHA).
 - [ ] Treat the build pipeline + pinned source as the trust boundary (release artifact signing is not involved).
-
