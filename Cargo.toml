@@ -1,6 +1,6 @@
 [package]
 name = "aivault"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "Standalone CLI for local vault lifecycle and secret management"
 license = "Apache-2.0"
