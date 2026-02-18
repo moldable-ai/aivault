@@ -444,7 +444,7 @@ To verify downloads:
 - macOS signature inspection: `codesign -dv --verbose=4 aivault`
 - macOS Gatekeeper assessment: `spctl --assess --verbose aivault`
 - Linux artifact authenticity (cosign keyless, CI-driven):
-  - `cosign verify-blob --certificate aivault-...tar.gz.cert --signature aivault-...tar.gz.sig --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity 'https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/cli-vX.Y.Z' aivault-...tar.gz`
+  - `cosign verify-blob --certificate aivault-...tar.gz.cert --signature aivault-...tar.gz.sig --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity 'https://github.com/moldable-ai/aivault/.github/workflows/release.yml@refs/tags/cli-vX.Y.Z' aivault-...tar.gz`
 
 ## Storage defaults
 
