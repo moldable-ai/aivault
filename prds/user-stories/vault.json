@@ -103,6 +103,15 @@
       ]
     },
     {
+      "id": "ev-vault-cli-help-banner-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/cli.rs",
+      "tests": [
+        "cli_help_includes_ascii_banner"
+      ]
+    },
+    {
       "id": "ev-broker-vault-credential-provider-binding-test",
       "kind": "tests",
       "automated": true,
@@ -863,6 +872,42 @@
               {
                 "evidenceId": "ev-vault-cli-status-output-test",
                 "test": "e2e_status_prints_kek_identifier_label"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-cli-help-shows-aivault-banner",
+          "story": "As an operator, I want `aivault` help output to show a recognizable `aivault` ASCII banner, so the CLI surface is easier to identify at a glance.",
+          "evidenceLinks": [
+            "ev-vault-cli-help-banner-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/main.rs",
+                "symbol": "main"
+              }
+            ],
+            "guards": [],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/cli.rs",
+                "symbol": "HELP_BANNER"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-cli-help-banner-test",
+                "test": "cli_help_includes_ascii_banner"
               }
             ]
           }

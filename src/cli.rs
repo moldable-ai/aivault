@@ -32,10 +32,21 @@ pub enum AuthKind {
 #[derive(Debug, Parser)]
 #[command(name = "aivault")]
 #[command(about = "Standalone local vault runtime and CLI")]
+#[command(before_help = HELP_BANNER, before_long_help = HELP_BANNER)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 }
+
+const HELP_BANNER: &str = concat!(
+    "\n",
+    "\x1b[38;5;255m █████╗ ██╗██╗   ██╗ █████╗ ██╗   ██╗██╗  ████████╗\x1b[0m\n",
+    "\x1b[38;5;253m██╔══██╗██║██║   ██║██╔══██╗██║   ██║██║  ╚══██╔══╝\x1b[0m\n",
+    "\x1b[38;5;251m███████║██║██║   ██║███████║██║   ██║██║     ██║\x1b[0m\n",
+    "\x1b[38;5;249m██╔══██║██║╚██╗ ██╔╝██╔══██║██║   ██║██║     ██║\x1b[0m\n",
+    "\x1b[38;5;247m██║  ██║██║ ╚████╔╝ ██║  ██║╚██████╔╝███████╗██║\x1b[0m\n",
+    "\x1b[38;5;245m╚═╝  ╚═╝╚═╝  ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝\x1b[0m\n",
+);
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -286,7 +297,7 @@ pub enum SecretsCommand {
 mod tests {
     use super::{Cli, Command};
     use clap::error::ErrorKind;
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
 
     #[test]
     fn cli_rejects_plaintext_secret_resolution_commands() {
@@ -316,6 +327,15 @@ mod tests {
     fn cli_parses_restart_command() {
         let cli = Cli::try_parse_from(["aivault", "restart"]).expect("parse restart");
         assert!(matches!(cli.command, Command::Restart));
+    }
+
+    #[test]
+    fn cli_help_includes_ascii_banner() {
+        let mut command = Cli::command();
+        let help = command.render_help().to_string();
+
+        assert!(help.contains("█████╗ ██╗██╗"));
+        assert!(help.contains("╚═════╝ ╚══════╝╚═╝"));
     }
 }
 
