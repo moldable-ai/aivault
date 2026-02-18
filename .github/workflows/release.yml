@@ -85,6 +85,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.92.0
           targets: ${{ matrix.target }}
 
       - name: Build (release)
@@ -213,6 +214,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
 
       - name: Validate crate version matches release tag
         run: |
