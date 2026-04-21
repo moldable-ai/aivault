@@ -49,6 +49,15 @@
       }
     },
     {
+      "id": "deepgram/projects",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": ["api.deepgram.com"],
+        "methods": ["GET", "POST"],
+        "pathPrefixes": ["/v1/projects"]
+      }
+    },
+    {
       "id": "deepgram/voice-agent",
       "provider": "deepgram",
       "allow": {

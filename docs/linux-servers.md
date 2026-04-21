@@ -57,7 +57,13 @@ sudo useradd -m -s /bin/bash aivault
 sudo useradd -m -s /bin/bash agent
 ```
 
-2. Install `aivault` and `aivaultd` somewhere root-owned (example):
+2. Install `aivault` and `aivaultd` somewhere root-owned. One option is crates.io:
+
+```bash
+cargo install aivault --locked
+```
+
+Then copy the binaries into a root-owned location (example):
 
 ```bash
 sudo install -m 0755 aivault /usr/local/bin/aivault

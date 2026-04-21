@@ -97,7 +97,12 @@ Important:
 1. Install both binaries (`aivault` and `aivaultd`) and verify:
 
 ```bash
+cargo install aivault --locked
+```
+
+```bash
 aivault status
+aivaultd --version
 ```
 
 2. Keep the canonical data location (recommended):

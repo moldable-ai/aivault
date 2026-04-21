@@ -3,10 +3,34 @@ title: Install
 description: Install the aivault CLI on macOS or Linux.
 ---
 
-## From source (Rust)
+## Install script (recommended)
 
 ```bash
-cargo install --path .
+curl -fsSL https://aivault.moldable.sh/install.sh | sh
+```
+
+This installs prebuilt `aivault` and `aivaultd` binaries for macOS/Linux to `~/.local/bin` by default.
+
+Script URL: https://aivault.moldable.sh/install.sh
+
+## From crates.io
+
+```bash
+cargo install aivault --locked
+```
+
+This installs both binaries:
+- `aivault`
+- `aivaultd`
+
+Crate page: https://crates.io/crates/aivault
+
+## From source (Rust)
+
+From the repo root:
+
+```bash
+cargo install --path . --locked
 ```
 
 Or build without installing:
@@ -52,6 +76,7 @@ cosign verify-blob \
 
 ```bash
 aivault status
+aivaultd --version
 ```
 
 This auto-initializes the vault with safe defaults (macOS Keychain on macOS) if no vault exists yet.
