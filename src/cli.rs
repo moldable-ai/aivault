@@ -195,6 +195,9 @@ pub struct InvokeArgs {
     pub body: Option<String>,
     #[arg(long)]
     pub body_file_path: Option<String>,
+    /// Stream the raw upstream response body to stdout as it arrives.
+    #[arg(long)]
+    pub stream: bool,
     #[arg(long)]
     pub multipart_field: Vec<String>,
     #[arg(long)]

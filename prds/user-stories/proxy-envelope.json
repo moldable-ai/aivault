@@ -61,9 +61,15 @@
       "id": "ev-broker-env-streaming-response-forwarding-test",
       "kind": "tests",
       "automated": true,
-      "file": "src/broker/tests.rs",
+      "files": [
+        "src/broker/tests.rs",
+        "tests/e2e_cli_local_tls.rs",
+        "tests/e2e_daemon.rs"
+      ],
       "tests": [
-        "story_env_streaming_response_forwarding"
+        "story_env_streaming_response_forwarding",
+        "e2e_local_tls_invoke_stream_prints_first_chunk_before_response_completes",
+        "e2e_streaming_invoke_via_aivaultd_unix_socket"
       ]
     },
     {
@@ -508,6 +514,10 @@
               {
                 "evidenceId": "ev-broker-env-streaming-response-forwarding-test",
                 "test": "story_env_streaming_response_forwarding"
+              },
+              {
+                "evidenceId": "ev-broker-env-streaming-response-forwarding-test",
+                "test": "e2e_streaming_invoke_via_aivaultd_unix_socket"
               }
             ]
           }

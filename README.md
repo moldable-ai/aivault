@@ -107,6 +107,7 @@ Browse and inspect available capabilities:
 ### Invoke
 
 - `aivault invoke <id> ... [--workspace-id ... --group-id ...]` — execute a proxied request (top-level shortcut)
+- `aivault invoke <id> --stream ...` — stream the raw upstream response body to stdout as chunks arrive through `aivaultd`
 - `aivault json <id> ...` — invoke and print response as JSON
 - `aivault markdown <id> ...` (alias: `md`) — invoke and print response as markdown
 - `aivault capability invoke <id> ...` (alias: `call`) — same as `aivault invoke`
@@ -149,6 +150,13 @@ aivault capability describe openai/transcription
 aivault invoke openai/transcription \
   --multipart-field model=whisper-1 \
   --multipart-file file=/tmp/audio.wav
+
+# Stream raw text/SSE responses progressively
+aivault invoke openai/responses \
+  --method POST \
+  --header content-type=application/json \
+  --stream \
+  --body '{"model":"gpt-5.4","stream":true,"input":"hello"}'
 ```
 
 ## Quickstart (pnpm)
@@ -399,14 +407,19 @@ The broker runtime models three network contracts:
 
 These contracts are fully implemented and tested at the broker runtime layer, but this repo does **not** yet ship a network daemon with HTTP routes.
 Use `aivault invoke` (or `aivault capability invoke`) today for real request execution.
+For progressive text/SSE use cases, pass `--stream` with raw `invoke`; streaming
+uses the same `aivaultd` daemon boundary as non-streaming invoke. Response body
+policies that require full-body inspection, such as response blocklists or maximum
+response body bytes, intentionally fall back to buffered output.
 
 ### Daemon boundary (`aivaultd`)
 
 On unix platforms (macOS/Linux), capability invocation defaults to a local daemon boundary:
 
 - `aivault invoke ...` will connect to `aivaultd` over a unix socket, and **auto-start** the daemon if needed.
+- `aivault invoke --stream ...` uses a daemon streaming protocol; the CLI only forwards chunk frames to stdout.
 - Secret decryption and auth injection happen inside the daemon process, not the CLI process.
-- Set `AIVAULTD_DISABLE=1` to force in-process execution (dev/debug).
+- Set `AIVAULTD_DISABLE=1` to force in-process non-streaming execution (dev/debug); streaming requires `aivaultd`.
 - Set `AIVAULTD_AUTOSTART=0` to require a daemon already running (no autostart).
 - Set `AIVAULTD_SOCKET=/path/to.sock` to override the socket path.
 

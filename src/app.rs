@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::IpAddr;
 #[cfg(debug_assertions)]
 use std::net::SocketAddr;
@@ -617,8 +617,18 @@ enum InvokeOutputMode {
 }
 
 fn run_invoke_thin_or_local(args: InvokeArgs, mode: InvokeOutputMode) -> Result<(), String> {
+    if args.stream && !matches!(mode, InvokeOutputMode::Raw) {
+        return Err("--stream is only supported with raw `aivault invoke` output".to_string());
+    }
+
     // In-process execution explicitly requested.
     if env_flag_true("AIVAULTD_DISABLE") {
+        if args.stream {
+            return Err(
+                "--stream requires aivaultd; AIVAULTD_DISABLE cannot be used for streaming"
+                    .to_string(),
+            );
+        }
         let vault = VaultRuntime::discover();
         vault.load().map_err(|e| e.to_string())?;
         crate::migrations::run_on_cli_startup(&vault)?;
@@ -639,24 +649,33 @@ fn run_invoke_thin_or_local(args: InvokeArgs, mode: InvokeOutputMode) -> Result<
     // having read access to the vault directory or key provider.
     //
     // If it fails, keep the error to report if local fallback also fails.
-    let thin_err = match invoke_via_daemon_thin(args.clone()) {
-        Ok(envelope_response) => {
-            return match mode {
-                InvokeOutputMode::Raw => print_invoke_body(&envelope_response),
-                InvokeOutputMode::Json => invoke_json_from_envelope_response(&envelope_response),
-                InvokeOutputMode::Markdown {
-                    namespace,
-                    exclude_field,
-                    wrap_field,
-                } => invoke_markdown_from_envelope_response(
-                    &envelope_response,
-                    namespace,
-                    exclude_field,
-                    wrap_field,
-                ),
-            };
+    let thin_err = if args.stream {
+        match invoke_stream_via_daemon_thin(args.clone()) {
+            Ok(()) => return Ok(()),
+            Err(err) => err,
         }
-        Err(err) => err,
+    } else {
+        match invoke_via_daemon_thin(args.clone()) {
+            Ok(envelope_response) => {
+                return match mode {
+                    InvokeOutputMode::Raw => print_invoke_body(&envelope_response),
+                    InvokeOutputMode::Json => {
+                        invoke_json_from_envelope_response(&envelope_response)
+                    }
+                    InvokeOutputMode::Markdown {
+                        namespace,
+                        exclude_field,
+                        wrap_field,
+                    } => invoke_markdown_from_envelope_response(
+                        &envelope_response,
+                        namespace,
+                        exclude_field,
+                        wrap_field,
+                    ),
+                };
+            }
+            Err(err) => err,
+        }
     };
 
     // Fall back to local execution (which will use the daemon boundary if available).
@@ -1823,6 +1842,16 @@ fn invoke_with_store(
         .client_ip
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
+    if args.stream {
+        return maybe_run_capability_envelope_streaming(
+            vault,
+            store,
+            envelope,
+            client_ip,
+            workspace_id,
+            group_id,
+        );
+    }
     let response =
         maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
     print_invoke_body(&response)
@@ -1833,6 +1862,10 @@ fn invoke_json_with_store(
     store: &BrokerStore,
     args: InvokeArgs,
 ) -> Result<(), String> {
+    if args.stream {
+        return Err("--stream is only supported with raw `aivault invoke` output".to_string());
+    }
+
     let (workspace_id, group_id) =
         normalize_invoke_context(args.workspace_id.as_deref(), args.group_id.as_deref())?;
     let id = args.id.trim().to_string();
@@ -1884,6 +1917,10 @@ fn invoke_markdown_with_store(
     exclude_field: Vec<String>,
     wrap_field: Vec<String>,
 ) -> Result<(), String> {
+    if args.stream {
+        return Err("--stream is only supported with raw `aivault invoke` output".to_string());
+    }
+
     let (workspace_id, group_id) =
         normalize_invoke_context(args.workspace_id.as_deref(), args.group_id.as_deref())?;
     let id = args.id.trim().to_string();
@@ -1984,10 +2021,21 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
     let user_socket = daemon::default_socket_path();
     let shared_socket = daemon::shared_socket_path();
 
+    let explicit_vault_dir = env_var_nonempty("AIVAULT_DIR");
+    let explicit_shared_socket = env_var_nonempty("AIVAULTD_SHARED_SOCKET");
+
     let attempt = daemon::client_execute_envelope_typed(&user_socket, request.clone());
     match attempt {
         Ok(v) => return Ok(v),
-        Err(crate::daemon::DaemonClientError::Connect(_)) => { /* fall through */ }
+        Err(crate::daemon::DaemonClientError::Connect(err)) => {
+            if explicit_vault_dir && !explicit_shared_socket {
+                return Err(format!(
+                    "failed connecting to aivaultd at '{}': {}",
+                    user_socket.display(),
+                    err
+                ));
+            }
+        }
         Err(crate::daemon::DaemonClientError::Protocol(e)) => {
             return Err(format!(
                 "invalid response from aivaultd at '{}': {}",
@@ -2008,6 +2056,115 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
         ),
         crate::daemon::DaemonClientError::Protocol(err) => format!(
             "invalid response from aivaultd at '{}': {}",
+            shared_socket.display(),
+            err
+        ),
+        crate::daemon::DaemonClientError::Remote(err) => err,
+    })
+}
+
+fn invoke_stream_via_daemon_thin(args: InvokeArgs) -> Result<(), String> {
+    let (workspace_id, group_id) =
+        normalize_invoke_context(args.workspace_id.as_deref(), args.group_id.as_deref())?;
+
+    // Build an envelope without reading any local vault or broker store state.
+    // If the capability is registry-backed, we can still apply default method/path rules
+    // (only when unambiguous). Otherwise, require --method/--path or --request payload.
+    let capability_id = args.id.trim().to_string();
+    if capability_id.is_empty() {
+        return Err("capability id required".to_string());
+    }
+
+    let has_payload = args.request.is_some() || args.request_file.is_some();
+    let has_method_or_path = args
+        .method
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+        || args
+            .path
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+
+    let envelope = if has_payload {
+        build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
+    } else {
+        let registry_capability = crate::registry::builtin_registry()
+            .ok()
+            .and_then(|r| r.capability(&capability_id));
+        if let Some(capability) = registry_capability {
+            build_capability_call_envelope(&capability, args.clone())?
+        } else if has_method_or_path {
+            build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
+        } else {
+            return Err(format!(
+                "capability '{}' is not available locally; pass --method/--path or use --request/--request-file",
+                capability_id
+            ));
+        }
+    };
+
+    let client_ip: IpAddr = args
+        .client_ip
+        .parse()
+        .map_err(|_| "invalid --client-ip".to_string())?;
+
+    let request = DaemonRequest::ExecuteEnvelopeStream {
+        envelope,
+        client_ip: client_ip.to_string(),
+        workspace_id: workspace_id.map(|s| s.to_string()),
+        group_id: group_id.map(|s| s.to_string()),
+    };
+
+    // Thin invoke: try connecting without autostart (this path is meant to work even when the
+    // caller cannot read local vault state).
+    let mut stdout = std::io::stdout().lock();
+    let env_socket = daemon::socket_path_from_env();
+    if let Some(p) = env_socket {
+        return daemon::client_execute_envelope_streaming(&p, request, &mut stdout);
+    }
+
+    let user_socket = daemon::default_socket_path();
+    let shared_socket = daemon::shared_socket_path();
+
+    let explicit_vault_dir = env_var_nonempty("AIVAULT_DIR");
+    let explicit_shared_socket = env_var_nonempty("AIVAULTD_SHARED_SOCKET");
+
+    let attempt =
+        daemon::client_execute_envelope_streaming_typed(&user_socket, request.clone(), &mut stdout);
+    match attempt {
+        Ok(()) => return Ok(()),
+        Err(crate::daemon::DaemonClientError::Connect(err)) => {
+            if explicit_vault_dir && !explicit_shared_socket {
+                return Err(format!(
+                    "failed connecting to aivaultd at '{}': {}",
+                    user_socket.display(),
+                    err
+                ));
+            }
+        }
+        Err(crate::daemon::DaemonClientError::Protocol(e)) => {
+            return Err(format!(
+                "invalid streaming response from aivaultd at '{}': {}",
+                user_socket.display(),
+                e
+            ));
+        }
+        Err(crate::daemon::DaemonClientError::Remote(e)) => return Err(e),
+    }
+
+    let attempt =
+        daemon::client_execute_envelope_streaming_typed(&shared_socket, request, &mut stdout);
+    attempt.map_err(|e| match e {
+        crate::daemon::DaemonClientError::Connect(err) => format!(
+            "failed connecting to aivaultd (tried '{}' and '{}'): {}",
+            user_socket.display(),
+            shared_socket.display(),
+            err
+        ),
+        crate::daemon::DaemonClientError::Protocol(err) => format!(
+            "invalid streaming response from aivaultd at '{}': {}",
             shared_socket.display(),
             err
         ),
@@ -2276,6 +2433,7 @@ fn build_capability_call_envelope(
         header,
         body,
         body_file_path,
+        stream: _,
         multipart_field,
         multipart_file,
         credential,
@@ -2402,6 +2560,7 @@ fn build_capability_call_envelope_without_local_capability(
         header,
         body,
         body_file_path,
+        stream: _,
         multipart_field,
         multipart_file,
         credential,
@@ -2615,6 +2774,36 @@ pub(crate) fn run_capability_envelope(
     workspace_id: Option<&str>,
     group_id: Option<&str>,
 ) -> Result<Value, String> {
+    let (broker, planned) =
+        plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+    execute_planned_http_request(&broker, &planned)
+}
+
+pub(crate) fn run_capability_envelope_streaming<F>(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    envelope: ProxyEnvelope,
+    client_ip: IpAddr,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+    on_chunk: F,
+) -> Result<(), String>
+where
+    F: FnMut(&[u8]) -> Result<(), String>,
+{
+    let (broker, planned) =
+        plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+    execute_planned_http_request_streaming(&broker, &planned, on_chunk)
+}
+
+fn plan_capability_envelope(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    envelope: ProxyEnvelope,
+    client_ip: IpAddr,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> Result<(Broker, PlannedRequest), String> {
     let mut broker = load_runtime_broker_for_context(
         vault,
         store,
@@ -2668,7 +2857,7 @@ pub(crate) fn run_capability_envelope(
         }
         Err(err) => return Err(err.to_string()),
     };
-    execute_planned_http_request(&broker, &planned)
+    Ok((broker, planned))
 }
 
 fn refresh_oauth2_for_envelope(
@@ -2929,10 +3118,8 @@ fn maybe_run_capability_envelope(
             .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
             .unwrap_or(true);
 
-        let aivault_dir_set = std::env::var("AIVAULT_DIR")
-            .ok()
-            .map(|v| !v.trim().is_empty())
-            .unwrap_or(false);
+        let aivault_dir_set = env_var_nonempty("AIVAULT_DIR");
+        let explicit_shared_socket = env_var_nonempty("AIVAULTD_SHARED_SOCKET");
         let autostart_once = env_flag_true("AIVAULTD_AUTOSTART_ONCE") || aivault_dir_set;
 
         let autostart_and_retry = |socket_path: &std::path::Path| -> Result<Value, String> {
@@ -3050,6 +3237,10 @@ fn maybe_run_capability_envelope(
         match attempt {
             Ok(v) => Ok(v),
             Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                if aivault_dir_set && !explicit_shared_socket {
+                    return autostart_and_retry(&user_socket);
+                }
+
                 // Then try shared socket (no autostart here).
                 let shared_attempt =
                     daemon::client_execute_envelope_typed(&shared_socket, request.clone());
@@ -3097,6 +3288,212 @@ fn maybe_run_capability_envelope(
     {
         // Non-unix targets: daemon boundary not supported; fall back to in-process.
         run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)
+    }
+}
+
+fn maybe_run_capability_envelope_streaming(
+    _vault: &VaultRuntime,
+    _store: &BrokerStore,
+    envelope: ProxyEnvelope,
+    client_ip: IpAddr,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> Result<(), String> {
+    if env_flag_true("AIVAULTD_DISABLE") {
+        return Err("streaming invoke requires aivaultd; AIVAULTD_DISABLE is set".to_string());
+    }
+
+    #[cfg(unix)]
+    let env_socket = daemon::socket_path_from_env();
+    #[cfg(unix)]
+    let user_socket = daemon::default_socket_path();
+    #[cfg(unix)]
+    let shared_socket = daemon::shared_socket_path();
+
+    #[cfg(unix)]
+    {
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+
+        let request = DaemonRequest::ExecuteEnvelopeStream {
+            envelope,
+            client_ip: client_ip.to_string(),
+            workspace_id: workspace_id.map(|s| s.to_string()),
+            group_id: group_id.map(|s| s.to_string()),
+        };
+
+        let autostart_enabled = std::env::var("AIVAULTD_AUTOSTART")
+            .ok()
+            .map(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(true);
+
+        let aivault_dir_set = env_var_nonempty("AIVAULT_DIR");
+        let explicit_shared_socket = env_var_nonempty("AIVAULTD_SHARED_SOCKET");
+        let autostart_once = env_flag_true("AIVAULTD_AUTOSTART_ONCE") || aivault_dir_set;
+
+        let try_stream = |socket_path: &std::path::Path,
+                          request: DaemonRequest|
+         -> Result<(), crate::daemon::DaemonClientError> {
+            let mut stdout = std::io::stdout().lock();
+            daemon::client_execute_envelope_streaming_typed(socket_path, request, &mut stdout)
+        };
+
+        let autostart_and_retry = |socket_path: &std::path::Path| -> Result<(), String> {
+            if !autostart_enabled {
+                return Err(format!(
+                    "aivaultd not running at '{}' (autostart disabled)",
+                    socket_path.display()
+                ));
+            }
+
+            // Try to locate aivaultd alongside the current executable first.
+            let mut daemon_exe = std::env::current_exe()
+                .ok()
+                .unwrap_or_else(|| std::path::PathBuf::from("aivault"));
+            #[cfg(target_os = "windows")]
+            {
+                daemon_exe.set_file_name("aivaultd.exe");
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                daemon_exe.set_file_name("aivaultd");
+            }
+            if !daemon_exe.exists() {
+                daemon_exe = std::path::PathBuf::from("aivaultd");
+            }
+
+            let mut cmd = Command::new(daemon_exe);
+            cmd.arg("--socket")
+                .arg(socket_path.to_string_lossy().to_string())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            if autostart_once {
+                cmd.arg("--once");
+            }
+
+            let mut child = cmd
+                .spawn()
+                .map_err(|e| format!("failed to start aivaultd: {}", e))?;
+
+            // Wait for the daemon to become connectable, then retry the request.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                match try_stream(socket_path, request.clone()) {
+                    Ok(()) => {
+                        if autostart_once {
+                            let _ = child.wait();
+                        }
+                        return Ok(());
+                    }
+                    Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                        if Instant::now() > deadline {
+                            if autostart_once {
+                                let _ = child.wait();
+                            }
+                            return Err(format!(
+                                "failed connecting to aivaultd at '{}' after autostart",
+                                socket_path.display()
+                            ));
+                        }
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(crate::daemon::DaemonClientError::Protocol(e)) => {
+                        if autostart_once {
+                            let _ = child.wait();
+                        }
+                        return Err(format!(
+                            "invalid streaming response from aivaultd at '{}': {}",
+                            socket_path.display(),
+                            e
+                        ));
+                    }
+                    Err(crate::daemon::DaemonClientError::Remote(e)) => {
+                        if autostart_once {
+                            let _ = child.wait();
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+        };
+
+        if let Some(p) = env_socket {
+            let attempt = try_stream(&p, request.clone());
+            return match attempt {
+                Ok(()) => Ok(()),
+                Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                    if p == shared_socket {
+                        Err(format!(
+                            "failed connecting to aivaultd at '{}' (shared socket; autostart suppressed)",
+                            p.display()
+                        ))
+                    } else {
+                        autostart_and_retry(&p)
+                    }
+                }
+                Err(crate::daemon::DaemonClientError::Protocol(err)) => Err(format!(
+                    "invalid streaming response from aivaultd at '{}': {}",
+                    p.display(),
+                    err
+                )),
+                Err(crate::daemon::DaemonClientError::Remote(err)) => Err(err),
+            };
+        }
+
+        // Try per-user socket first.
+        let attempt = try_stream(&user_socket, request.clone());
+        match attempt {
+            Ok(()) => Ok(()),
+            Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                if aivault_dir_set && !explicit_shared_socket {
+                    return autostart_and_retry(&user_socket);
+                }
+
+                // Then try shared socket (no autostart here).
+                let shared_attempt = try_stream(&shared_socket, request.clone());
+                match shared_attempt {
+                    Ok(()) => Ok(()),
+                    Err(crate::daemon::DaemonClientError::Connect(_)) => {
+                        // Neither socket is connectable.
+                        //
+                        // If the shared socket directory exists, assume this machine is configured
+                        // for shared-daemon cross-user access and fail closed (do not autostart a
+                        // per-user daemon under the caller).
+                        if shared_socket.parent().map(|p| p.exists()).unwrap_or(false) {
+                            return Err(format!(
+                                "aivaultd not running at shared socket '{}' (start it as the operator with `aivaultd --shared`)",
+                                shared_socket.display()
+                            ));
+                        }
+
+                        // Otherwise, autostart per-user daemon if allowed.
+                        autostart_and_retry(&user_socket).map_err(|e| {
+                            format!(
+                                "{e}\n(also tried shared socket '{}')",
+                                shared_socket.display()
+                            )
+                        })
+                    }
+                    Err(crate::daemon::DaemonClientError::Protocol(err)) => Err(format!(
+                        "invalid streaming response from aivaultd at '{}': {}",
+                        shared_socket.display(),
+                        err
+                    )),
+                    Err(crate::daemon::DaemonClientError::Remote(err)) => Err(err),
+                }
+            }
+            Err(crate::daemon::DaemonClientError::Protocol(err)) => Err(format!(
+                "invalid streaming response from aivaultd at '{}': {}",
+                user_socket.display(),
+                err
+            )),
+            Err(crate::daemon::DaemonClientError::Remote(err)) => Err(err),
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        Err("streaming invoke requires aivaultd on a unix-like OS".to_string())
     }
 }
 
@@ -3518,6 +3915,13 @@ fn credential_matches_context(
     true
 }
 
+fn env_var_nonempty(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
 fn env_flag_true(name: &str) -> bool {
     std::env::var(name)
         .ok()
@@ -3748,6 +4152,106 @@ fn execute_planned_http_request(
             "bodyB64": base64::engine::general_purpose::STANDARD.encode(body_raw)
         }
     }))
+}
+
+fn execute_planned_http_request_streaming<F>(
+    broker: &Broker,
+    planned: &PlannedRequest,
+    mut on_chunk: F,
+) -> Result<(), String>
+where
+    F: FnMut(&[u8]) -> Result<(), String>,
+{
+    if broker.response_body_policy_requires_buffering(&planned.capability) {
+        let response = execute_planned_http_request(broker, planned)?;
+        let bytes = extract_invoke_body_bytes(&response)?;
+        return on_chunk(&bytes);
+    }
+
+    let mut url = reqwest::Url::parse(&format!(
+        "{}://{}{}",
+        planned.scheme, planned.host, planned.path
+    ))
+    .map_err(|e| e.to_string())?;
+    {
+        let mut qp = url.query_pairs_mut();
+        for (k, v) in &planned.query {
+            qp.append_pair(k, v);
+        }
+    }
+
+    let safe_url = planned_url_for_output(broker, planned).unwrap_or_else(|_| {
+        // Fail closed on secret disclosure; fall back to host-only URL.
+        format!("{}://{}", planned.scheme, planned.host)
+    });
+
+    let method =
+        reqwest::Method::from_bytes(planned.method.as_bytes()).map_err(|e| e.to_string())?;
+    let client = build_http_client_with_dev_overrides()?;
+
+    let mut req = client.request(method, url.clone());
+    let is_multipart = matches!(planned.body_mode, RequestBodyMode::Multipart { .. });
+    for header in &planned.headers {
+        if is_multipart && header.name.eq_ignore_ascii_case("content-type") {
+            continue;
+        }
+        req = req.header(header.name.as_str(), header.value.as_str());
+    }
+
+    req = match &planned.body_mode {
+        RequestBodyMode::Empty => req,
+        RequestBodyMode::Text(text) => req.body(text.clone()),
+        RequestBodyMode::BodyFilePath(path) => {
+            let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+            req.body(bytes)
+        }
+        RequestBodyMode::Multipart { fields, files } => {
+            let mut form = Form::new();
+            for (k, v) in fields {
+                form = form.text(k.clone(), v.clone());
+            }
+            for file in files {
+                form = form
+                    .file(file.field.clone(), file.path.clone())
+                    .map_err(|e| e.to_string())?;
+            }
+            req.multipart(form)
+        }
+    };
+
+    let mut response = req.send().map_err(|e| {
+        // reqwest error strings often include the full URL. Replace any instance of the full URL
+        // with the already-redacted planned URL to avoid leaking broker-managed secrets.
+        let from = e
+            .url()
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| url.to_string());
+        format_reqwest_error_with_url_replacement(&e, &from, &safe_url)
+    })?;
+
+    let _forwarded_headers = Broker::forward_response(UpstreamResponse {
+        status: response.status().as_u16(),
+        headers: response
+            .headers()
+            .iter()
+            .map(|(k, v)| Header {
+                name: k.as_str().to_string(),
+                value: v.to_str().unwrap_or_default().to_string(),
+            })
+            .collect(),
+        body_chunks: Vec::new(),
+    });
+
+    let mut buffer = [0u8; 16 * 1024];
+    loop {
+        let read = response.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
+        }
+        on_chunk(&buffer[..read])?;
+    }
+
+    Ok(())
 }
 
 fn planned_url_for_output(broker: &Broker, planned: &PlannedRequest) -> Result<String, String> {

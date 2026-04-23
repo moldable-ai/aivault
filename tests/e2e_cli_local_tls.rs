@@ -1,17 +1,20 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex, Once};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use axum::body::Bytes;
+use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{HeaderMap, Method, Uri};
+use axum::response::{IntoResponse, Response};
 use axum::routing::any;
 use axum::{Json, Router};
 use axum_server::tls_rustls::RustlsConfig;
+use futures_util::stream;
 use rcgen::generate_simple_self_signed;
 use serde_json::Value;
 use tempfile::TempDir;
@@ -37,7 +40,7 @@ async fn echo_handler(
     uri: Uri,
     headers: HeaderMap,
     body: Bytes,
-) -> Json<Value> {
+) -> Response {
     let mut header_map = HashMap::new();
     for (name, value) in &headers {
         header_map.insert(
@@ -70,7 +73,32 @@ async fn echo_handler(
             "access_token": token,
             "token_type": "Bearer",
             "expires_in": 3600,
-        }));
+        }))
+        .into_response();
+    }
+
+    if uri.path() == "/stream" {
+        let body_stream = stream::unfold(0u8, |state| async move {
+            match state {
+                0 => Some((
+                    Ok::<_, std::convert::Infallible>(Bytes::from_static(b"data: 1\n\n")),
+                    1,
+                )),
+                1 => {
+                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                    Some((
+                        Ok::<_, std::convert::Infallible>(Bytes::from_static(b"data: 2\n\n")),
+                        2,
+                    ))
+                }
+                _ => None,
+            }
+        });
+
+        return Response::builder()
+            .header("content-type", "text/event-stream")
+            .body(Body::from_stream(body_stream))
+            .expect("build streaming response");
     }
 
     Json(serde_json::json!({
@@ -79,6 +107,7 @@ async fn echo_handler(
         "headers": header_map,
         "body": String::from_utf8_lossy(&body),
     }))
+    .into_response()
 }
 
 struct LocalTlsEchoServer {
@@ -215,6 +244,50 @@ fn run_aivault_with_env(dir: &TempDir, args: &[&str], envs: &[(String, String)])
         command.env(key, value);
     }
     command.output().expect("failed to run aivault binary")
+}
+
+fn run_aivault_raw_stream_first_chunk(
+    dir: &TempDir,
+    args: &[&str],
+    envs: &[(String, String)],
+    first_chunk_len: usize,
+) -> (String, String, String, Duration, std::process::ExitStatus) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_aivault"));
+    command
+        .env("AIVAULT_DIR", dir.path())
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+
+    let started = Instant::now();
+    let mut child = command.spawn().expect("spawn aivault");
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stderr = child.stderr.take().expect("stderr pipe");
+
+    let mut first = vec![0u8; first_chunk_len];
+    stdout
+        .read_exact(&mut first)
+        .expect("read first stream chunk");
+    let first_elapsed = started.elapsed();
+
+    let mut rest = Vec::new();
+    stdout
+        .read_to_end(&mut rest)
+        .expect("read remaining stdout");
+    let mut stderr_bytes = Vec::new();
+    stderr.read_to_end(&mut stderr_bytes).expect("read stderr");
+    let status = child.wait().expect("wait child");
+
+    (
+        String::from_utf8(first).expect("first chunk utf8"),
+        String::from_utf8(rest).expect("remaining stdout utf8"),
+        String::from_utf8(stderr_bytes).expect("stderr utf8"),
+        first_elapsed,
+        status,
+    )
 }
 
 fn rewrite_invoke_to_json<'a>(args: &'a [&'a str]) -> Vec<&'a str> {
@@ -373,6 +446,56 @@ fn e2e_local_tls_invoke_routes_to_local_listener_and_injects_secret() {
     assert!(
         captured[0].body.is_empty(),
         "expected empty body for GET request"
+    );
+}
+
+#[test]
+fn e2e_local_tls_invoke_stream_prints_first_chunk_before_response_completes() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+    setup_tls_capability(
+        &dir,
+        &envs,
+        &upstream_authority,
+        "local/tls-stream",
+        "local-tls-stream-cred",
+        &["GET"],
+        &["/stream"],
+    );
+
+    let (first, rest, stderr, first_elapsed, status) = run_aivault_raw_stream_first_chunk(
+        &dir,
+        &[
+            "invoke",
+            "local/tls-stream",
+            "--stream",
+            "--path",
+            "/stream",
+        ],
+        &envs,
+        b"data: 1\n\n".len(),
+    );
+
+    assert!(
+        status.success(),
+        "command failed\nstdout first:\n{}\nstdout rest:\n{}\nstderr:\n{}",
+        first,
+        rest,
+        stderr
+    );
+    assert_eq!(first, "data: 1\n\n");
+    assert!(
+        first_elapsed < Duration::from_millis(900),
+        "first chunk arrived after {:?}, which suggests buffering",
+        first_elapsed
+    );
+    assert!(
+        rest.contains("data: 2\n\n"),
+        "remaining stdout should contain second chunk, got: {}",
+        rest
     );
 }
 

@@ -581,6 +581,16 @@ impl Broker {
         Ok(forwarded)
     }
 
+    pub fn response_body_policy_requires_buffering(&self, capability_id: &str) -> bool {
+        self.advanced_policies
+            .get(capability_id)
+            .map(|policy| {
+                policy.max_response_body_bytes.is_some()
+                    || !policy.response_body_blocklist.is_empty()
+            })
+            .unwrap_or(false)
+    }
+
     pub fn conformance_levels(&self) -> HashMap<String, bool> {
         HashMap::from([
             ("Core".to_string(), true),

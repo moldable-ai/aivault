@@ -1,13 +1,18 @@
+use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::Once;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use axum::body::{Body, Bytes};
+use axum::http::Uri;
+use axum::response::{IntoResponse, Response};
 use axum::routing::any;
 use axum::{Json, Router};
 use axum_server::tls_rustls::RustlsConfig;
+use futures_util::stream;
 use rcgen::generate_simple_self_signed;
 use serde_json::Value;
 use tempfile::TempDir;
@@ -59,8 +64,37 @@ impl LocalTlsServer {
                 .build()
                 .expect("build tokio runtime");
             runtime.block_on(async move {
-                let app =
-                    Router::new().fallback(any(|| async { Json(serde_json::json!({"ok": true})) }));
+                let app = Router::new().fallback(any(|uri: Uri| async move {
+                    if uri.path() == "/stream" {
+                        let body_stream = stream::unfold(0u8, |state| async move {
+                            match state {
+                                0 => Some((
+                                    Ok::<_, std::convert::Infallible>(Bytes::from_static(
+                                        b"data: daemon-1\n\n",
+                                    )),
+                                    1,
+                                )),
+                                1 => {
+                                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                                    Some((
+                                        Ok::<_, std::convert::Infallible>(Bytes::from_static(
+                                            b"data: daemon-2\n\n",
+                                        )),
+                                        2,
+                                    ))
+                                }
+                                _ => None,
+                            }
+                        });
+
+                        return Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(Body::from_stream(body_stream))
+                            .expect("build streaming response");
+                    }
+
+                    Json(serde_json::json!({"ok": true})).into_response()
+                }));
                 let tls_config =
                     RustlsConfig::from_pem_file(cert_path_for_thread, key_path_for_thread)
                         .await
@@ -409,6 +443,155 @@ fn e2e_invoke_via_aivaultd_unix_socket() {
 
     let status = child.wait().expect("wait daemon");
     assert!(status.success(), "aivaultd did not exit cleanly");
+}
+
+#[test]
+fn e2e_streaming_invoke_via_aivaultd_unix_socket() {
+    let dir = TempDir::new().expect("temp dir");
+    let server = LocalTlsServer::start("daemon.stream");
+    let mut envs = server.env_pairs();
+
+    // Setup vault + broker state via CLI.
+    let created = run_ok_json(
+        &dir,
+        &[
+            "secrets",
+            "create",
+            "--name",
+            "DAEMON_STREAM_TOKEN",
+            "--value",
+            "sk-daemon-stream",
+            "--scope",
+            "global",
+        ],
+        &envs,
+    );
+    let secret_id = created["secretId"].as_str().unwrap().to_string();
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "daemon-stream-cred",
+            "--provider",
+            "daemon-stream-provider",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "header",
+            "--host",
+            "daemon.stream",
+        ],
+        &envs,
+    );
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "daemon/stream",
+            "--credential",
+            "daemon-stream-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/stream",
+        ],
+        &envs,
+    );
+
+    let sock_path = dir.path().join("aivaultd-stream.sock");
+    let mut daemon_cmd = Command::new(env!("CARGO_BIN_EXE_aivaultd"));
+    daemon_cmd.env("AIVAULT_DIR", dir.path());
+    for (key, value) in &envs {
+        daemon_cmd.env(key, value);
+    }
+    daemon_cmd
+        .arg("--socket")
+        .arg(sock_path.to_string_lossy().to_string())
+        .arg("--once");
+    let mut daemon_child = daemon_cmd.spawn().expect("spawn aivaultd");
+
+    // Wait for socket creation.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline && !sock_path.exists() {
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(sock_path.exists(), "daemon socket was not created");
+
+    envs.push((
+        "AIVAULTD_SOCKET".to_string(),
+        sock_path.display().to_string(),
+    ));
+    envs.push(("AIVAULTD_AUTOSTART".to_string(), "0".to_string()));
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_aivault"));
+    command
+        .env("AIVAULT_DIR", dir.path())
+        .args(["invoke", "daemon/stream", "--stream", "--path", "/stream"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in &envs {
+        command.env(key, value);
+    }
+
+    let started = Instant::now();
+    let mut child = command.spawn().expect("spawn aivault");
+    let mut stdout = child.stdout.take().expect("stdout pipe");
+    let mut stderr = child.stderr.take().expect("stderr pipe");
+
+    let mut first = vec![0u8; b"data: daemon-1\n\n".len()];
+    stdout
+        .read_exact(&mut first)
+        .expect("read first stream chunk");
+    let first_elapsed = started.elapsed();
+
+    let mut rest = String::new();
+    stdout
+        .read_to_string(&mut rest)
+        .expect("read remaining stdout");
+    let mut stderr_text = String::new();
+    stderr
+        .read_to_string(&mut stderr_text)
+        .expect("read stderr");
+    let status = child.wait().expect("wait aivault");
+
+    assert!(
+        status.success(),
+        "streaming invoke failed\nstdout first:\n{}\nstdout rest:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&first),
+        rest,
+        stderr_text
+    );
+    assert_eq!(String::from_utf8(first).unwrap(), "data: daemon-1\n\n");
+    assert!(
+        first_elapsed < Duration::from_millis(900),
+        "first chunk arrived after {:?}, which suggests buffering",
+        first_elapsed
+    );
+    assert!(
+        rest.contains("data: daemon-2\n\n"),
+        "remaining stdout should contain second chunk, got: {}",
+        rest
+    );
+
+    let daemon_deadline = Instant::now() + Duration::from_secs(3);
+    let daemon_status = loop {
+        if let Some(status) = daemon_child.try_wait().expect("poll daemon") {
+            break status;
+        }
+        if Instant::now() >= daemon_deadline {
+            let _ = daemon_child.kill();
+            panic!("aivaultd --once did not exit, so streaming invoke did not use the daemon");
+        }
+        thread::sleep(Duration::from_millis(20));
+    };
+    assert!(
+        daemon_status.success(),
+        "aivaultd did not exit cleanly after streaming request"
+    );
 }
 
 #[test]

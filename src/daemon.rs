@@ -1,5 +1,7 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::broker::ProxyEnvelope;
@@ -123,6 +125,14 @@ pub enum DaemonRequest {
         #[serde(default)]
         group_id: Option<String>,
     },
+    ExecuteEnvelopeStream {
+        envelope: ProxyEnvelope,
+        client_ip: String,
+        #[serde(default)]
+        workspace_id: Option<String>,
+        #[serde(default)]
+        group_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +161,18 @@ impl DaemonResponse {
             error: Some(message),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum DaemonStreamFrame {
+    Chunk { body_b64: String },
+    Error { error: String },
+    End,
 }
 
 #[derive(Debug)]
@@ -196,6 +218,69 @@ pub fn client_execute_envelope_typed(
                 .unwrap_or_else(|| "unknown aivaultd error".to_string()),
         ))
     }
+}
+
+#[cfg(unix)]
+pub fn client_execute_envelope_streaming_typed<W: Write>(
+    socket_path: &Path,
+    request: DaemonRequest,
+    output: &mut W,
+) -> Result<(), DaemonClientError> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::UnixStream;
+
+    let mut stream = UnixStream::connect(socket_path).map_err(DaemonClientError::Connect)?;
+
+    let raw =
+        serde_json::to_vec(&request).map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+    stream
+        .write_all(&raw)
+        .map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+    // Half-close to signal request EOF (daemon reads until end).
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let read = reader
+            .read_line(&mut line)
+            .map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+        if read == 0 {
+            return Err(DaemonClientError::Protocol(
+                "stream ended before daemon end frame".to_string(),
+            ));
+        }
+
+        let frame: DaemonStreamFrame = serde_json::from_str(line.trim_end())
+            .map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+        match frame {
+            DaemonStreamFrame::Chunk { body_b64 } => {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(body_b64.as_bytes())
+                    .map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+                output
+                    .write_all(&bytes)
+                    .map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+                output
+                    .flush()
+                    .map_err(|e| DaemonClientError::Protocol(e.to_string()))?;
+            }
+            DaemonStreamFrame::Error { error } => return Err(DaemonClientError::Remote(error)),
+            DaemonStreamFrame::End => return Ok(()),
+        }
+    }
+}
+
+#[cfg(not(unix))]
+pub fn client_execute_envelope_streaming_typed<W: Write>(
+    _socket_path: &Path,
+    _request: DaemonRequest,
+    _output: &mut W,
+) -> Result<(), DaemonClientError> {
+    Err(DaemonClientError::Protocol(
+        "aivaultd requires a unix-like OS (no unix sockets available)".to_string(),
+    ))
 }
 
 #[cfg(not(unix))]
@@ -245,14 +330,26 @@ pub fn serve(socket_path: &Path, once: bool) -> Result<(), String> {
         let mut buf = Vec::new();
         stream.read_to_end(&mut buf).map_err(|e| e.to_string())?;
 
-        let response = match serde_json::from_slice::<DaemonRequest>(&buf) {
-            Ok(request) => handle_request(request),
-            Err(err) => DaemonResponse::err(format!("invalid request JSON: {}", err)),
-        };
-
-        let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
-        stream.write_all(&raw).map_err(|e| e.to_string())?;
-        let _ = stream.flush();
+        match serde_json::from_slice::<DaemonRequest>(&buf) {
+            Ok(request @ DaemonRequest::ExecuteEnvelopeStream { .. }) => {
+                if let Err(err) = handle_stream_request(request, &mut stream) {
+                    let _ =
+                        write_stream_frame(&mut stream, &DaemonStreamFrame::Error { error: err });
+                }
+            }
+            Ok(request) => {
+                let response = handle_request(request);
+                let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
+                stream.write_all(&raw).map_err(|e| e.to_string())?;
+                let _ = stream.flush();
+            }
+            Err(err) => {
+                let response = DaemonResponse::err(format!("invalid request JSON: {}", err));
+                let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
+                stream.write_all(&raw).map_err(|e| e.to_string())?;
+                let _ = stream.flush();
+            }
+        }
 
         if once {
             break;
@@ -305,7 +402,59 @@ fn handle_request(request: DaemonRequest) -> DaemonResponse {
                 Err(err) => DaemonResponse::err(err),
             }
         }
+        DaemonRequest::ExecuteEnvelopeStream { .. } => {
+            DaemonResponse::err("stream request used non-stream daemon handler".to_string())
+        }
     }
+}
+
+fn handle_stream_request<W: Write>(request: DaemonRequest, writer: &mut W) -> Result<(), String> {
+    let DaemonRequest::ExecuteEnvelopeStream {
+        envelope,
+        client_ip,
+        workspace_id,
+        group_id,
+    } = request
+    else {
+        return Err("non-stream request used stream daemon handler".to_string());
+    };
+
+    let client_ip = client_ip
+        .parse::<std::net::IpAddr>()
+        .map_err(|_| "invalid clientIp".to_string())?;
+
+    let vault = crate::vault::VaultRuntime::discover();
+    vault.load().map_err(|e| e.to_string())?;
+    crate::migrations::run_on_cli_startup(&vault)?;
+    let store = crate::broker_store::BrokerStore::open_under(vault.paths().root_dir())?;
+
+    crate::app::run_capability_envelope_streaming(
+        &vault,
+        &store,
+        envelope,
+        client_ip,
+        workspace_id.as_deref(),
+        group_id.as_deref(),
+        |chunk| write_stream_chunk(writer, chunk),
+    )?;
+
+    write_stream_frame(writer, &DaemonStreamFrame::End)
+}
+
+fn write_stream_chunk<W: Write>(writer: &mut W, chunk: &[u8]) -> Result<(), String> {
+    write_stream_frame(
+        writer,
+        &DaemonStreamFrame::Chunk {
+            body_b64: base64::engine::general_purpose::STANDARD.encode(chunk),
+        },
+    )
+}
+
+fn write_stream_frame<W: Write>(writer: &mut W, frame: &DaemonStreamFrame) -> Result<(), String> {
+    let raw = serde_json::to_vec(frame).map_err(|e| e.to_string())?;
+    writer.write_all(&raw).map_err(|e| e.to_string())?;
+    writer.write_all(b"\n").map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())
 }
 
 pub fn client_execute_envelope(
@@ -321,6 +470,27 @@ pub fn client_execute_envelope(
         )),
         Err(DaemonClientError::Protocol(e)) => Err(format!(
             "invalid response from aivaultd at '{}': {}",
+            socket_path.display(),
+            e
+        )),
+        Err(DaemonClientError::Remote(e)) => Err(e),
+    }
+}
+
+pub fn client_execute_envelope_streaming<W: Write>(
+    socket_path: &Path,
+    request: DaemonRequest,
+    output: &mut W,
+) -> Result<(), String> {
+    match client_execute_envelope_streaming_typed(socket_path, request, output) {
+        Ok(()) => Ok(()),
+        Err(DaemonClientError::Connect(e)) => Err(format!(
+            "failed connecting to aivaultd at '{}': {}",
+            socket_path.display(),
+            e
+        )),
+        Err(DaemonClientError::Protocol(e)) => Err(format!(
+            "invalid streaming response from aivaultd at '{}': {}",
             socket_path.display(),
             e
         )),
