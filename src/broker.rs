@@ -122,7 +122,7 @@ pub enum SecretMaterial {
     },
     OAuth2 {
         client_id: String,
-        client_secret: String,
+        client_secret: Option<String>,
         refresh_token: String,
         access_token: Option<String>,
         access_token_expires_at_ms: Option<i64>,

@@ -411,6 +411,25 @@ fn e2e_invoke_workspace_scoped_secret_isolated_by_workspace_id() {
         "unexpected error output: {}",
         err
     );
+
+    let err = run_err_text(
+        &dir,
+        &[
+            "invoke",
+            "local/workspace-scope",
+            "--path",
+            "/v1/items",
+            "--credential",
+            "workspace-scope-cred",
+            "--workspace-id",
+            "default",
+        ],
+    );
+    assert!(
+        err.contains("upstream host blocked by SSRF guard"),
+        "workspace-scoped invoke without group should reach request planning, got: {}",
+        err
+    );
 }
 
 #[test]

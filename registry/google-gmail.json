@@ -1,0 +1,68 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "google-gmail",
+  "vaultSecrets": {
+    "GOOGLE_GMAIL_OAUTH": "secret"
+  },
+  "auth": {
+    "o_auth2": {
+      "grant_type": "refresh_token",
+      "token_endpoint": "https://auth.moldable.sh/api/google/refresh",
+      "scopes": [
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.send"
+      ]
+    }
+  },
+  "hosts": ["gmail.googleapis.com", "auth.moldable.sh"],
+  "capabilities": [
+    {
+      "id": "google-gmail/profile",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": ["gmail.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/gmail/v1/users/me/profile"]
+      }
+    },
+    {
+      "id": "google-gmail/labels",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": ["gmail.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": ["/gmail/v1/users/me/labels"]
+      }
+    },
+    {
+      "id": "google-gmail/messages-read",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": ["gmail.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/messages",
+          "/gmail/v1/users/me/messages/"
+        ]
+      }
+    },
+    {
+      "id": "google-gmail/messages-modify",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": ["gmail.googleapis.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/gmail/v1/users/me/messages/"]
+      }
+    },
+    {
+      "id": "google-gmail/send",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": ["gmail.googleapis.com"],
+        "methods": ["POST"],
+        "pathPrefixes": ["/gmail/v1/users/me/messages/send"]
+      }
+    }
+  ]
+}

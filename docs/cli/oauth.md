@@ -72,4 +72,14 @@ This returns a consent URL — open it in a browser to authorize the application
 
 The key insight: aivault manages the **runtime token refresh** automatically. You only need to do the initial consent/exchange once. After that, the broker handles refreshing expired tokens transparently on every invoke.
 
+For public/native OAuth clients that use PKCE, omit `clientSecret` from the secret JSON:
+
+```bash
+aivault secrets create --name GOOGLE_GMAIL_OAUTH \
+  --value-file /path/to/oauth-secret.json \
+  --scope workspace --workspace-id personal
+```
+
+`--value-file` is preferred for token payloads because the secret value does not appear in the process argument list.
+
 Next: [Security](/security)

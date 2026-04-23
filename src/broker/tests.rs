@@ -1447,7 +1447,7 @@ fn story_auth_oauth2_refresh_and_cache() {
         },
         Some(&SecretMaterial::OAuth2 {
             client_id: "cid".to_string(),
-            client_secret: "csec".to_string(),
+            client_secret: Some("csec".to_string()),
             refresh_token: "rt".to_string(),
             access_token: None,
             access_token_expires_at_ms: None,
@@ -1475,7 +1475,7 @@ fn story_auth_oauth2_client_credentials_grant() {
         },
         Some(&SecretMaterial::OAuth2 {
             client_id: "cid".to_string(),
-            client_secret: "csec".to_string(),
+            client_secret: Some("csec".to_string()),
             refresh_token: String::new(),
             access_token: None,
             access_token_expires_at_ms: None,
@@ -1503,7 +1503,7 @@ fn story_auth_oauth2_scopes_applied() {
         },
         Some(&SecretMaterial::OAuth2 {
             client_id: "cid".to_string(),
-            client_secret: "csec".to_string(),
+            client_secret: Some("csec".to_string()),
             refresh_token: String::new(),
             access_token: None,
             access_token_expires_at_ms: None,
@@ -1536,7 +1536,7 @@ fn story_auth_oauth2_consent_outside_broker() {
             },
             SecretMaterial::OAuth2 {
                 client_id: "cid".to_string(),
-                client_secret: "csecret".to_string(),
+                client_secret: Some("csecret".to_string()),
                 refresh_token: "rtok".to_string(),
                 access_token: None,
                 access_token_expires_at_ms: None,

@@ -60,5 +60,25 @@ mod tests {
             .capabilities
             .iter()
             .any(|cap| cap.id == "elevenlabs/transcription"));
+
+        let gmail = registry
+            .provider("google-gmail")
+            .expect("google-gmail provider");
+        assert!(gmail
+            .capabilities
+            .iter()
+            .any(|cap| cap.id == "google-gmail/messages-read"));
+        assert!(gmail
+            .capabilities
+            .iter()
+            .any(|cap| cap.id == "google-gmail/send"));
+
+        let calendar = registry
+            .provider("google-calendar")
+            .expect("google-calendar provider");
+        assert!(calendar
+            .capabilities
+            .iter()
+            .any(|cap| cap.id == "google-calendar/events"));
     }
 }

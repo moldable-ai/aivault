@@ -1,0 +1,41 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "google-calendar",
+  "vaultSecrets": {
+    "GOOGLE_CALENDAR_OAUTH": "secret"
+  },
+  "auth": {
+    "o_auth2": {
+      "grant_type": "refresh_token",
+      "token_endpoint": "https://auth.moldable.sh/api/google/refresh",
+      "scopes": [
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.readonly"
+      ]
+    }
+  },
+  "hosts": ["www.googleapis.com", "auth.moldable.sh"],
+  "capabilities": [
+    {
+      "id": "google-calendar/events",
+      "provider": "google-calendar",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+        "pathPrefixes": ["/calendar/v3/calendars/"]
+      }
+    },
+    {
+      "id": "google-calendar/lists",
+      "provider": "google-calendar",
+      "allow": {
+        "hosts": ["www.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": [
+          "/calendar/v3/users/me/calendarList",
+          "/calendar/v3/users/me/settings"
+        ]
+      }
+    }
+  ]
+}

@@ -132,6 +132,7 @@ Client credentials or refresh token grant. The broker automatically refreshes ex
 ```
 
 The secret value is a JSON object: `{"clientId": "...", "clientSecret": "...", "refreshToken": "..."}`.
+For public/native OAuth clients that use PKCE, omit `clientSecret`.
 
 On each request, the broker:
 1. Checks if the cached access token is expired

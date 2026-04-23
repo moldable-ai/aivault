@@ -157,6 +157,15 @@
       ]
     },
     {
+      "id": "ev-e2e-auth-oauth2-public-refresh-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local_tls.rs",
+      "tests": [
+        "e2e_oauth2_public_refresh_exchanges_without_client_secret"
+      ]
+    },
+    {
       "id": "ev-e2e-auth-oauth2-client-credentials-exchange-test",
       "kind": "tests",
       "automated": true,
@@ -299,7 +308,8 @@
           "slug": "auth-oauth2-refresh-and-cache",
           "story": "As an operator, I want oauth2 credentials to refresh and cache access tokens automatically, so callers get bearer auth without running consent or refresh logic.",
           "evidenceLinks": [
-            "ev-e2e-auth-oauth2-refresh-and-cache-test"
+            "ev-e2e-auth-oauth2-refresh-and-cache-test",
+            "ev-e2e-auth-oauth2-public-refresh-test"
           ],
           "trace": {
             "proofLevel": "e2e",
@@ -345,6 +355,64 @@
               {
                 "evidenceId": "ev-e2e-auth-oauth2-refresh-and-cache-test",
                 "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+              },
+              {
+                "evidenceId": "ev-e2e-auth-oauth2-public-refresh-test",
+                "test": "e2e_oauth2_public_refresh_exchanges_without_client_secret"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "auth-oauth2-public-client-refresh",
+          "story": "As an operator, I want oauth2 refresh_token credentials for public/native clients to refresh without a client secret, so PKCE-based desktop apps can proxy APIs without shipping confidential credentials.",
+          "evidenceLinks": [
+            "ev-e2e-auth-oauth2-public-refresh-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              },
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "apply_auth"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "secret_material_from_bytes"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-auth-oauth2-public-refresh-test",
+                "test": "e2e_oauth2_public_refresh_exchanges_without_client_secret"
               }
             ]
           }

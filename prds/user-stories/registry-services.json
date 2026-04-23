@@ -326,6 +326,34 @@
           }
         },
         {
+          "slug": "regsvc-google-gmail",
+          "story": "As an operator, I want Gmail capabilities (profile, labels, message read, message modify, send) available in the built-in registry with OAuth2 refresh-token auth, so local apps can proxy Gmail APIs without exposing Google credentials.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
+          "slug": "regsvc-google-calendar",
+          "story": "As an operator, I want Google Calendar capabilities (events and calendar list/settings) available in the built-in registry with OAuth2 refresh-token auth, so local apps can proxy Calendar APIs without exposing Google credentials.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
+            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
+            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+          }
+        },
+        {
           "slug": "regsvc-airtable",
           "story": "As an operator, I want Airtable capabilities (records, meta, webhooks) available in the built-in registry, so agents can access Airtable APIs with zero policy authoring.",
           "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
@@ -686,7 +714,8 @@
         "regsvc-anthropic", "regsvc-gemini", "regsvc-openrouter", "regsvc-replicate",
         "regsvc-elevenlabs", "regsvc-deepgram",
         "regsvc-slack", "regsvc-discord", "regsvc-twilio",
-        "regsvc-notion", "regsvc-airtable", "regsvc-linear", "regsvc-hubspot",
+        "regsvc-notion", "regsvc-google-gmail", "regsvc-google-calendar",
+        "regsvc-airtable", "regsvc-linear", "regsvc-hubspot",
         "regsvc-todoist", "regsvc-intercom", "regsvc-calendly",
         "regsvc-github", "regsvc-stripe", "regsvc-resend",
         "regsvc-sendgrid", "regsvc-postmark", "regsvc-mailgun",

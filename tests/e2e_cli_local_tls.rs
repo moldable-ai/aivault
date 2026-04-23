@@ -766,6 +766,91 @@ fn e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache() {
 }
 
 #[test]
+fn e2e_oauth2_public_refresh_exchanges_without_client_secret() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+
+    let secret_id = create_secret(
+        &dir,
+        &envs,
+        "OAUTH_PUBLIC_SECRET",
+        r#"{"clientId":"public-cid","refreshToken":"rt","accessToken":null,"accessTokenExpiresAtMs":0}"#,
+    );
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "oauth-public-cred",
+            "--provider",
+            "oauth",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "oauth2",
+            "--grant-type",
+            "refresh_token",
+            "--token-endpoint",
+            &format!("https://{}/oauth/token", upstream_authority),
+            "--host",
+            &upstream_authority,
+        ],
+        &envs,
+    );
+
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "oauth/public",
+            "--credential",
+            "oauth-public-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/users",
+        ],
+        &envs,
+    );
+
+    let response = run_ok_json(
+        &dir,
+        &["invoke", "oauth/public", "--path", "/v1/users"],
+        &envs,
+    );
+    assert_eq!(response["response"]["status"].as_u64(), Some(200));
+    let upstream = &response["response"]["json"];
+    let auth = upstream["headers"]["authorization"]
+        .as_str()
+        .expect("upstream should receive authorization");
+    assert_eq!(auth, "Bearer at-1");
+
+    let captured = server.captured_requests();
+    let token_req = captured
+        .iter()
+        .find(|req| req.path.starts_with("/oauth/token"))
+        .expect("expected captured token endpoint request");
+    assert!(
+        !token_req.headers.contains_key("authorization"),
+        "public oauth refresh must not use HTTP Basic auth"
+    );
+    assert!(
+        token_req.body.contains("client_id=public-cid"),
+        "expected token endpoint request body to include client_id"
+    );
+    assert!(
+        token_req.body.contains("refresh_token=rt"),
+        "expected token endpoint request body to include refresh_token"
+    );
+}
+
+#[test]
 fn e2e_oauth2_client_credentials_exchanges_token_writes_back_and_reuses_cache() {
     let server = LocalTlsEchoServer::start("upstream.test");
     let envs = server.env_pairs();

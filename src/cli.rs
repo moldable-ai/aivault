@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -232,7 +234,9 @@ pub enum SecretsCommand {
         #[arg(long)]
         name: String,
         #[arg(long)]
-        value: String,
+        value: Option<String>,
+        #[arg(long)]
+        value_file: Option<PathBuf>,
         #[arg(long, value_enum, default_value_t = ScopeKind::Global)]
         scope: ScopeKind,
         #[arg(long)]
@@ -258,7 +262,9 @@ pub enum SecretsCommand {
         #[arg(long)]
         id: String,
         #[arg(long)]
-        value: String,
+        value: Option<String>,
+        #[arg(long)]
+        value_file: Option<PathBuf>,
     },
     /// Revoke and delete a secret
     Delete {

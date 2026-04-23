@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use std::net::IpAddr;
 #[cfg(debug_assertions)]
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use base64::Engine;
 use reqwest::blocking::multipart::Form;
@@ -817,6 +818,26 @@ fn run_init(
 }
 
 fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), String> {
+    fn read_secret_input(
+        value: Option<String>,
+        value_file: Option<PathBuf>,
+    ) -> Result<Vec<u8>, String> {
+        match (value, value_file) {
+            (Some(value), None) => Ok(value.into_bytes()),
+            (None, Some(path)) => std::fs::read(&path).map_err(|e| {
+                format!(
+                    "failed to read secret value file '{}': {}",
+                    path.display(),
+                    e
+                )
+            }),
+            (Some(_), Some(_)) => {
+                Err("provide either --value or --value-file, not both".to_string())
+            }
+            (None, None) => Err("provide --value or --value-file".to_string()),
+        }
+    }
+
     match command {
         SecretsCommand::List {
             scope,
@@ -844,14 +865,16 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
         SecretsCommand::Create {
             name,
             value,
+            value_file,
             scope,
             workspace_id,
             group_id,
             alias,
         } => {
+            let value = read_secret_input(value, value_file)?;
             let scope = parse_secret_scope(scope, workspace_id.as_deref(), group_id.as_deref())?;
             let mut meta = vault
-                .create_secret(&name, value.as_bytes(), scope, alias)
+                .create_secret(&name, &value, scope, alias)
                 .map_err(|e| e.to_string())?;
             if let Ok(registry) = crate::registry::builtin_registry() {
                 if let Some(template) =
@@ -887,9 +910,14 @@ fn run_secrets(vault: &VaultRuntime, command: SecretsCommand) -> Result<(), Stri
                 .map_err(|e| e.to_string())?;
             print_json(&meta)
         }
-        SecretsCommand::Rotate { id, value } => {
+        SecretsCommand::Rotate {
+            id,
+            value,
+            value_file,
+        } => {
+            let value = read_secret_input(value, value_file)?;
             let meta = vault
-                .rotate_secret_value(&id, value.as_bytes())
+                .rotate_secret_value(&id, &value)
                 .map_err(|e| e.to_string())?;
             print_json(&meta)
         }
@@ -2402,9 +2430,6 @@ fn normalize_invoke_context<'a>(
     if group_id.is_some() && ws.is_none() {
         return Err("--workspace-id is required when --group-id is provided".to_string());
     }
-    if ws.is_some() && group_id.is_none() {
-        return Err("--group-id is required when --workspace-id is provided".to_string());
-    }
     Ok((ws, group_id))
 }
 
@@ -2956,12 +2981,17 @@ fn refresh_oauth2_and_writeback(
     } = material
     else {
         return Err(
-            "oauth2 secret must be JSON with clientId/clientSecret/refreshToken".to_string(),
+            "oauth2 secret must be JSON with clientId and refreshToken/clientSecret as required"
+                .to_string(),
         );
     };
 
-    if client_id.trim().is_empty() || client_secret.trim().is_empty() {
-        return Err("missing oauth2 client credentials".to_string());
+    if client_id.trim().is_empty() {
+        return Err("missing oauth2 client id".to_string());
+    }
+    let client_secret = client_secret.filter(|secret| !secret.trim().is_empty());
+    if grant_type.eq_ignore_ascii_case("client_credentials") && client_secret.is_none() {
+        return Err("missing oauth2 client secret".to_string());
     }
 
     let token_url = reqwest::Url::parse(token_endpoint)
@@ -3014,10 +3044,11 @@ fn refresh_oauth2_and_writeback(
         }
     }
 
-    let response = client
-        .post(token_url)
-        .basic_auth(client_id.clone(), Some(client_secret.clone()))
-        .form(&params)
+    let mut request = client.post(token_url).form(&params);
+    if let Some(secret) = client_secret.as_ref() {
+        request = request.basic_auth(client_id.clone(), Some(secret.clone()));
+    }
+    let response = request
         .send()
         .map_err(|e| format!("oauth2 token exchange failed: {}", format_reqwest_error(&e)))?;
 
@@ -3052,7 +3083,8 @@ fn refresh_oauth2_and_writeback(
     #[serde(rename_all = "camelCase")]
     struct OAuth2SecretWrite {
         client_id: String,
-        client_secret: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_secret: Option<String>,
         #[serde(default)]
         refresh_token: String,
         access_token: Option<String>,
@@ -3859,9 +3891,7 @@ fn resolve_secret_ref_for_context(
     if group_id.is_some() && ws.is_none() {
         return Err("--workspace-id is required when --group-id is provided".to_string());
     }
-    if let Some(ws) = ws {
-        let group_id = group_id
-            .ok_or_else(|| "--group-id is required when --workspace-id is provided".to_string())?;
+    if let (Some(ws), Some(group_id)) = (ws, group_id) {
         return vault
             .resolve_secret_ref_for_group(secret_ref, ws, group_id, capability, consumer)
             .map_err(|e| e.to_string());
@@ -3949,7 +3979,8 @@ fn secret_material_from_bytes(auth: &AuthStrategy, raw: Vec<u8>) -> Result<Secre
     #[serde(rename_all = "camelCase")]
     struct OAuth2Secret {
         client_id: String,
-        client_secret: String,
+        #[serde(default)]
+        client_secret: Option<String>,
         #[serde(default)]
         refresh_token: String,
         #[serde(default)]
@@ -4018,7 +4049,8 @@ fn secret_material_from_bytes(auth: &AuthStrategy, raw: Vec<u8>) -> Result<Secre
         }
         AuthStrategy::OAuth2 { .. } => {
             let parsed: OAuth2Secret = serde_json::from_slice(&raw).map_err(|_| {
-                "oauth2 secret must be JSON with clientId/clientSecret/refreshToken".to_string()
+                "oauth2 secret must be JSON with clientId and refreshToken/clientSecret as required"
+                    .to_string()
             })?;
             Ok(SecretMaterial::OAuth2 {
                 client_id: parsed.client_id,
@@ -4937,7 +4969,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "OPENAI_API_KEY".to_string(),
-                value: "sk-test".to_string(),
+                value: Some("sk-test".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
@@ -4978,7 +5011,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "TRELLO_API_KEY".to_string(),
-                value: "k-1".to_string(),
+                value: Some("k-1".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
@@ -4994,7 +5028,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "TRELLO_TOKEN".to_string(),
-                value: "t-1".to_string(),
+                value: Some("t-1".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
@@ -5038,7 +5073,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "OPENAI_API_KEY".to_string(),
-                value: "sk-initial".to_string(),
+                value: Some("sk-initial".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
@@ -5164,7 +5200,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "OPENAI_API_KEY".to_string(),
-                value: "sk-test".to_string(),
+                value: Some("sk-test".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
@@ -5218,7 +5255,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "OPENAI_API_KEY".to_string(),
-                value: "sk-test".to_string(),
+                value: Some("sk-test".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
@@ -5267,7 +5305,8 @@ mod tests {
             &vault,
             SecretsCommand::Create {
                 name: "OPENAI_API_KEY".to_string(),
-                value: "sk-test".to_string(),
+                value: Some("sk-test".to_string()),
+                value_file: None,
                 scope: ScopeKind::Global,
                 workspace_id: None,
                 group_id: None,
