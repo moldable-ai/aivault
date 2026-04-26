@@ -211,6 +211,15 @@
       ]
     },
     {
+      "id": "ev-e2e-vault-oauth-upstream-401-refresh-retry-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_cli_local_tls.rs",
+      "tests": [
+        "e2e_oauth2_upstream_401_forces_refresh_and_retries_once"
+      ]
+    },
+    {
       "id": "ev-broker-vault-per-tenant-host-binding-with-registry-test",
       "kind": "tests",
       "automated": true,
@@ -533,6 +542,60 @@
               {
                 "evidenceId": "ev-e2e-vault-oauth-secret-writeback-test",
                 "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-broker-oauth-upstream-401-refresh-retry",
+          "story": "As an app runtime, I want OAuth-backed upstream 401 responses to force-refresh the access token and retry the original request once, so an unexpectedly expired access token heals without surfacing an avoidable auth error.",
+          "evidenceLinks": [
+            "ev-e2e-vault-oauth-upstream-401-refresh-retry-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "force_refresh_oauth2_credential_for_retry"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_oauth2_and_writeback"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "response_status"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-e2e-vault-oauth-upstream-401-refresh-retry-test",
+                "test": "e2e_oauth2_upstream_401_forces_refresh_and_retries_once"
               }
             ]
           }

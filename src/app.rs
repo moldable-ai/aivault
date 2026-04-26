@@ -32,6 +32,8 @@ use crate::vault::{
     VaultRuntime,
 };
 
+const OAUTH2_REFRESH_SKEW_MS: i64 = 5 * 60 * 1000;
+
 pub fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Command::Invoke { args } => run_invoke_thin_or_local(args, InvokeOutputMode::Raw),
@@ -2817,9 +2819,32 @@ pub(crate) fn run_capability_envelope(
     workspace_id: Option<&str>,
     group_id: Option<&str>,
 ) -> Result<Value, String> {
+    let retry_envelope = envelope.clone();
     let (broker, planned) =
         plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
-    execute_planned_http_request(&broker, &planned)
+    let response = execute_planned_http_request(&broker, &planned)?;
+
+    if response_status(&response) == Some(401)
+        && force_refresh_oauth2_credential_for_retry(
+            vault,
+            store,
+            &planned.credential,
+            workspace_id,
+            group_id,
+        )?
+    {
+        let (retry_broker, retry_planned) = plan_capability_envelope(
+            vault,
+            store,
+            retry_envelope,
+            client_ip,
+            workspace_id,
+            group_id,
+        )?;
+        return execute_planned_http_request(&retry_broker, &retry_planned);
+    }
+
+    Ok(response)
 }
 
 pub(crate) fn run_capability_envelope_streaming<F>(
@@ -2903,6 +2928,14 @@ fn plan_capability_envelope(
     Ok((broker, planned))
 }
 
+fn response_status(response: &Value) -> Option<u16> {
+    response
+        .get("response")
+        .and_then(|value| value.get("status"))
+        .and_then(|value| value.as_u64())
+        .and_then(|value| u16::try_from(value).ok())
+}
+
 fn refresh_oauth2_for_envelope(
     vault: &VaultRuntime,
     store: &BrokerStore,
@@ -2932,11 +2965,39 @@ fn refresh_oauth2_for_envelope(
         workspace_id,
         group_id,
         &client,
+        false,
     )?;
     broker
         .upsert_secret_material(&credential.id, refreshed)
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn force_refresh_oauth2_credential_for_retry(
+    vault: &VaultRuntime,
+    store: &BrokerStore,
+    credential_id: &str,
+    workspace_id: Option<&str>,
+    group_id: Option<&str>,
+) -> Result<bool, String> {
+    let Some(stored) = store.credentials().iter().find(|c| c.id == credential_id) else {
+        return Ok(false);
+    };
+    if !matches!(stored.auth, AuthStrategy::OAuth2 { .. }) {
+        return Ok(false);
+    }
+
+    let client = build_http_client_with_dev_overrides()?;
+    refresh_oauth2_and_writeback(
+        vault,
+        store,
+        credential_id,
+        workspace_id,
+        group_id,
+        &client,
+        true,
+    )?;
+    Ok(true)
 }
 
 fn refresh_oauth2_and_writeback(
@@ -2946,6 +3007,7 @@ fn refresh_oauth2_and_writeback(
     workspace_id: Option<&str>,
     group_id: Option<&str>,
     client: &Client,
+    force: bool,
 ) -> Result<SecretMaterial, String> {
     let stored = store
         .credentials()
@@ -2973,7 +3035,6 @@ fn refresh_oauth2_and_writeback(
     let material = secret_material_from_bytes(&stored.auth, secret_bytes.clone())?;
 
     let now_ms = chrono::Utc::now().timestamp_millis();
-    let skew_ms = 30_000i64;
     if let SecretMaterial::OAuth2 {
         client_id: _,
         client_secret: _,
@@ -2982,7 +3043,7 @@ fn refresh_oauth2_and_writeback(
         access_token_expires_at_ms: Some(expires_at),
     } = &material
     {
-        if *expires_at > now_ms + skew_ms {
+        if !force && *expires_at > now_ms + OAUTH2_REFRESH_SKEW_MS {
             return Ok(material);
         }
     }

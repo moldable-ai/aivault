@@ -49,6 +49,7 @@ async fn echo_handler(
         );
     }
 
+    let body_text = String::from_utf8_lossy(&body).to_string();
     let captured = CapturedRequest {
         method: method.to_string(),
         path: uri
@@ -56,7 +57,7 @@ async fn echo_handler(
             .map(|pq| pq.as_str().to_string())
             .unwrap_or_else(|| "/".to_string()),
         headers: header_map.clone(),
-        body: String::from_utf8_lossy(&body).to_string(),
+        body: body_text.clone(),
     };
     state
         .requests
@@ -68,7 +69,11 @@ async fn echo_handler(
         // Minimal oauth2 token endpoint stub for e2e tests.
         let mut issued = state.oauth_issued.lock().expect("lock oauth counter");
         *issued += 1;
-        let token = format!("at-{}", *issued);
+        let token = if body_text.contains("refresh_token=rt-stale") {
+            "at-2".to_string()
+        } else {
+            format!("at-{}", *issued)
+        };
         return Json(serde_json::json!({
             "access_token": token,
             "token_type": "Bearer",
@@ -99,6 +104,15 @@ async fn echo_handler(
             .header("content-type", "text/event-stream")
             .body(Body::from_stream(body_stream))
             .expect("build streaming response");
+    }
+
+    if uri.path() == "/requires-fresh-token"
+        && header_map
+            .get("authorization")
+            .map(|value| value == "Bearer at-1")
+            .unwrap_or(false)
+    {
+        return (axum::http::StatusCode::UNAUTHORIZED, "expired access token").into_response();
     }
 
     Json(serde_json::json!({
@@ -762,6 +776,118 @@ fn e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache() {
     assert!(
         token_req.body.contains("scope=s1"),
         "expected token endpoint request body to include scope"
+    );
+}
+
+#[test]
+fn e2e_oauth2_upstream_401_forces_refresh_and_retries_once() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+    let valid_until = chrono::Utc::now().timestamp_millis() + 60 * 60 * 1000;
+    let secret_id = create_secret(
+        &dir,
+        &envs,
+        "OAUTH_STALE_SECRET",
+        &format!(
+            r#"{{"clientId":"cid","clientSecret":"csec","refreshToken":"rt-stale","accessToken":"at-1","accessTokenExpiresAtMs":{valid_until}}}"#
+        ),
+    );
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "oauth-stale-cred",
+            "--provider",
+            "oauth",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "oauth2",
+            "--grant-type",
+            "refresh_token",
+            "--token-endpoint",
+            &format!("https://{}/oauth/token", upstream_authority),
+            "--host",
+            &upstream_authority,
+        ],
+        &envs,
+    );
+
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "oauth/stale-retry",
+            "--credential",
+            "oauth-stale-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/requires-fresh-token",
+        ],
+        &envs,
+    );
+
+    let response = run_ok_json(
+        &dir,
+        &[
+            "invoke",
+            "oauth/stale-retry",
+            "--path",
+            "/requires-fresh-token",
+        ],
+        &envs,
+    );
+    assert_eq!(response["response"]["status"].as_u64(), Some(200));
+    let upstream = &response["response"]["json"];
+    assert_eq!(
+        upstream["headers"]["authorization"].as_str(),
+        Some("Bearer at-2")
+    );
+
+    let captured = server.captured_requests();
+    let token_calls = captured
+        .iter()
+        .filter(|req| req.path.starts_with("/oauth/token"))
+        .count();
+    assert_eq!(
+        token_calls, 1,
+        "401 from upstream should force exactly one refresh"
+    );
+
+    let protected_calls: Vec<_> = captured
+        .iter()
+        .filter(|req| req.path.contains("/requires-fresh-token"))
+        .collect();
+    assert_eq!(
+        protected_calls.len(),
+        2,
+        "request should be retried once; captured paths: {:?}",
+        captured
+            .iter()
+            .map(|req| req.path.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        protected_calls[0]
+            .headers
+            .get("authorization")
+            .map(String::as_str),
+        Some("Bearer at-1")
+    );
+    assert_eq!(
+        protected_calls[1]
+            .headers
+            .get("authorization")
+            .map(String::as_str),
+        Some("Bearer at-2")
     );
 }
 
