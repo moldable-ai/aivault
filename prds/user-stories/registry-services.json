@@ -327,7 +327,7 @@
         },
         {
           "slug": "regsvc-google-gmail",
-          "story": "As an operator, I want Gmail capabilities (profile, labels, message read, message modify, send) available in the built-in registry with OAuth2 refresh-token auth, so local apps can proxy Gmail APIs without exposing Google credentials.",
+          "story": "As an operator, I want Gmail capabilities (profile, labels, message read, message modify, send, contacts read) available in the built-in registry with OAuth2 refresh-token auth, so local apps can proxy Gmail APIs without exposing Google credentials.",
           "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
           "trace": {
             "proofLevel": "runtime",

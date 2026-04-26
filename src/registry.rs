@@ -72,6 +72,10 @@ mod tests {
             .capabilities
             .iter()
             .any(|cap| cap.id == "google-gmail/send"));
+        assert!(gmail
+            .capabilities
+            .iter()
+            .any(|cap| cap.id == "google-gmail/contacts-read"));
 
         let calendar = registry
             .provider("google-calendar")

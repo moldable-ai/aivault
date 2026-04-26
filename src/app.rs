@@ -1109,6 +1109,23 @@ fn hosts_within_registry_policy(template: &ProviderTemplate, hosts: &[String]) -
         })
 }
 
+fn registry_hosts_with_existing_overrides(
+    template: &ProviderTemplate,
+    existing_hosts: &[String],
+) -> Vec<String> {
+    if !hosts_within_registry_policy(template, existing_hosts) {
+        return template.hosts.clone();
+    }
+
+    let mut hosts = existing_hosts.to_vec();
+    for registry_host in &template.hosts {
+        if !hosts.iter().any(|host| host == registry_host) {
+            hosts.push(registry_host.clone());
+        }
+    }
+    hosts
+}
+
 fn registry_secret_ref_for_template_scope(
     vault: &VaultRuntime,
     template: &ProviderTemplate,
@@ -1239,9 +1256,7 @@ fn derive_registry_credentials_from_vault(
                     .iter()
                     .find(|c| c.id == cred_id && c.provider == template.provider)
                 {
-                    if hosts_within_registry_policy(&template, &existing.hosts) {
-                        hosts = existing.hosts.clone();
-                    }
+                    hosts = registry_hosts_with_existing_overrides(&template, &existing.hosts);
                 }
             }
 
@@ -1274,6 +1289,9 @@ fn maybe_autoprovision_registry_credential(
     let secrets = vault.list_secrets().map_err(|e| e.to_string())?;
     let mut by_name: HashMap<String, crate::vault::SecretMeta> = HashMap::new();
     for meta in secrets {
+        if meta.revoked_at_ms.is_some() {
+            continue;
+        }
         if &meta.scope == scope {
             by_name.insert(meta.name.clone(), meta);
         }
@@ -5189,6 +5207,132 @@ mod tests {
             .unwrap();
         assert_eq!(planned.credential, "openai");
         assert_eq!(planned.host, "api.openai.com");
+    }
+
+    #[test]
+    fn runtime_merges_new_registry_hosts_into_existing_registry_credentials() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+
+        super::run_secrets(
+            &vault,
+            SecretsCommand::Create {
+                name: "GOOGLE_GMAIL_OAUTH".to_string(),
+                value: Some(
+                    r#"{"clientId":"client-test","refreshToken":"refresh-test"}"#.to_string(),
+                ),
+                value_file: None,
+                scope: ScopeKind::Workspace,
+                workspace_id: Some("personal".to_string()),
+                group_id: None,
+                alias: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        let mut legacy = store
+            .credentials()
+            .iter()
+            .find(|c| c.id == "google-gmail:ws:personal")
+            .cloned()
+            .expect("gmail credential should be auto-provisioned");
+        legacy.hosts = vec![
+            "gmail.googleapis.com".to_string(),
+            "auth.moldable.sh".to_string(),
+        ];
+        store.upsert_credential(legacy);
+        store.save().unwrap();
+
+        let broker = load_runtime_broker_for_context(
+            &vault,
+            &store,
+            Some("personal"),
+            Some("personal"),
+            None,
+        )
+        .unwrap();
+
+        let credential = broker
+            .credentials()
+            .into_iter()
+            .find(|c| c.id == "google-gmail:ws:personal")
+            .expect("gmail credential should be available");
+        assert_eq!(
+            credential.hosts,
+            vec![
+                "gmail.googleapis.com",
+                "auth.moldable.sh",
+                "people.googleapis.com"
+            ]
+        );
+    }
+
+    #[test]
+    fn registry_autoprovision_ignores_revoked_secret_generations() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+
+        super::run_secrets(
+            &vault,
+            SecretsCommand::Create {
+                name: "GOOGLE_GMAIL_OAUTH".to_string(),
+                value: Some(
+                    r#"{"clientId":"client-test","refreshToken":"refresh-old"}"#.to_string(),
+                ),
+                value_file: None,
+                scope: ScopeKind::Workspace,
+                workspace_id: Some("personal".to_string()),
+                group_id: None,
+                alias: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let old_secret = vault
+            .list_secrets()
+            .unwrap()
+            .into_iter()
+            .find(|m| m.name == "GOOGLE_GMAIL_OAUTH" && m.revoked_at_ms.is_none())
+            .expect("gmail secret should exist");
+        vault.revoke_secret(&old_secret.secret_id).unwrap();
+
+        super::run_secrets(
+            &vault,
+            SecretsCommand::Create {
+                name: "GOOGLE_GMAIL_OAUTH".to_string(),
+                value: Some(
+                    r#"{"clientId":"client-test","refreshToken":"refresh-new"}"#.to_string(),
+                ),
+                value_file: None,
+                scope: ScopeKind::Workspace,
+                workspace_id: Some("personal".to_string()),
+                group_id: None,
+                alias: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let active_secret = vault
+            .list_secrets()
+            .unwrap()
+            .into_iter()
+            .find(|m| m.name == "GOOGLE_GMAIL_OAUTH" && m.revoked_at_ms.is_none())
+            .expect("replacement gmail secret should exist");
+        let store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        let credential = store
+            .credentials()
+            .iter()
+            .find(|c| c.id == "google-gmail:ws:personal")
+            .expect("gmail credential should be auto-provisioned");
+
+        assert_eq!(
+            credential.secret_ref,
+            SecretRef {
+                secret_id: active_secret.secret_id
+            }
+            .to_string()
+        );
     }
 
     #[test]

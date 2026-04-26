@@ -10,11 +10,12 @@
       "token_endpoint": "https://auth.moldable.sh/api/google/refresh",
       "scopes": [
         "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/gmail.send"
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/contacts.readonly"
       ]
     }
   },
-  "hosts": ["gmail.googleapis.com", "auth.moldable.sh"],
+  "hosts": ["gmail.googleapis.com", "people.googleapis.com", "auth.moldable.sh"],
   "capabilities": [
     {
       "id": "google-gmail/profile",
@@ -62,6 +63,18 @@
         "hosts": ["gmail.googleapis.com"],
         "methods": ["POST"],
         "pathPrefixes": ["/gmail/v1/users/me/messages/send"]
+      }
+    },
+    {
+      "id": "google-gmail/contacts-read",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": ["people.googleapis.com"],
+        "methods": ["GET"],
+        "pathPrefixes": [
+          "/v1/people/me/connections",
+          "/v1/people:searchContacts"
+        ]
       }
     }
   ]
