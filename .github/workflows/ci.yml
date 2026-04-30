@@ -30,6 +30,9 @@ jobs:
           cargo clippy --all-targets --all-features -- -D warnings
           cargo clippy --manifest-path providers/postgres/Cargo.toml --all-targets -- -D warnings
 
+      - name: Skill docs sync
+        run: node scripts/sync-skills.js --check
+
       - name: Test
         run: |
           cargo test --all-targets
