@@ -10,6 +10,8 @@ curl -fsSL https://aivault.moldable.sh/install.sh | sh
 ```
 
 This installs prebuilt `aivault` and `aivaultd` binaries for macOS/Linux to `~/.local/bin` by default.
+It also copies bundled official provider plugin binaries, such as Postgres, under
+`~/.local/bin/providers/`.
 
 Script URL: https://aivault.moldable.sh/install.sh
 
@@ -22,6 +24,9 @@ cargo install aivault --locked
 This installs both binaries:
 - `aivault`
 - `aivaultd`
+
+It does not install optional provider plugin binaries. Use the install script or release artifacts
+when you need bundled providers such as Postgres.
 
 Crate page: https://crates.io/crates/aivault
 
@@ -45,6 +50,12 @@ cargo build --release
 Download the latest release from the GitHub releases page. Artifacts are available for macOS (arm64, x86_64) and Linux (x86_64).
 
 macOS releases are signed and notarized. Linux releases include cosign keyless signatures for CI-driven verification.
+
+Release artifacts include:
+
+- `aivault`
+- `aivaultd`
+- `providers/postgres/aivault-provider-postgres`
 
 ### Verify downloads
 
@@ -77,8 +88,15 @@ cosign verify-blob \
 ```bash
 aivault status
 aivaultd --version
+aivault provider list -v
 ```
 
 This auto-initializes the vault with safe defaults (macOS Keychain on macOS) if no vault exists yet.
+
+To activate an optional provider:
+
+```bash
+aivault provider install postgres --enable
+```
 
 Next: [Getting started](/getting-started)

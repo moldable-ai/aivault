@@ -40,6 +40,7 @@
           "cli/vault-lifecycle",
           "cli/secrets",
           "cli/credentials",
+          "cli/providers",
           "cli/capabilities",
           "cli/invoke",
           "cli/oauth"
@@ -60,6 +61,13 @@
           "registry/index",
           "registry/custom-providers",
           "registry/schema"
+        ]
+      },
+      {
+        "group": "Providers",
+        "pages": [
+          "providers/index",
+          "providers/postgres"
         ]
       },
       {

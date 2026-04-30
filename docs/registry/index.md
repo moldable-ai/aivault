@@ -31,3 +31,5 @@ This tells the system: "when someone stores `OPENAI_API_KEY`, pin it to `openai`
 
 - [Custom providers](/registry/custom-providers) — adding providers not in the built-in registry
 - [Registry schema](/registry/schema) — the JSON schema for registry provider definitions
+
+For non-HTTP provider binaries such as Postgres, see [Provider plugins](/providers).

@@ -98,6 +98,25 @@ Browse and inspect available capabilities:
 - `aivault capability delete <id>`
 - `aivault capability policy set --capability <id> [--rate-limit-per-minute ...] [--max-request-body-bytes ...] [--max-response-body-bytes ...] [--response-block ...]`
 
+### Provider plugins
+
+Provider plugins are official optional binaries for capabilities that need non-HTTP client
+libraries. They can be bundled beside aivault but are installed and enabled only when needed.
+
+- `aivault provider list [-v]` — list official provider plugins and install status
+- `aivault provider install postgres [--enable] [--from <path>]`
+- `aivault provider enable postgres`
+- `aivault provider disable postgres`
+- `aivault provider remove postgres`
+
+Postgres capabilities use this plugin path, so the main aivault binary does not link the
+Postgres client dependency. Build the official provider from source with
+`pnpm provider:build:postgres`; installers can bundle the resulting provider binary for
+offline install.
+
+Provider-specific docs:
+- [Postgres provider](docs/providers/postgres.md)
+
 ### Capability bindings
 
 - `aivault capability bindings [--capability ... --scope ... --consumer ...] [-v]` — list capability-to-secret bindings

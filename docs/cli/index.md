@@ -12,6 +12,7 @@ Commands default to colored human-readable output. Many list/status commands acc
 | [Vault lifecycle](/cli/vault-lifecycle) | `status`, `init`, `unlock`, `lock`, `rotate-master`, `audit` |
 | [Secrets](/cli/secrets) | `secrets create`, `list`, `update`, `rotate`, `delete`, `import` |
 | [Credentials](/cli/credentials) | `credential create`, `list`, `delete` |
+| [Provider plugins](/cli/providers) | `provider list`, `install`, `enable`, `disable`, `remove` |
 | [Capabilities](/cli/capabilities) | `capability list`, `describe`, `create`, `delete`, `policy`, `bind`, `unbind`, `bindings` |
 | [Invoke](/cli/invoke) | `invoke`, `json`, `markdown` |
 | [OAuth](/cli/oauth) | `oauth setup` |

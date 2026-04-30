@@ -1,0 +1,4 @@
+docker_compose("docker-compose.yml")
+dc_resource("postgres", labels=["Database"])
+
+print("PostgreSQL fixture: localhost:55432 (postgres/postgres), database aivault_postgres_test")

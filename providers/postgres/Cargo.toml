@@ -1,0 +1,19 @@
+[package]
+name = "aivault-provider-postgres"
+version = "0.1.0"
+edition = "2021"
+description = "Official aivault Postgres provider plugin"
+license = "Apache-2.0"
+
+[[bin]]
+name = "aivault-provider-postgres"
+path = "src/main.rs"
+
+[dependencies]
+native-tls = "0.2"
+percent-encoding = "2"
+postgres = "0.19"
+postgres-native-tls = "0.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+url = "2"

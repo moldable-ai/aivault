@@ -90,15 +90,18 @@ jobs:
 
       - name: Build (release)
         run: |
-          cargo build --release --locked --all-features --target ${{ matrix.target }} --bin aivault --bin aivaultd
+          cargo build --release --locked --target ${{ matrix.target }} --bin aivault --bin aivaultd
+          cargo build --manifest-path providers/postgres/Cargo.toml --release --locked --target ${{ matrix.target }}
 
       - name: Package (macOS)
         if: startsWith(matrix.platform, 'macos')
         run: |
           mkdir -p dist
+          mkdir -p dist/providers/postgres
           cp target/${{ matrix.target }}/release/aivault dist/aivault
           cp target/${{ matrix.target }}/release/aivaultd dist/aivaultd
-          chmod +x dist/aivault dist/aivaultd
+          cp providers/postgres/target/${{ matrix.target }}/release/aivault-provider-postgres dist/providers/postgres/aivault-provider-postgres
+          chmod +x dist/aivault dist/aivaultd dist/providers/postgres/aivault-provider-postgres
 
       - name: Sign binaries (macOS)
         if: startsWith(matrix.platform, 'macos')
@@ -128,7 +131,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
 
-          for bin in dist/aivault dist/aivaultd; do
+          for bin in dist/aivault dist/aivaultd dist/providers/postgres/aivault-provider-postgres; do
             codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp --keychain "$KEYCHAIN_PATH" "$bin"
           done
 
@@ -139,7 +142,7 @@ jobs:
         if: startsWith(matrix.platform, 'macos')
         run: |
           cd dist
-          zip -r "../aivault-${{ matrix.target }}.zip" aivault aivaultd
+          zip -r "../aivault-${{ matrix.target }}.zip" aivault aivaultd providers
           shasum -a 256 "../aivault-${{ matrix.target }}.zip" > "../aivault-${{ matrix.target }}.zip.sha256"
 
       - name: Notarize zip (macOS)
@@ -160,10 +163,12 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: |
           mkdir -p dist
+          mkdir -p dist/providers/postgres
           cp target/${{ matrix.target }}/release/aivault dist/aivault
           cp target/${{ matrix.target }}/release/aivaultd dist/aivaultd
-          chmod +x dist/aivault dist/aivaultd
-          tar -czf "aivault-${{ matrix.target }}.tar.gz" -C dist aivault aivaultd
+          cp providers/postgres/target/${{ matrix.target }}/release/aivault-provider-postgres dist/providers/postgres/aivault-provider-postgres
+          chmod +x dist/aivault dist/aivaultd dist/providers/postgres/aivault-provider-postgres
+          tar -czf "aivault-${{ matrix.target }}.tar.gz" -C dist aivault aivaultd providers
           sha256sum "aivault-${{ matrix.target }}.tar.gz" > "aivault-${{ matrix.target }}.tar.gz.sha256"
 
       - name: Install cosign (Linux)

@@ -109,6 +109,11 @@ pub enum Command {
         #[command(subcommand)]
         command: CredentialCommand,
     },
+    /// Manage installable provider plugins
+    Provider {
+        #[command(subcommand)]
+        command: ProviderCommand,
+    },
     /// Manage capability definitions (list, describe, invoke)
     Capability {
         #[command(subcommand)]
@@ -420,6 +425,42 @@ pub enum CredentialCommand {
     },
     /// Delete a credential
     Delete {
+        #[arg()]
+        id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProviderCommand {
+    /// List official and installed provider plugins
+    List {
+        /// Show full JSON detail
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Install an official provider plugin into the local vault
+    Install {
+        #[arg()]
+        id: String,
+        /// Use an explicit provider binary path instead of auto-discovering a bundled binary.
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// Enable the provider immediately after install.
+        #[arg(long)]
+        enable: bool,
+    },
+    /// Enable an installed provider plugin
+    Enable {
+        #[arg()]
+        id: String,
+    },
+    /// Disable an installed provider plugin without deleting it
+    Disable {
+        #[arg()]
+        id: String,
+    },
+    /// Remove an installed provider plugin
+    Remove {
         #[arg()]
         id: String,
     },

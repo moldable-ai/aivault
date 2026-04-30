@@ -78,6 +78,55 @@
       "tests": [
         "resolve_uses_latest_secret_ref_override_for_same_binding_key"
       ]
+    },
+    {
+      "id": "ev-postgres-capability-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "providers/postgres/src/main.rs",
+      "tests": [
+        "read_only_sql_accepts_select_and_rejects_mutation_tokens",
+        "postgres_url_secret_parses_connection_without_query_metadata",
+        "postgres_url_secret_parses_remote_hosts_and_sslmode"
+      ]
+    },
+    {
+      "id": "ev-postgres-capability-e2e",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/e2e_postgres.rs",
+      "tests": [
+        "e2e_postgres_capabilities_query_fixture_database"
+      ]
+    },
+    {
+      "id": "ev-postgres-capability-code",
+      "kind": "code",
+      "automated": false,
+      "files": [
+        "src/postgres_capabilities.rs",
+        "src/provider_plugins.rs",
+        "src/app.rs",
+        "providers/postgres/src/main.rs"
+      ],
+      "references": [
+        "run_postgres_capability",
+        "invoke_provider",
+        "run_capability_envelope"
+      ]
+    }
+  ],
+  "knownCoverageGaps": [
+    {
+      "description": "Postgres network execution is covered by a gated Docker fixture test, but the default test command does not start Docker or require a live Postgres server.",
+      "storySlugs": [
+        "cap-postgres-readonly-broker"
+      ],
+      "references": [
+        "src/postgres_capabilities.rs",
+        "tests/e2e_postgres.rs",
+        "read_only_sql_accepts_select_and_rejects_mutation_tokens"
+      ]
     }
   ],
   "sections": [
@@ -319,6 +368,85 @@
               {
                 "evidenceId": "ev-broker-cap-user-defined-capabilities-test",
                 "test": "story_cap_user_defined_capabilities"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cap-postgres-provider",
+      "group": "Capabilities",
+      "title": "Postgres Capability Provider",
+      "stories": [
+        {
+          "slug": "cap-postgres-readonly-broker",
+          "story": "As a Moldable app, I want Postgres access through aivault-owned read-only capabilities, so agents can inspect database metadata and rows without receiving database credentials.",
+          "evidenceLinks": [
+            "ev-postgres-capability-tests",
+            "ev-postgres-capability-e2e",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "partial",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              },
+              {
+                "file": "src/provider_plugins.rs",
+                "symbol": "invoke_provider"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_host_allowed"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_read_only_sql"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_read_only"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "response_envelope"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "read_only_sql_accepts_select_and_rejects_mutation_tokens"
+              },
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "postgres_url_secret_parses_connection_without_query_metadata"
+              },
+              {
+                "evidenceId": "ev-postgres-capability-e2e",
+                "test": "e2e_postgres_capabilities_query_fixture_database"
               }
             ]
           }

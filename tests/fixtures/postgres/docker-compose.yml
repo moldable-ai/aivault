@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: aivault-postgres-e2e
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aivault_postgres_test
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aivault_postgres_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 20

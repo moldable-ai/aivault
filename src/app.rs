@@ -23,7 +23,8 @@ use crate::broker_store::{BrokerStore, StoredCapabilityPolicy, StoredCredential}
 use crate::capabilities::{CapabilityScope, CapabilityStore};
 use crate::cli::{
     AuthKind, CapabilityCommand, CapabilityPolicyCommand, Cli, Command, CredentialCommand,
-    InvokeArgs, OauthCommand, ProviderKind, ScopeKind, SecretsCommand, SetupCommand,
+    InvokeArgs, OauthCommand, ProviderCommand, ProviderKind, ScopeKind, SecretsCommand,
+    SetupCommand,
 };
 use crate::daemon::{self, DaemonRequest};
 use crate::markdown::{to_markdown, ToMarkdownOptions};
@@ -109,6 +110,7 @@ pub fn run(cli: Cli) -> Result<(), String> {
                 Command::Secrets { command } => run_secrets(&vault, command),
                 Command::Oauth { command } => run_oauth(command),
                 Command::Credential { command } => run_credential(&vault, command),
+                Command::Provider { command } => run_provider(&vault, command),
                 Command::Capability { command } => run_capability(&vault, command),
                 // These are handled earlier.
                 Command::Invoke { .. } | Command::Json { .. } | Command::Markdown { .. } => {
@@ -1487,6 +1489,12 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 None => provider_defaults
                     .as_ref()
                     .map(|template| template.auth.clone())
+                    .or_else(|| {
+                        (provider == "postgres").then(|| AuthStrategy::Header {
+                            header_name: "x-aivault-postgres".to_string(),
+                            value_template: "{{secret}}".to_string(),
+                        })
+                    })
                     .ok_or_else(|| {
                         "--auth is required when provider is not in built-in registry".to_string()
                     })?,
@@ -1561,6 +1569,51 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             print_json(&serde_json::json!({
                 "removed": removed,
                 "id": id.trim(),
+            }))
+        }
+    }
+}
+
+fn run_provider(vault: &VaultRuntime, command: ProviderCommand) -> Result<(), String> {
+    match command {
+        ProviderCommand::List { verbose } => {
+            let statuses = crate::provider_plugins::list_status(vault)?;
+            if verbose {
+                return print_json(&serde_json::json!({
+                    "providers": statuses,
+                    "path": crate::provider_plugins::provider_root(vault).display().to_string()
+                }));
+            }
+            print_json(&serde_json::json!({ "providers": statuses }))
+        }
+        ProviderCommand::Install { id, from, enable } => {
+            let manifest =
+                crate::provider_plugins::install_provider(vault, &id, from.as_deref(), enable)?;
+            print_json(&serde_json::json!({
+                "installed": true,
+                "enabled": manifest.enabled,
+                "provider": manifest
+            }))
+        }
+        ProviderCommand::Enable { id } => {
+            let manifest = crate::provider_plugins::set_enabled(vault, &id, true)?;
+            print_json(&serde_json::json!({
+                "enabled": true,
+                "provider": manifest
+            }))
+        }
+        ProviderCommand::Disable { id } => {
+            let manifest = crate::provider_plugins::set_enabled(vault, &id, false)?;
+            print_json(&serde_json::json!({
+                "enabled": false,
+                "provider": manifest
+            }))
+        }
+        ProviderCommand::Remove { id } => {
+            let removed = crate::provider_plugins::remove_provider(vault, &id)?;
+            print_json(&serde_json::json!({
+                "removed": removed,
+                "id": id.trim()
             }))
         }
     }
@@ -1675,6 +1728,11 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
                     }
                 }
             }
+            if credentialed_providers.contains("postgres") {
+                for capability in crate::postgres_capabilities::builtin_capabilities() {
+                    local_map.insert(capability.id.clone(), capability);
+                }
+            }
             let local_capabilities: Vec<Capability> = local_map.into_values().collect();
             let local_ids: HashSet<&str> =
                 local_capabilities.iter().map(|c| c.id.as_str()).collect();
@@ -1685,6 +1743,11 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
                     if !local_ids.contains(cap.id.as_str()) {
                         registry_capabilities.push(cap.clone());
                     }
+                }
+            }
+            for capability in crate::postgres_capabilities::builtin_capabilities() {
+                if !local_ids.contains(capability.id.as_str()) {
+                    registry_capabilities.push(capability);
                 }
             }
             registry_capabilities.sort_by(|a, b| a.id.cmp(&b.id));
@@ -2032,9 +2095,12 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
     let envelope = if has_payload {
         build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
     } else {
-        let registry_capability = crate::registry::builtin_registry()
-            .ok()
-            .and_then(|r| r.capability(&capability_id));
+        let registry_capability = crate::postgres_capabilities::builtin_capability(&capability_id)
+            .or_else(|| {
+                crate::registry::builtin_registry()
+                    .ok()
+                    .and_then(|r| r.capability(&capability_id))
+            });
         if let Some(capability) = registry_capability {
             build_capability_call_envelope(&capability, args.clone())?
         } else if has_method_or_path {
@@ -2138,9 +2204,12 @@ fn invoke_stream_via_daemon_thin(args: InvokeArgs) -> Result<(), String> {
     let envelope = if has_payload {
         build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
     } else {
-        let registry_capability = crate::registry::builtin_registry()
-            .ok()
-            .and_then(|r| r.capability(&capability_id));
+        let registry_capability = crate::postgres_capabilities::builtin_capability(&capability_id)
+            .or_else(|| {
+                crate::registry::builtin_registry()
+                    .ok()
+                    .and_then(|r| r.capability(&capability_id))
+            });
         if let Some(capability) = registry_capability {
             build_capability_call_envelope(&capability, args.clone())?
         } else if has_method_or_path {
@@ -2245,6 +2314,7 @@ fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), Strin
     let capability = store
         .find_capability(id)
         .cloned()
+        .or_else(|| crate::postgres_capabilities::builtin_capability(id))
         .or_else(|| {
             crate::registry::builtin_registry()
                 .ok()
@@ -2458,11 +2528,15 @@ fn lookup_capability_for_invoke(store: &BrokerStore, id: &str) -> Option<Capabil
     if id.is_empty() {
         return None;
     }
-    store.find_capability(id).cloned().or_else(|| {
-        crate::registry::builtin_registry()
-            .ok()
-            .and_then(|r| r.capability(id))
-    })
+    store
+        .find_capability(id)
+        .cloned()
+        .or_else(|| crate::postgres_capabilities::builtin_capability(id))
+        .or_else(|| {
+            crate::registry::builtin_registry()
+                .ok()
+                .and_then(|r| r.capability(id))
+        })
 }
 
 fn build_capability_call_envelope(
@@ -2819,6 +2893,17 @@ pub(crate) fn run_capability_envelope(
     workspace_id: Option<&str>,
     group_id: Option<&str>,
 ) -> Result<Value, String> {
+    if crate::postgres_capabilities::is_postgres_capability(&envelope.capability) {
+        return crate::postgres_capabilities::run_postgres_capability(
+            vault,
+            store,
+            envelope,
+            client_ip,
+            workspace_id,
+            group_id,
+        );
+    }
+
     let retry_envelope = envelope.clone();
     let (broker, planned) =
         plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
@@ -2859,6 +2944,10 @@ pub(crate) fn run_capability_envelope_streaming<F>(
 where
     F: FnMut(&[u8]) -> Result<(), String>,
 {
+    if crate::postgres_capabilities::is_postgres_capability(&envelope.capability) {
+        return Err("postgres capabilities do not support streaming output".to_string());
+    }
+
     let (broker, planned) =
         plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
     execute_planned_http_request_streaming(&broker, &planned, on_chunk)
