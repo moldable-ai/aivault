@@ -1068,10 +1068,13 @@ fn registry_provider_template_claiming_secret_name(
     if wanted.is_empty() {
         return None;
     }
-    registry
-        .providers()
-        .into_iter()
-        .find(|template| template.vault_secrets.contains_key(wanted))
+    registry.providers().into_iter().find(|template| {
+        template.vault_secrets.contains_key(wanted)
+            || template
+                .credential_alternatives
+                .iter()
+                .any(|alternative| alternative.vault_secrets.contains_key(wanted))
+    })
 }
 
 fn credential_id_for_provider_scope(provider: &str, scope: &SecretScope) -> String {
@@ -1083,6 +1086,15 @@ fn credential_id_for_provider_scope(provider: &str, scope: &SecretScope) -> Stri
             group_id,
         } => format!("{}:group:{}:{}", provider, workspace_id, group_id),
     }
+}
+
+fn credential_id_for_provider_alternative_scope(
+    provider: &str,
+    alternative: &str,
+    scope: &SecretScope,
+) -> String {
+    let base = format!("{}:{}", provider, alternative);
+    credential_id_for_provider_scope(&base, scope)
 }
 
 fn composite_secret_name_for_provider_scope(provider: &str, scope: &SecretScope) -> String {
@@ -1113,10 +1125,17 @@ fn credential_context_for_secret_scope(scope: &SecretScope) -> (Option<String>, 
 }
 
 fn hosts_within_registry_policy(template: &ProviderTemplate, hosts: &[String]) -> bool {
+    let mut allowed_hosts = template.hosts.clone();
+    for alternative in &template.credential_alternatives {
+        for host in &alternative.hosts {
+            if !allowed_hosts.iter().any(|existing| existing == host) {
+                allowed_hosts.push(host.clone());
+            }
+        }
+    }
     !hosts.is_empty()
         && hosts.iter().all(|host| {
-            template
-                .hosts
+            allowed_hosts
                 .iter()
                 .any(|pattern| crate::broker::host_matches(pattern, host))
         })
@@ -1145,15 +1164,30 @@ fn registry_secret_ref_for_template_scope(
     scope: &SecretScope,
     by_name: &HashMap<String, crate::vault::SecretMeta>,
 ) -> Result<String, String> {
-    let needs_composite_secret = matches!(
+    registry_secret_ref_for_scope(
+        vault,
+        &template.provider,
         &template.auth,
-        AuthStrategy::MultiHeader(_) | AuthStrategy::MultiQuery(_) | AuthStrategy::Basic
-    ) || template.vault_secrets.len() > 1;
+        &template.vault_secrets,
+        scope,
+        by_name,
+    )
+}
+
+fn registry_secret_ref_for_scope(
+    vault: &VaultRuntime,
+    provider: &str,
+    auth: &AuthStrategy,
+    vault_secrets: &HashMap<String, String>,
+    scope: &SecretScope,
+    by_name: &HashMap<String, crate::vault::SecretMeta>,
+) -> Result<String, String> {
+    let needs_composite_secret = matches!(auth, AuthStrategy::Basic) || vault_secrets.len() > 1;
 
     // For multi-secret providers (and for auth strategies that require structured secret
     // material), create/rotate a system-managed composite secret.
-    let secret_ref = if !needs_composite_secret && template.vault_secrets.len() == 1 {
-        let (name, _placeholder) = template.vault_secrets.iter().next().expect("len() == 1");
+    let secret_ref = if !needs_composite_secret && vault_secrets.len() == 1 {
+        let (name, _placeholder) = vault_secrets.iter().next().expect("len() == 1");
         let meta = by_name
             .get(name)
             .ok_or_else(|| "missing required secret".to_string())?;
@@ -1163,7 +1197,7 @@ fn registry_secret_ref_for_template_scope(
         .to_string()
     } else {
         let mut fields = serde_json::Map::new();
-        for (secret_name, placeholder) in &template.vault_secrets {
+        for (secret_name, placeholder) in vault_secrets {
             let meta = by_name
                 .get(secret_name)
                 .ok_or_else(|| "missing required secret".to_string())?;
@@ -1183,7 +1217,7 @@ fn registry_secret_ref_for_template_scope(
             })?;
             fields.insert(placeholder.clone(), serde_json::Value::String(value));
         }
-        if matches!(&template.auth, AuthStrategy::Basic) && !fields.contains_key("username") {
+        if matches!(auth, AuthStrategy::Basic) && !fields.contains_key("username") {
             // Convenience default for common basic-auth APIs (e.g. Mailgun uses username "api").
             fields.insert(
                 "username".to_string(),
@@ -1193,7 +1227,7 @@ fn registry_secret_ref_for_template_scope(
         let composite_value =
             serde_json::to_vec(&serde_json::Value::Object(fields)).map_err(|e| e.to_string())?;
 
-        let composite_name = composite_secret_name_for_provider_scope(&template.provider, scope);
+        let composite_name = composite_secret_name_for_provider_scope(provider, scope);
         let existing = by_name.get(&composite_name).map(|m| m.secret_id.clone());
         let composite_meta = if let Some(existing_id) = existing {
             let _ = vault
@@ -1208,7 +1242,7 @@ fn registry_secret_ref_for_template_scope(
                 .map_err(|e| e.to_string())?
         };
         let composite_meta = vault
-            .pin_secret_to_provider(&composite_meta.secret_id, &template.provider)
+            .pin_secret_to_provider(&composite_meta.secret_id, provider)
             .map_err(|e| e.to_string())?;
         crate::vault::SecretRef {
             secret_id: composite_meta.secret_id,
@@ -1217,6 +1251,32 @@ fn registry_secret_ref_for_template_scope(
     };
 
     Ok(secret_ref)
+}
+
+fn codex_oauth_secret_is_current(
+    vault: &VaultRuntime,
+    by_name: &HashMap<String, crate::vault::SecretMeta>,
+) -> Result<bool, String> {
+    let Some(meta) = by_name.get("CODEX_OAUTH_JSON") else {
+        return Ok(false);
+    };
+    let sr = crate::vault::SecretRef {
+        secret_id: meta.secret_id.clone(),
+    }
+    .to_string();
+    let raw = vault
+        .resolve_secret_ref(&sr, Some("secret.codex_oauth.check"), Some("aivault-cli"))
+        .map_err(|e| e.to_string())?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|_| "CODEX_OAUTH_JSON must be JSON".to_string())?;
+    let expires_ms = value
+        .get("expires")
+        .or_else(|| value.get("expires_at"))
+        .or_else(|| value.get("expiresMs"))
+        .or_else(|| value.get("accessTokenExpiresAtMs"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(i64::MAX);
+    Ok(expires_ms > chrono::Utc::now().timestamp_millis())
 }
 
 fn derive_registry_credentials_from_vault(
@@ -1244,45 +1304,95 @@ fn derive_registry_credentials_from_vault(
 
     let mut out = Vec::new();
     for template in providers {
-        if template.vault_secrets.is_empty() {
-            continue;
+        if !template.vault_secrets.is_empty() {
+            for (scope, by_name) in secrets_by_scope.values() {
+                let complete = template
+                    .vault_secrets
+                    .keys()
+                    .all(|secret_name| by_name.contains_key(secret_name));
+                if !complete {
+                    continue;
+                }
+
+                let secret_ref =
+                    registry_secret_ref_for_template_scope(vault, &template, scope, by_name)?;
+                let cred_id = credential_id_for_provider_scope(&template.provider, scope);
+                let (workspace_id, group_id) = credential_context_for_secret_scope(scope);
+
+                let mut hosts = template.hosts.clone();
+                if let Some(store) = store {
+                    if let Some(existing) = store
+                        .credentials()
+                        .iter()
+                        .find(|c| c.id == cred_id && c.provider == template.provider)
+                    {
+                        hosts = registry_hosts_with_existing_overrides(&template, &existing.hosts);
+                    }
+                }
+
+                out.push(StoredCredential {
+                    id: cred_id,
+                    provider: template.provider.clone(),
+                    workspace_id,
+                    group_id,
+                    auth: template.auth.clone(),
+                    hosts,
+                    capabilities: Vec::new(),
+                    priority: 0,
+                    upstream_path_prefix: None,
+                    secret_ref,
+                    max_policy_mode: None,
+                });
+            }
         }
 
-        for (scope, by_name) in secrets_by_scope.values() {
-            let complete = template
-                .vault_secrets
-                .keys()
-                .all(|secret_name| by_name.contains_key(secret_name));
-            if !complete {
+        for alternative in &template.credential_alternatives {
+            if alternative.vault_secrets.is_empty() {
                 continue;
             }
 
-            let secret_ref =
-                registry_secret_ref_for_template_scope(vault, &template, scope, by_name)?;
-            let cred_id = credential_id_for_provider_scope(&template.provider, scope);
-            let (workspace_id, group_id) = credential_context_for_secret_scope(scope);
-
-            let mut hosts = template.hosts.clone();
-            if let Some(store) = store {
-                if let Some(existing) = store
-                    .credentials()
-                    .iter()
-                    .find(|c| c.id == cred_id && c.provider == template.provider)
-                {
-                    hosts = registry_hosts_with_existing_overrides(&template, &existing.hosts);
+            for (scope, by_name) in secrets_by_scope.values() {
+                let complete = alternative
+                    .vault_secrets
+                    .keys()
+                    .all(|secret_name| by_name.contains_key(secret_name));
+                if !complete {
+                    continue;
                 }
-            }
+                if alternative.id == "codex-cli" && !codex_oauth_secret_is_current(vault, by_name)?
+                {
+                    continue;
+                }
 
-            out.push(StoredCredential {
-                id: cred_id,
-                provider: template.provider.clone(),
-                workspace_id,
-                group_id,
-                auth: template.auth.clone(),
-                hosts,
-                secret_ref,
-                max_policy_mode: None,
-            });
+                let secret_ref = registry_secret_ref_for_scope(
+                    vault,
+                    &template.provider,
+                    &alternative.auth,
+                    &alternative.vault_secrets,
+                    scope,
+                    by_name,
+                )?;
+                let cred_id = credential_id_for_provider_alternative_scope(
+                    &template.provider,
+                    &alternative.id,
+                    scope,
+                );
+                let (workspace_id, group_id) = credential_context_for_secret_scope(scope);
+
+                out.push(StoredCredential {
+                    id: cred_id,
+                    provider: template.provider.clone(),
+                    workspace_id,
+                    group_id,
+                    auth: alternative.auth.clone(),
+                    hosts: alternative.hosts.clone(),
+                    capabilities: alternative.capabilities.clone(),
+                    priority: alternative.priority,
+                    upstream_path_prefix: alternative.upstream_path_prefix.clone(),
+                    secret_ref,
+                    max_policy_mode: None,
+                });
+            }
         }
     }
 
@@ -1347,6 +1457,9 @@ fn maybe_autoprovision_registry_credential(
         group_id,
         auth: template.auth.clone(),
         hosts: template.hosts.clone(),
+        capabilities: Vec::new(),
+        priority: 0,
+        upstream_path_prefix: None,
         secret_ref,
         max_policy_mode: None,
     };
@@ -1549,6 +1662,9 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 group_id,
                 auth,
                 hosts,
+                capabilities: Vec::new(),
+                priority: 0,
+                upstream_path_prefix: None,
                 secret_ref,
                 max_policy_mode,
             };
@@ -3974,14 +4090,21 @@ fn load_runtime_broker_for_context(
         let input = CredentialInput {
             id: stored.id.clone(),
             provider: stored.provider.clone(),
-            // Registry-derived credentials are always canonicalized to registry auth.
-            auth: None,
+            // Registry-derived credentials are already canonicalized to compiled-in auth.
+            auth: Some(stored.auth.clone()),
             // Hosts may be derived defaults or validated persisted overrides.
             hosts: Some(stored.hosts.clone()),
         };
 
         broker
-            .create_credential(&operator, input, secret)
+            .create_credential_with_metadata(
+                &operator,
+                input,
+                secret,
+                stored.capabilities.clone(),
+                stored.priority,
+                stored.upstream_path_prefix.clone(),
+            )
             .map_err(|e| e.to_string())?;
     }
 
@@ -4045,8 +4168,15 @@ fn load_runtime_broker_for_context(
 
             if !stored.hosts.is_empty()
                 && !stored.hosts.iter().all(|host| {
-                    provider_template
-                        .hosts
+                    let mut allowed_hosts = provider_template.hosts.clone();
+                    for alternative in &provider_template.credential_alternatives {
+                        for alt_host in &alternative.hosts {
+                            if !allowed_hosts.iter().any(|existing| existing == alt_host) {
+                                allowed_hosts.push(alt_host.clone());
+                            }
+                        }
+                    }
+                    allowed_hosts
                         .iter()
                         .any(|pattern| crate::broker::host_matches(pattern, host))
                 })
@@ -4099,8 +4229,15 @@ fn load_runtime_broker_for_context(
             hosts: if let Some(provider) = registry_provider.as_ref() {
                 let allowed = !stored.hosts.is_empty()
                     && stored.hosts.iter().all(|host| {
-                        provider
-                            .hosts
+                        let mut allowed_hosts = provider.hosts.clone();
+                        for alternative in &provider.credential_alternatives {
+                            for alt_host in &alternative.hosts {
+                                if !allowed_hosts.iter().any(|existing| existing == alt_host) {
+                                    allowed_hosts.push(alt_host.clone());
+                                }
+                            }
+                        }
+                        allowed_hosts
                             .iter()
                             .any(|pattern| crate::broker::host_matches(pattern, host))
                     });
@@ -4111,14 +4248,21 @@ fn load_runtime_broker_for_context(
         };
 
         broker
-            .create_credential(&operator, input, secret)
+            .create_credential_with_metadata(
+                &operator,
+                input,
+                secret,
+                stored.capabilities.clone(),
+                stored.priority,
+                stored.upstream_path_prefix.clone(),
+            )
             .map_err(|e| e.to_string())?;
     }
 
     for capability in store.capabilities() {
         if let Some(canonical) = registry_lookup.capability(&capability.id) {
             broker
-                .upsert_capability(&operator, canonical)
+                .create_or_replace_capability_from_registry(canonical)
                 .map_err(|e| e.to_string())?;
             continue;
         }
@@ -4283,13 +4427,7 @@ fn secret_material_from_bytes(auth: &AuthStrategy, raw: Vec<u8>) -> Result<Secre
                 if k.is_empty() {
                     continue;
                 }
-                let Some(vs) = v.as_str() else {
-                    return Err(format!(
-                        "{} secret field '{}' must be a string value",
-                        label, k
-                    ));
-                };
-                fields.insert(k.to_string(), vs.to_string());
+                collect_json_string_fields(k, v, &mut fields);
             }
             if fields.is_empty() {
                 return Err(format!("{} secret must include at least one field", label));
@@ -4336,6 +4474,29 @@ fn secret_material_from_bytes(auth: &AuthStrategy, raw: Vec<u8>) -> Result<Secre
                 key_pem: parsed.key_pem,
             })
         }
+    }
+}
+
+fn collect_json_string_fields(
+    prefix: &str,
+    value: &serde_json::Value,
+    fields: &mut HashMap<String, String>,
+) {
+    if let Some(value) = value.as_str() {
+        fields.insert(prefix.to_string(), value.to_string());
+        return;
+    }
+
+    let Some(obj) = value.as_object() else {
+        return;
+    };
+
+    for (key, nested) in obj {
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        collect_json_string_fields(&format!("{prefix}.{key}"), nested, fields);
     }
 }
 
@@ -5143,6 +5304,9 @@ mod tests {
                 value_template: "Bearer {{secret}}".to_string(),
             },
             hosts: vec!["api.openai.com".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref,
             max_policy_mode: None,
         });
@@ -5215,6 +5379,9 @@ mod tests {
                 value_template: "Bearer {{secret}}".to_string(),
             },
             hosts: vec!["api.openai.com".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref,
             max_policy_mode: None,
         });
@@ -5273,6 +5440,9 @@ mod tests {
                 param_name: "api_key".to_string(),
             },
             hosts: vec!["evil.example".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref,
             max_policy_mode: None,
         });
@@ -5863,6 +6033,9 @@ mod tests {
                 value_template: "Bearer {{secret}}".to_string(),
             },
             hosts: vec!["api.github.com".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref: SecretRef {
                 secret_id: meta.secret_id,
             }

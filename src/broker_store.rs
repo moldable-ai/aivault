@@ -24,6 +24,12 @@ pub struct StoredCredential {
     pub group_id: Option<String>,
     pub auth: AuthStrategy,
     pub hosts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub priority: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_path_prefix: Option<String>,
     pub secret_ref: String,
     /// Optional provider-specific ceiling for riskier operation modes.
     ///
@@ -31,6 +37,10 @@ pub struct StoredCredential {
     /// values default to the safest provider mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_policy_mode: Option<String>,
+}
+
+fn is_zero(value: &i32) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -213,6 +223,9 @@ mod tests {
                 value_template: "Bearer {{secret}}".to_string(),
             },
             hosts: vec!["api.openai.com".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref: "vault:secret:abc".to_string(),
             max_policy_mode: None,
         });
@@ -272,6 +285,9 @@ mod tests {
                 value_template: "Bearer {{secret}}".to_string(),
             },
             hosts: vec!["api.openai.com".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref: "vault:secret:abc".to_string(),
             max_policy_mode: None,
         });

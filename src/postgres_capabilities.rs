@@ -949,6 +949,9 @@ mod tests {
                 value_template: "{{secret}}".to_string(),
             },
             hosts: vec!["localhost:5432".to_string()],
+            capabilities: Vec::new(),
+            priority: 0,
+            upstream_path_prefix: None,
             secret_ref: "vault:secret:abc".to_string(),
             max_policy_mode: None,
         };

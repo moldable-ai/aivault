@@ -118,7 +118,30 @@ impl Broker {
         secret: SecretMaterial,
     ) -> BrokerResult<Credential> {
         self.ensure_operator(auth)?;
+        self.create_credential_internal(input, secret, Vec::new(), 0, None)
+    }
 
+    pub fn create_credential_with_metadata(
+        &mut self,
+        auth: &RequestAuth,
+        input: CredentialInput,
+        secret: SecretMaterial,
+        capabilities: Vec<String>,
+        priority: i32,
+        upstream_path_prefix: Option<String>,
+    ) -> BrokerResult<Credential> {
+        self.ensure_operator(auth)?;
+        self.create_credential_internal(input, secret, capabilities, priority, upstream_path_prefix)
+    }
+
+    fn create_credential_internal(
+        &mut self,
+        input: CredentialInput,
+        secret: SecretMaterial,
+        capabilities: Vec<String>,
+        priority: i32,
+        upstream_path_prefix: Option<String>,
+    ) -> BrokerResult<Credential> {
         let id = input.id.trim();
         let provider = input.provider.trim();
         if id.is_empty() || provider.is_empty() {
@@ -166,9 +189,9 @@ impl Broker {
         if let (Some(defaults), true) = (provider_defaults.as_ref(), requested_hosts_present) {
             // Registry providers may allow per-tenant host binding, but bound hosts must match
             // the registry's allowed host patterns (fail-closed).
+            let allowed_host_patterns = registry_provider_allowed_hosts(defaults);
             for host in &hosts {
-                if !defaults
-                    .hosts
+                if !allowed_host_patterns
                     .iter()
                     .any(|pattern| host_matches(pattern, host))
                 {
@@ -180,12 +203,17 @@ impl Broker {
             }
         }
         self.validate_credential_hosts(&hosts)?;
+        let capabilities = normalize_credential_capabilities(capabilities)?;
+        let upstream_path_prefix = normalize_upstream_path_prefix(upstream_path_prefix)?;
 
         let credential = Credential {
             id: id.to_string(),
             provider: provider.to_string(),
             auth: auth_strategy,
             hosts,
+            capabilities,
+            priority,
+            upstream_path_prefix,
         };
 
         self.secrets.insert(id.to_string(), secret);
@@ -268,6 +296,12 @@ impl Broker {
                         "capability provider does not match credential provider",
                     ));
                 }
+                if !credential_supports_capability(credential, &capability.id) {
+                    return Err(BrokerError::new(
+                        ErrorCode::PolicyViolation,
+                        "credential is not scoped to this capability",
+                    ));
+                }
             }
         }
 
@@ -346,7 +380,10 @@ impl Broker {
         self.enforce_capability_request_size_limit(&capability.id, &body_mode)?;
         let mut headers = sanitize_headers(&envelope.request.headers, &credential.auth)?;
         apply_broker_managed_body_headers(&mut headers, &body_mode);
-        let mut upstream_path = normalized_path;
+        let mut upstream_path = apply_upstream_path_prefix(
+            credential.upstream_path_prefix.as_deref(),
+            &normalized_path,
+        );
         apply_auth(
             &credential.auth,
             self.secrets.get(&credential.id),
@@ -444,7 +481,10 @@ impl Broker {
         self.enforce_upstream_target_rules("https", &upstream_host, upstream_port)?;
 
         let mut headers = sanitize_headers(&headers, &credential.auth)?;
-        let mut upstream_path = normalized_path;
+        let mut upstream_path = apply_upstream_path_prefix(
+            credential.upstream_path_prefix.as_deref(),
+            &normalized_path,
+        );
         apply_auth(
             &credential.auth,
             self.secrets.get(&credential.id),
@@ -709,6 +749,12 @@ impl Broker {
                     "credential provider does not match capability provider",
                 ));
             }
+            if !credential_supports_capability(credential, &capability.id) {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "credential is not scoped to this capability",
+                ));
+            }
             return Ok(credential.clone());
         }
 
@@ -722,13 +768,22 @@ impl Broker {
                     "credential provider does not match capability provider",
                 ));
             }
+            if !credential_supports_capability(credential, &capability.id) {
+                return Err(BrokerError::new(
+                    ErrorCode::PolicyViolation,
+                    "credential is not scoped to this capability",
+                ));
+            }
             return Ok(credential.clone());
         }
 
         let matching: Vec<_> = self
             .credentials
             .values()
-            .filter(|credential| credential.provider == capability.provider)
+            .filter(|credential| {
+                credential.provider == capability.provider
+                    && credential_supports_capability(credential, &capability.id)
+            })
             .cloned()
             .collect();
 
@@ -738,10 +793,25 @@ impl Broker {
                 ErrorCode::CredentialNotFound,
                 "no credential for capability provider",
             )),
-            _ => Err(BrokerError::new(
-                ErrorCode::CredentialAmbiguous,
-                "multiple credentials available; pass credential id",
-            )),
+            _ => {
+                let max_priority = matching
+                    .iter()
+                    .map(|credential| credential.priority)
+                    .max()
+                    .unwrap_or_default();
+                let mut preferred: Vec<_> = matching
+                    .into_iter()
+                    .filter(|credential| credential.priority == max_priority)
+                    .collect();
+                preferred.sort_by(|a, b| a.id.cmp(&b.id));
+                match preferred.as_slice() {
+                    [only] => Ok(only.clone()),
+                    _ => Err(BrokerError::new(
+                        ErrorCode::CredentialAmbiguous,
+                        "multiple credentials available; pass credential id",
+                    )),
+                }
+            }
         }
     }
 
@@ -792,19 +862,18 @@ impl Broker {
         credential: &Credential,
         capability: &Capability,
     ) -> BrokerResult<String> {
-        let allow_pattern = capability
-            .allow
-            .hosts
-            .first()
-            .map(|s| s.as_str())
-            .unwrap_or_default();
-
         // Capability allow.hosts may be a wildcard pattern (registry templates); the effective
         // upstream authority is always the credential-bound host instance.
         let allowed: Vec<String> = credential
             .hosts
             .iter()
-            .filter(|candidate| host_matches(allow_pattern, candidate))
+            .filter(|candidate| {
+                capability
+                    .allow
+                    .hosts
+                    .iter()
+                    .any(|allow_pattern| host_matches(allow_pattern, candidate))
+            })
             .cloned()
             .collect();
 
@@ -888,7 +957,7 @@ impl Broker {
             ));
         }
 
-        if capability.allow.hosts.len() != 1 {
+        if exact_hosts_only && capability.allow.hosts.len() != 1 {
             return Err(BrokerError::new(
                 ErrorCode::PolicyViolation,
                 "core conformance requires allow.hosts length = 1",
@@ -1038,7 +1107,7 @@ impl Broker {
         Ok(())
     }
 
-    fn create_or_replace_capability_from_registry(
+    pub(crate) fn create_or_replace_capability_from_registry(
         &mut self,
         capability: Capability,
     ) -> BrokerResult<()> {
@@ -1066,4 +1135,72 @@ fn split_upstream_authority(authority: &str) -> BrokerResult<(String, Option<u16
         })?
         .to_string();
     Ok((host, parsed.port()))
+}
+
+fn credential_supports_capability(credential: &Credential, capability_id: &str) -> bool {
+    credential.capabilities.is_empty()
+        || credential
+            .capabilities
+            .iter()
+            .any(|allowed| allowed == capability_id)
+}
+
+fn normalize_credential_capabilities(capabilities: Vec<String>) -> BrokerResult<Vec<String>> {
+    let mut out = Vec::new();
+    for capability in capabilities {
+        let capability = capability.trim();
+        if capability.is_empty() {
+            return Err(BrokerError::new(
+                ErrorCode::InvalidRequest,
+                "credential capability scope cannot be empty",
+            ));
+        }
+        if !out.iter().any(|existing| existing == capability) {
+            out.push(capability.to_string());
+        }
+    }
+    Ok(out)
+}
+
+fn normalize_upstream_path_prefix(prefix: Option<String>) -> BrokerResult<Option<String>> {
+    let Some(prefix) = prefix else {
+        return Ok(None);
+    };
+    let prefix = prefix.trim().trim_end_matches('/').to_string();
+    if prefix.is_empty() {
+        return Ok(None);
+    }
+    if !prefix.starts_with('/') || prefix.contains('?') || prefix.contains('#') {
+        return Err(BrokerError::new(
+            ErrorCode::PolicyViolation,
+            "upstreamPathPrefix must start with '/' and cannot include query or fragment",
+        ));
+    }
+    Ok(Some(prefix))
+}
+
+fn apply_upstream_path_prefix(prefix: Option<&str>, path: &str) -> String {
+    let Some(prefix) = prefix else {
+        return path.to_string();
+    };
+    if path == "/" {
+        return prefix.to_string();
+    }
+    format!(
+        "{}/{}",
+        prefix.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
+}
+
+fn registry_provider_allowed_hosts(template: &ProviderTemplate) -> Vec<String> {
+    let mut hosts = template.hosts.clone();
+    for alternative in &template.credential_alternatives {
+        for host in &alternative.hosts {
+            if !hosts.iter().any(|existing| existing == host) {
+                hosts.push(host.clone());
+            }
+        }
+    }
+    hosts
 }

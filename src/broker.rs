@@ -158,6 +158,9 @@ pub struct Credential {
     pub provider: String,
     pub auth: AuthStrategy,
     pub hosts: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub priority: i32,
+    pub upstream_path_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,6 +203,29 @@ pub struct ProviderTemplate {
     /// Example: { "OPENAI_API_KEY": "secret" } where auth templates reference `{{secret}}`.
     #[serde(default, rename = "vaultSecrets")]
     pub vault_secrets: HashMap<String, String>,
+    /// Ordered alternate credential templates for the same logical provider.
+    ///
+    /// Alternatives may use different auth, hosts, and secret names while still satisfying a
+    /// provider capability. Capability filters keep high-risk alternates scoped to only the
+    /// logical capabilities they are intended to satisfy.
+    #[serde(default, rename = "credentialAlternatives")]
+    pub credential_alternatives: Vec<ProviderCredentialTemplate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCredentialTemplate {
+    pub id: String,
+    pub auth: AuthStrategy,
+    pub hosts: Vec<String>,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_path_prefix: Option<String>,
+    #[serde(default, rename = "vaultSecrets")]
+    pub vault_secrets: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -225,7 +251,12 @@ impl Registry {
 
         // A canonical vault secret name may only be claimed by one provider template.
         for template in providers.values() {
-            for secret_name in template.vault_secrets.keys() {
+            let mut provider_secret_claims = template.vault_secrets.keys().collect::<Vec<_>>();
+            for alternative in &template.credential_alternatives {
+                provider_secret_claims.extend(alternative.vault_secrets.keys());
+            }
+
+            for secret_name in provider_secret_claims {
                 let name = secret_name.trim();
                 if name.is_empty() {
                     return Err(BrokerError::new(

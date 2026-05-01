@@ -110,6 +110,16 @@
       "tests": [
         "story_reg_per_tenant_host_binding"
       ]
+    },
+    {
+      "id": "ev-cli-reg-credential-alternatives-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "registry_credential_alternatives_prefer_highest_priority_scoped_credential",
+        "registry_credential_alternatives_do_not_satisfy_unscoped_capabilities"
+      ]
     }
   ],
   "sections": [
@@ -206,6 +216,64 @@
               {
                 "evidenceId": "ev-broker-reg-provider-based-capability-activation-test",
                 "test": "story_reg_provider_based_capability_activation"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-credential-alternatives",
+          "story": "As an operator, I want registry providers to declare ordered credential alternatives for a capability, so aivault can prefer a safer available credential and fall back to the standard provider key when needed.",
+          "evidenceLinks": [
+            "ev-cli-reg-credential-alternatives-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "load_runtime_broker_for_context"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "derive_registry_credentials_from_vault"
+              },
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::resolve_credential_for_request"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "credential_supports_capability"
+              },
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::select_effective_host"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/app.rs",
+                "symbol": "registry_secret_ref_for_scope"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-cli-reg-credential-alternatives-test",
+                "test": "registry_credential_alternatives_prefer_highest_priority_scoped_credential"
+              },
+              {
+                "evidenceId": "ev-cli-reg-credential-alternatives-test",
+                "test": "registry_credential_alternatives_do_not_satisfy_unscoped_capabilities"
               }
             ]
           }

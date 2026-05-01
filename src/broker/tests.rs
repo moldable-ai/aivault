@@ -32,6 +32,7 @@ fn openai_registry() -> Registry {
             },
         }],
         vault_secrets: Default::default(),
+        credential_alternatives: Vec::new(),
     }])
     .unwrap()
 }
@@ -49,6 +50,7 @@ fn registry_rejects_duplicate_vault_secret_claims() {
         vault_secrets: [("DUPLICATE_SECRET".to_string(), "secret".to_string())]
             .into_iter()
             .collect(),
+        credential_alternatives: Vec::new(),
     };
     let t2 = ProviderTemplate {
         provider: "p2".to_string(),
@@ -61,10 +63,184 @@ fn registry_rejects_duplicate_vault_secret_claims() {
         vault_secrets: [("DUPLICATE_SECRET".to_string(), "secret".to_string())]
             .into_iter()
             .collect(),
+        credential_alternatives: Vec::new(),
     };
 
     let err = Registry::from_templates(vec![t1, t2]).unwrap_err();
     assert!(err.message.contains("duplicate vault secret name"));
+}
+
+fn alternative_registry() -> Registry {
+    Registry::from_templates(vec![ProviderTemplate {
+        provider: "test".to_string(),
+        auth: AuthStrategy::Header {
+            header_name: "authorization".to_string(),
+            value_template: "Bearer {{secret}}".to_string(),
+        },
+        hosts: vec!["api.primary.test".to_string()],
+        capabilities: vec![
+            Capability {
+                id: "test/write".to_string(),
+                provider: "test".to_string(),
+                allow: AllowPolicy {
+                    hosts: vec!["api.primary.test".to_string(), "api.alt.test".to_string()],
+                    methods: vec!["POST".to_string()],
+                    path_prefixes: vec!["/v1/write".to_string()],
+                },
+            },
+            Capability {
+                id: "test/read".to_string(),
+                provider: "test".to_string(),
+                allow: AllowPolicy {
+                    hosts: vec!["api.primary.test".to_string()],
+                    methods: vec!["GET".to_string()],
+                    path_prefixes: vec!["/v1/read".to_string()],
+                },
+            },
+        ],
+        vault_secrets: Default::default(),
+        credential_alternatives: vec![ProviderCredentialTemplate {
+            id: "alt".to_string(),
+            auth: AuthStrategy::Header {
+                header_name: "x-alt-auth".to_string(),
+                value_template: "Alt {{secret}}".to_string(),
+            },
+            hosts: vec!["api.alt.test".to_string()],
+            capabilities: vec!["test/write".to_string()],
+            priority: 100,
+            upstream_path_prefix: Some("/proxy".to_string()),
+            vault_secrets: [("TEST_ALT_TOKEN".to_string(), "secret".to_string())]
+                .into_iter()
+                .collect(),
+        }],
+    }])
+    .unwrap()
+}
+
+#[test]
+fn registry_credential_alternatives_prefer_highest_priority_scoped_credential() {
+    let mut broker = Broker::default_with_registry(Some(alternative_registry()));
+    broker
+        .create_credential(
+            &operator(),
+            CredentialInput {
+                id: "test".to_string(),
+                provider: "test".to_string(),
+                auth: None,
+                hosts: None,
+            },
+            SecretMaterial::String("primary-token".to_string()),
+        )
+        .unwrap();
+    broker
+        .create_credential_with_metadata(
+            &operator(),
+            CredentialInput {
+                id: "test:alt".to_string(),
+                provider: "test".to_string(),
+                auth: Some(AuthStrategy::Header {
+                    header_name: "x-alt-auth".to_string(),
+                    value_template: "Alt {{secret}}".to_string(),
+                }),
+                hosts: Some(vec!["api.alt.test".to_string()]),
+            },
+            SecretMaterial::String("alt-token".to_string()),
+            vec!["test/write".to_string()],
+            100,
+            Some("/proxy".to_string()),
+        )
+        .unwrap();
+
+    let token = mint_token(&mut broker, vec!["test/write"], None, 60_000);
+    let planned = broker
+        .execute_envelope(
+            &RequestAuth::Proxy(token.token),
+            ProxyEnvelope {
+                capability: "test/write".to_string(),
+                credential: None,
+                request: ProxyEnvelopeRequest {
+                    method: "POST".to_string(),
+                    path: "/v1/write".to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            loopback_ip(),
+        )
+        .unwrap();
+
+    assert_eq!(planned.credential, "test:alt");
+    assert_eq!(planned.host, "api.alt.test");
+    assert_eq!(planned.path, "/proxy/v1/write");
+    assert!(planned
+        .headers
+        .iter()
+        .any(|h| h.name == "x-alt-auth" && h.value == "Alt alt-token"));
+}
+
+#[test]
+fn registry_credential_alternatives_do_not_satisfy_unscoped_capabilities() {
+    let mut broker = Broker::default_with_registry(Some(alternative_registry()));
+    broker
+        .create_credential(
+            &operator(),
+            CredentialInput {
+                id: "test".to_string(),
+                provider: "test".to_string(),
+                auth: None,
+                hosts: None,
+            },
+            SecretMaterial::String("primary-token".to_string()),
+        )
+        .unwrap();
+    broker
+        .create_credential_with_metadata(
+            &operator(),
+            CredentialInput {
+                id: "test:alt".to_string(),
+                provider: "test".to_string(),
+                auth: Some(AuthStrategy::Header {
+                    header_name: "x-alt-auth".to_string(),
+                    value_template: "Alt {{secret}}".to_string(),
+                }),
+                hosts: Some(vec!["api.alt.test".to_string()]),
+            },
+            SecretMaterial::String("alt-token".to_string()),
+            vec!["test/write".to_string()],
+            100,
+            Some("/proxy".to_string()),
+        )
+        .unwrap();
+
+    let token = mint_token(&mut broker, vec!["test/read"], None, 60_000);
+    let planned = broker
+        .execute_envelope(
+            &RequestAuth::Proxy(token.token),
+            ProxyEnvelope {
+                capability: "test/read".to_string(),
+                credential: None,
+                request: ProxyEnvelopeRequest {
+                    method: "GET".to_string(),
+                    path: "/v1/read".to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            loopback_ip(),
+        )
+        .unwrap();
+
+    assert_eq!(planned.credential, "test");
+    assert_eq!(planned.host, "api.primary.test");
+    assert_eq!(planned.path, "/v1/read");
 }
 
 fn base_broker() -> Broker {
@@ -205,6 +381,7 @@ fn story_vault_credential_provider_resolution_overrides() {
             },
         }],
         vault_secrets: Default::default(),
+        credential_alternatives: Vec::new(),
     }])
     .unwrap();
     let mut broker = Broker::default_with_registry(Some(registry));
@@ -289,6 +466,7 @@ fn story_vault_per_tenant_host_binding_with_registry() {
             },
         }],
         vault_secrets: Default::default(),
+        credential_alternatives: Vec::new(),
     }])
     .unwrap();
 
@@ -2180,6 +2358,7 @@ fn story_reg_host_pattern_matching() {
             },
         }],
         vault_secrets: Default::default(),
+        credential_alternatives: Vec::new(),
     }])
     .unwrap();
 
@@ -2245,6 +2424,7 @@ fn story_reg_per_tenant_host_binding() {
             },
         }],
         vault_secrets: Default::default(),
+        credential_alternatives: Vec::new(),
     }])
     .unwrap();
 
