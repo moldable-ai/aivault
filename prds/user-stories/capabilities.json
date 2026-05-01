@@ -86,8 +86,13 @@
       "file": "providers/postgres/src/main.rs",
       "tests": [
         "read_only_sql_accepts_select_and_rejects_mutation_tokens",
+        "read_only_sql_accepts_show_and_safe_explain",
+        "write_sql_accepts_guarded_common_writes_only",
+        "admin_sql_accepts_guarded_schema_permission_and_maintenance_only",
         "postgres_url_secret_parses_connection_without_query_metadata",
-        "postgres_url_secret_parses_remote_hosts_and_sslmode"
+        "postgres_url_secret_parses_remote_hosts_and_sslmode",
+        "export_rows_are_bounded_and_formatted",
+        "import_rows_prepare_csv_and_jsonl_with_limits"
       ]
     },
     {
@@ -97,6 +102,35 @@
       "file": "tests/e2e_postgres.rs",
       "tests": [
         "e2e_postgres_capabilities_query_fixture_database"
+      ]
+    },
+    {
+      "id": "ev-postgres-policy-mode-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/postgres_capabilities.rs",
+      "tests": [
+        "postgres_policy_mode_rejects_non_read_only_modes",
+        "postgres_credential_policy_mode_defaults_to_read_only_and_enforces_ceiling",
+        "postgres_file_paths_stay_under_approved_roots"
+      ]
+    },
+    {
+      "id": "ev-postgres-credential-policy-store-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker_store.rs",
+      "tests": [
+        "stored_credential_policy_mode_is_backward_compatible"
+      ]
+    },
+    {
+      "id": "ev-postgres-credential-policy-cli-tests",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "postgres_credential_create_persists_max_policy_mode"
       ]
     },
     {
@@ -120,12 +154,21 @@
     {
       "description": "Postgres network execution is covered by a gated Docker fixture test, but the default test command does not start Docker or require a live Postgres server.",
       "storySlugs": [
-        "cap-postgres-readonly-broker"
+        "cap-postgres-readonly-broker",
+        "cap-postgres-export-broker",
+        "cap-postgres-import-broker",
+        "cap-postgres-common-write-broker",
+        "cap-postgres-admin-broker"
       ],
       "references": [
         "src/postgres_capabilities.rs",
         "tests/e2e_postgres.rs",
-        "read_only_sql_accepts_select_and_rejects_mutation_tokens"
+        "read_only_sql_accepts_select_and_rejects_mutation_tokens",
+        "write_sql_accepts_guarded_common_writes_only",
+        "admin_sql_accepts_guarded_schema_permission_and_maintenance_only",
+        "export_rows_are_bounded_and_formatted",
+        "import_rows_prepare_csv_and_jsonl_with_limits",
+        "postgres_file_paths_stay_under_approved_roots"
       ]
     }
   ],
@@ -385,6 +428,7 @@
           "evidenceLinks": [
             "ev-postgres-capability-tests",
             "ev-postgres-capability-e2e",
+            "ev-postgres-policy-mode-test",
             "ev-postgres-capability-code"
           ],
           "trace": {
@@ -447,6 +491,467 @@
               {
                 "evidenceId": "ev-postgres-capability-e2e",
                 "test": "e2e_postgres_capabilities_query_fixture_database"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-postgres-credential-policy-ceiling",
+          "story": "As an operator, I want each Postgres credential to declare its maximum allowed policy mode, so write and admin capabilities cannot be enabled by request payload alone.",
+          "evidenceLinks": [
+            "ev-postgres-policy-mode-test",
+            "ev-postgres-credential-policy-store-tests",
+            "ev-postgres-credential-policy-cli-tests",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_credential"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "StoredCredential"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_credential_allows_policy_mode"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_provider_supports_policy_mode"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker_store.rs",
+                "symbol": "BrokerStore::save"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_credential"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "response_envelope"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_credential_policy_mode_defaults_to_read_only_and_enforces_ceiling"
+              },
+              {
+                "evidenceId": "ev-postgres-credential-policy-store-tests",
+                "test": "stored_credential_policy_mode_is_backward_compatible"
+              },
+              {
+                "evidenceId": "ev-postgres-credential-policy-cli-tests",
+                "test": "postgres_credential_create_persists_max_policy_mode"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-postgres-export-broker",
+          "story": "As a database operator, I want exports to use a dedicated bounded Postgres capability, so agents can export query results without gaining arbitrary COPY or filesystem access.",
+          "evidenceLinks": [
+            "ev-postgres-capability-tests",
+            "ev-postgres-capability-e2e",
+            "ev-postgres-policy-mode-test",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "partial",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              },
+              {
+                "file": "src/provider_plugins.rs",
+                "symbol": "postgres_capabilities"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_export_query"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "write_export_file"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "requested_policy_mode_for_capability"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_credential_allows_policy_mode"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_read_only_sql"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "serialize_export_rows"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "approved_postgres_file_path"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "response_envelope"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "export_rows_are_bounded_and_formatted"
+              },
+              {
+                "evidenceId": "ev-postgres-capability-e2e",
+                "test": "e2e_postgres_capabilities_query_fixture_database"
+              },
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_policy_mode_rejects_non_read_only_modes"
+              },
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_file_paths_stay_under_approved_roots"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-postgres-import-broker",
+          "story": "As a database operator, I want row imports to use a dedicated bounded Postgres capability, so CSV and JSONL imports can be enabled without exposing raw COPY or arbitrary local file access.",
+          "evidenceLinks": [
+            "ev-postgres-capability-tests",
+            "ev-postgres-capability-e2e",
+            "ev-postgres-policy-mode-test",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "partial",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              },
+              {
+                "file": "src/provider_plugins.rs",
+                "symbol": "postgres_capabilities"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_import_rows"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "requested_policy_mode_for_capability"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_credential_allows_policy_mode"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "prepare_import_request"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "prepare_import_csv"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_import_rows"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "response_envelope"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "import_rows_prepare_csv_and_jsonl_with_limits"
+              },
+              {
+                "evidenceId": "ev-postgres-capability-e2e",
+                "test": "e2e_postgres_capabilities_query_fixture_database"
+              },
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_file_paths_stay_under_approved_roots"
+              },
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_policy_mode_rejects_non_read_only_modes"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-postgres-common-write-broker",
+          "story": "As a database operator, I want Postgres common writes to use a separate guarded capability, so inserts, updates, and deletes can be enabled without weakening read-only query access.",
+          "evidenceLinks": [
+            "ev-postgres-capability-tests",
+            "ev-postgres-policy-mode-test",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "partial",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              },
+              {
+                "file": "src/provider_plugins.rs",
+                "symbol": "postgres_capabilities"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_execute"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "requested_policy_mode_for_capability"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_credential_allows_policy_mode"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_write_sql"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_execute"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "response_envelope"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "write_sql_accepts_guarded_common_writes_only"
+              },
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_policy_mode_rejects_non_read_only_modes"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-postgres-admin-broker",
+          "story": "As a database operator, I want heavier Postgres admin statements behind an explicit admin capability, so schema, permission, and maintenance actions are not exposed through normal query or write paths.",
+          "evidenceLinks": [
+            "ev-postgres-capability-tests",
+            "ev-postgres-policy-mode-test",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "partial",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              },
+              {
+                "file": "src/provider_plugins.rs",
+                "symbol": "postgres_capabilities"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_admin"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "requested_policy_mode_for_capability"
+              },
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "ensure_credential_allows_policy_mode"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_admin_sql"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_admin"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/audit.rs",
+                "symbol": "append_audit_event"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "response_envelope"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "admin_sql_accepts_guarded_schema_permission_and_maintenance_only"
+              },
+              {
+                "evidenceId": "ev-postgres-policy-mode-test",
+                "test": "postgres_policy_mode_rejects_non_read_only_modes"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "cap-postgres-no-generic-bulk-or-session",
+          "story": "As a security reviewer, I want generic Postgres capabilities to reject COPY, bulk file import/export, and transaction/session commands, so those workflows cannot bypass future dedicated file and session policies.",
+          "evidenceLinks": [
+            "ev-postgres-capability-tests",
+            "ev-postgres-capability-code"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/postgres_capabilities.rs",
+                "symbol": "run_postgres_capability"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_query"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_execute"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "run_admin"
+              }
+            ],
+            "guards": [
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_read_only_sql"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_write_sql"
+              },
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "normalize_admin_sql"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "providers/postgres/src/main.rs",
+                "symbol": "main"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "read_only_sql_accepts_select_and_rejects_mutation_tokens"
+              },
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "write_sql_accepts_guarded_common_writes_only"
+              },
+              {
+                "evidenceId": "ev-postgres-capability-tests",
+                "test": "admin_sql_accepts_guarded_schema_permission_and_maintenance_only"
               }
             ]
           }

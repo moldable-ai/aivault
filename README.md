@@ -84,7 +84,7 @@ All list/status commands default to colored human-readable output. Pass `--verbo
 
 For registry-backed providers, credentials are auto-provisioned when you create a secret with a matching name (e.g., `OPENAI_API_KEY` auto-creates the `openai` credential). Manual credential creation is only needed for custom/non-registry providers or per-tenant host overrides.
 
-- `aivault credential create <id> --provider ... --secret-ref vault:secret:<id> [--auth ... --host ...]`
+- `aivault credential create <id> --provider ... --secret-ref vault:secret:<id> [--auth ... --host ... --max-policy-mode ...]`
 - `aivault credential list [-v]` — list configured credentials
 - `aivault credential delete <id>`
 
@@ -113,6 +113,9 @@ Postgres capabilities use this plugin path, so the main aivault binary does not 
 Postgres client dependency. Build the official provider from source with
 `pnpm provider:build:postgres`; installers can bundle the resulting provider binary for
 offline install.
+
+For local development, use `pnpm install:local` to build release binaries, update local
+`aivault`/`aivaultd` symlinks, install bundled providers, and restart running daemon instances.
 
 Provider-specific docs:
 - [Postgres provider](docs/providers/postgres.md)

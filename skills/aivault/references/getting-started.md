@@ -214,6 +214,18 @@ cargo build --release
 # Binary at target/release/aivault
 ```
 
+For local development where you want to replace your active CLI, daemon, and bundled providers
+after a code change:
+
+```bash
+pnpm install:local
+```
+
+This builds release binaries, updates local `aivault`/`aivaultd` symlinks, installs and enables
+the bundled Postgres provider, restarts the per-user daemon, restarts the macOS shared LaunchAgent
+when present, and runs a smoke check. Use `pnpm install:local -- --help` for options such as
+`--install-dir`, `--no-postgres`, `--no-shared`, and `--no-smoke`.
+
 ## From release artifacts
 
 Download the latest release from the GitHub releases page. Artifacts are available for macOS (arm64, x86_64) and Linux (x86_64).

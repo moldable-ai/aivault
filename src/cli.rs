@@ -31,6 +31,24 @@ pub enum AuthKind {
     Mtls,
 }
 
+#[derive(Debug, Clone, ValueEnum)]
+pub enum PolicyModeKind {
+    #[value(name = "read-only", alias = "readonly", alias = "read_only")]
+    ReadOnly,
+    Write,
+    Admin,
+}
+
+impl PolicyModeKind {
+    pub fn as_stored_value(&self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::Write => "write",
+            Self::Admin => "admin",
+        }
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "aivault")]
 #[command(about = "Standalone local vault runtime and CLI")]
@@ -209,6 +227,9 @@ pub struct InvokeArgs {
     pub multipart_field: Vec<String>,
     #[arg(long)]
     pub multipart_file: Vec<String>,
+    /// Maximum upstream request duration in milliseconds.
+    #[arg(long)]
+    pub timeout_ms: Option<u64>,
     #[arg(long)]
     pub credential: Option<String>,
     /// Optional workspace/group execution context for credential resolution and audit context.
@@ -416,6 +437,11 @@ pub enum CredentialCommand {
         /// Format: NAME=TEMPLATE (templates can reference secret fields like {{api_key}}).
         #[arg(long)]
         auth_header: Vec<String>,
+        /// Maximum provider policy mode this credential may be used with.
+        ///
+        /// Currently used by the Postgres provider. Missing values default to read-only.
+        #[arg(long, value_enum)]
+        max_policy_mode: Option<PolicyModeKind>,
     },
     /// List configured credentials
     List {

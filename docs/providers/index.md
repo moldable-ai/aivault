@@ -39,5 +39,4 @@ After that, provider capabilities are invoked like any other aivault capability.
 
 ## Providers
 
-- [Postgres](/providers/postgres) — read-only database metadata and query capabilities.
-
+- [Postgres](/providers/postgres) — database metadata, bounded queries, guarded writes/admin, and controlled import/export capabilities.

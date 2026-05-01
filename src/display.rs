@@ -141,6 +141,9 @@ pub fn print_credentials_list(credentials: &[StoredCredential]) {
         kv("    Provider", &cred.provider);
         kv("    Auth", &format_auth_strategy(&cred.auth));
         kv_dim("    Hosts", &cred.hosts.join(", "));
+        if let Some(ref max_policy_mode) = cred.max_policy_mode {
+            kv_dim("    Max policy mode", max_policy_mode);
+        }
         if let Some(ref ws) = cred.workspace_id {
             if let Some(ref g) = cred.group_id {
                 kv_dim("    Scope", &format!("group:{}:{}", ws, g));

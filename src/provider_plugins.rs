@@ -65,7 +65,7 @@ pub fn official_provider(id: &str) -> Option<OfficialProvider> {
     }
     Some(OfficialProvider {
         id: "postgres",
-        version: "0.1.0",
+        version: "0.4.0",
         binary_name: binary_name("aivault-provider-postgres"),
         capabilities: postgres_capabilities(),
     })
@@ -89,6 +89,11 @@ pub fn postgres_capabilities() -> Vec<Capability> {
         "postgres/describe-table",
         "postgres/preview-table",
         "postgres/query",
+        "postgres/export-query",
+        "postgres/export-file",
+        "postgres/import-rows",
+        "postgres/execute",
+        "postgres/admin",
     ]
     .into_iter()
     .map(|id| Capability {

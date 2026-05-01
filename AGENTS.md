@@ -29,6 +29,20 @@ When implementing or verifying behavior:
 
 ## Development Commands
 
+### Local Install / Daemon Replacement
+
+When testing changes against the locally installed CLI or daemon, use the repo script instead of
+manually copying binaries or restarting processes:
+
+```bash
+pnpm install:local
+```
+
+This builds release `aivault`/`aivaultd` binaries, updates local symlinks, installs bundled
+providers, replaces running daemon instances, and runs a smoke check. Use
+`pnpm install:local -- --help` for options such as `--install-dir`, `--no-postgres`,
+`--no-shared`, and `--no-smoke`.
+
 ### Code Quality Checks (Required)
 
 Run these from the repo root before finishing:
@@ -58,4 +72,3 @@ pnpm stories
 - Keep changes minimal and aligned with existing patterns.
 - Use existing scripts via `pnpm`.
 - Avoid string matching or regex matching on error messages to decide retryability.
-

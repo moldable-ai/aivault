@@ -25,6 +25,12 @@ pub struct StoredCredential {
     pub auth: AuthStrategy,
     pub hosts: Vec<String>,
     pub secret_ref: String,
+    /// Optional provider-specific ceiling for riskier operation modes.
+    ///
+    /// Postgres currently interprets this as one of `read-only`, `write`, or `admin`; missing
+    /// values default to the safest provider mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_policy_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -208,6 +214,7 @@ mod tests {
             },
             hosts: vec!["api.openai.com".to_string()],
             secret_ref: "vault:secret:abc".to_string(),
+            max_policy_mode: None,
         });
         store.upsert_capability(Capability {
             id: "openai/chat".to_string(),
@@ -228,6 +235,27 @@ mod tests {
     }
 
     #[test]
+    fn stored_credential_policy_mode_is_backward_compatible() {
+        let auth = AuthStrategy::Header {
+            header_name: "x-aivault-postgres".to_string(),
+            value_template: "{{secret}}".to_string(),
+        };
+        let raw = serde_json::json!({
+            "id": "pg",
+            "provider": "postgres",
+            "auth": auth,
+            "hosts": ["localhost:5432"],
+            "secretRef": "vault:secret:abc"
+        });
+
+        let credential: StoredCredential = serde_json::from_value(raw).unwrap();
+        assert_eq!(credential.max_policy_mode, None);
+
+        let raw = serde_json::to_value(&credential).unwrap();
+        assert!(raw.get("maxPolicyMode").is_none());
+    }
+
+    #[test]
     #[cfg(unix)]
     fn broker_store_save_uses_restrictive_permissions() {
         use std::os::unix::fs::PermissionsExt;
@@ -245,6 +273,7 @@ mod tests {
             },
             hosts: vec!["api.openai.com".to_string()],
             secret_ref: "vault:secret:abc".to_string(),
+            max_policy_mode: None,
         });
         store.save().unwrap();
 

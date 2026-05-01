@@ -5,6 +5,7 @@
     "build": "cargo build --all-targets",
     "build:link": "cargo build --bins && mkdir -p \"$HOME/.local/bin\" && ln -sf \"$(pwd)/target/debug/aivault\" \"$HOME/.local/bin/aivault\" && ln -sf \"$(pwd)/target/debug/aivaultd\" \"$HOME/.local/bin/aivaultd\" && pnpm daemon:restart",
     "build:release": "cargo build --release --all-targets",
+    "install:local": "bash scripts/install-local.sh",
     "provider:build:postgres": "cargo build --manifest-path providers/postgres/Cargo.toml",
     "provider:build:postgres:release": "cargo build --manifest-path providers/postgres/Cargo.toml --release",
     "provider:lint:postgres": "cargo clippy --manifest-path providers/postgres/Cargo.toml --all-targets -- -D warnings",

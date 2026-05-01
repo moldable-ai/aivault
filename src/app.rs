@@ -5,6 +5,7 @@ use std::net::IpAddr;
 #[cfg(debug_assertions)]
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use base64::Engine;
 use reqwest::blocking::multipart::Form;
@@ -34,6 +35,13 @@ use crate::vault::{
 };
 
 const OAUTH2_REFRESH_SKEW_MS: i64 = 5 * 60 * 1000;
+
+#[derive(Clone, Copy)]
+pub(crate) struct CapabilityExecutionOptions<'a> {
+    pub timeout_ms: Option<u64>,
+    pub workspace_id: Option<&'a str>,
+    pub group_id: Option<&'a str>,
+}
 
 pub fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
@@ -197,6 +205,7 @@ fn run_restart_daemon() -> Result<(), String> {
                 },
             },
             client_ip: "127.0.0.1".to_string(),
+            timeout_ms: None,
             workspace_id: None,
             group_id: None,
         };
@@ -1272,6 +1281,7 @@ fn derive_registry_credentials_from_vault(
                 auth: template.auth.clone(),
                 hosts,
                 secret_ref,
+                max_policy_mode: None,
             });
         }
     }
@@ -1338,6 +1348,7 @@ fn maybe_autoprovision_registry_credential(
         auth: template.auth.clone(),
         hosts: template.hosts.clone(),
         secret_ref,
+        max_policy_mode: None,
     };
 
     let existing_credential = store
@@ -1431,6 +1442,7 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             hmac_algorithm,
             path_prefix_template,
             auth_header,
+            max_policy_mode,
         } => {
             let id = id.trim().to_string();
             if id.is_empty() {
@@ -1463,6 +1475,13 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             if group_id.is_some() && workspace_id.is_none() {
                 return Err("--workspace-id is required when --group-id is provided".to_string());
             }
+            if max_policy_mode.is_some() && provider != "postgres" {
+                return Err(
+                    "--max-policy-mode is currently only supported for postgres credentials"
+                        .to_string(),
+                );
+            }
+            let max_policy_mode = max_policy_mode.map(|mode| mode.as_stored_value().to_string());
 
             let mut auth_headers = Vec::new();
             for raw in auth_header {
@@ -1531,6 +1550,7 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
                 auth,
                 hosts,
                 secret_ref,
+                max_policy_mode,
             };
             store.upsert_credential(credential.clone());
             if let Some(template) = provider_defaults {
@@ -1959,12 +1979,22 @@ fn invoke_with_store(
             store,
             envelope,
             client_ip,
-            workspace_id,
-            group_id,
+            CapabilityExecutionOptions {
+                timeout_ms: args.timeout_ms,
+                workspace_id,
+                group_id,
+            },
         );
     }
-    let response =
-        maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+    let response = maybe_run_capability_envelope(
+        vault,
+        store,
+        envelope,
+        client_ip,
+        args.timeout_ms,
+        workspace_id,
+        group_id,
+    )?;
     print_invoke_body(&response)
 }
 
@@ -1989,8 +2019,15 @@ fn invoke_json_with_store(
         .client_ip
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
-    let response =
-        maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+    let response = maybe_run_capability_envelope(
+        vault,
+        store,
+        envelope,
+        client_ip,
+        args.timeout_ms,
+        workspace_id,
+        group_id,
+    )?;
 
     let planned = response
         .get("planned")
@@ -2044,8 +2081,15 @@ fn invoke_markdown_with_store(
         .client_ip
         .parse()
         .map_err(|_| "invalid --client-ip".to_string())?;
-    let response =
-        maybe_run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
+    let response = maybe_run_capability_envelope(
+        vault,
+        store,
+        envelope,
+        client_ip,
+        args.timeout_ms,
+        workspace_id,
+        group_id,
+    )?;
 
     let bytes = extract_invoke_body_bytes(&response)?;
     let value = if let Ok(json) = serde_json::from_slice::<Value>(&bytes) {
@@ -2121,6 +2165,7 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
     let request = DaemonRequest::ExecuteEnvelope {
         envelope,
         client_ip: client_ip.to_string(),
+        timeout_ms: args.timeout_ms,
         workspace_id: workspace_id.map(|s| s.to_string()),
         group_id: group_id.map(|s| s.to_string()),
     };
@@ -2230,6 +2275,7 @@ fn invoke_stream_via_daemon_thin(args: InvokeArgs) -> Result<(), String> {
     let request = DaemonRequest::ExecuteEnvelopeStream {
         envelope,
         client_ip: client_ip.to_string(),
+        timeout_ms: args.timeout_ms,
         workspace_id: workspace_id.map(|s| s.to_string()),
         group_id: group_id.map(|s| s.to_string()),
     };
@@ -2555,6 +2601,7 @@ fn build_capability_call_envelope(
         stream: _,
         multipart_field,
         multipart_file,
+        timeout_ms: _,
         credential,
         workspace_id: _,
         group_id: _,
@@ -2682,6 +2729,7 @@ fn build_capability_call_envelope_without_local_capability(
         stream: _,
         multipart_field,
         multipart_file,
+        timeout_ms: _,
         credential,
         workspace_id: _,
         group_id: _,
@@ -2890,6 +2938,7 @@ pub(crate) fn run_capability_envelope(
     store: &BrokerStore,
     envelope: ProxyEnvelope,
     client_ip: IpAddr,
+    timeout_ms: Option<u64>,
     workspace_id: Option<&str>,
     group_id: Option<&str>,
 ) -> Result<Value, String> {
@@ -2907,7 +2956,7 @@ pub(crate) fn run_capability_envelope(
     let retry_envelope = envelope.clone();
     let (broker, planned) =
         plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
-    let response = execute_planned_http_request(&broker, &planned)?;
+    let response = execute_planned_http_request(&broker, &planned, timeout_ms)?;
 
     if response_status(&response) == Some(401)
         && force_refresh_oauth2_credential_for_retry(
@@ -2926,7 +2975,7 @@ pub(crate) fn run_capability_envelope(
             workspace_id,
             group_id,
         )?;
-        return execute_planned_http_request(&retry_broker, &retry_planned);
+        return execute_planned_http_request(&retry_broker, &retry_planned, timeout_ms);
     }
 
     Ok(response)
@@ -2937,8 +2986,7 @@ pub(crate) fn run_capability_envelope_streaming<F>(
     store: &BrokerStore,
     envelope: ProxyEnvelope,
     client_ip: IpAddr,
-    workspace_id: Option<&str>,
-    group_id: Option<&str>,
+    execution: CapabilityExecutionOptions<'_>,
     on_chunk: F,
 ) -> Result<(), String>
 where
@@ -2948,9 +2996,15 @@ where
         return Err("postgres capabilities do not support streaming output".to_string());
     }
 
-    let (broker, planned) =
-        plan_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)?;
-    execute_planned_http_request_streaming(&broker, &planned, on_chunk)
+    let (broker, planned) = plan_capability_envelope(
+        vault,
+        store,
+        envelope,
+        client_ip,
+        execution.workspace_id,
+        execution.group_id,
+    )?;
+    execute_planned_http_request_streaming(&broker, &planned, execution.timeout_ms, on_chunk)
 }
 
 fn plan_capability_envelope(
@@ -3285,11 +3339,20 @@ fn maybe_run_capability_envelope(
     store: &BrokerStore,
     envelope: ProxyEnvelope,
     client_ip: IpAddr,
+    timeout_ms: Option<u64>,
     workspace_id: Option<&str>,
     group_id: Option<&str>,
 ) -> Result<Value, String> {
     if env_flag_true("AIVAULTD_DISABLE") {
-        return run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id);
+        return run_capability_envelope(
+            vault,
+            store,
+            envelope,
+            client_ip,
+            timeout_ms,
+            workspace_id,
+            group_id,
+        );
     }
 
     // Default to daemon-backed execution on unix platforms. This keeps CLI UX as `aivault <cmd>`
@@ -3309,6 +3372,7 @@ fn maybe_run_capability_envelope(
         let request = DaemonRequest::ExecuteEnvelope {
             envelope: envelope.clone(),
             client_ip: client_ip.to_string(),
+            timeout_ms,
             workspace_id: workspace_id.map(|s| s.to_string()),
             group_id: group_id.map(|s| s.to_string()),
         };
@@ -3487,7 +3551,15 @@ fn maybe_run_capability_envelope(
     #[cfg(not(unix))]
     {
         // Non-unix targets: daemon boundary not supported; fall back to in-process.
-        run_capability_envelope(vault, store, envelope, client_ip, workspace_id, group_id)
+        run_capability_envelope(
+            vault,
+            store,
+            envelope,
+            client_ip,
+            timeout_ms,
+            workspace_id,
+            group_id,
+        )
     }
 }
 
@@ -3496,8 +3568,7 @@ fn maybe_run_capability_envelope_streaming(
     _store: &BrokerStore,
     envelope: ProxyEnvelope,
     client_ip: IpAddr,
-    workspace_id: Option<&str>,
-    group_id: Option<&str>,
+    execution: CapabilityExecutionOptions<'_>,
 ) -> Result<(), String> {
     if env_flag_true("AIVAULTD_DISABLE") {
         return Err("streaming invoke requires aivaultd; AIVAULTD_DISABLE is set".to_string());
@@ -3518,8 +3589,9 @@ fn maybe_run_capability_envelope_streaming(
         let request = DaemonRequest::ExecuteEnvelopeStream {
             envelope,
             client_ip: client_ip.to_string(),
-            workspace_id: workspace_id.map(|s| s.to_string()),
-            group_id: group_id.map(|s| s.to_string()),
+            timeout_ms: execution.timeout_ms,
+            workspace_id: execution.workspace_id.map(|s| s.to_string()),
+            group_id: execution.group_id.map(|s| s.to_string()),
         };
 
         let autostart_enabled = std::env::var("AIVAULTD_AUTOSTART")
@@ -3863,11 +3935,28 @@ fn load_runtime_broker_for_context(
             }
         }
 
+        let registry_secret_is_global = stored
+            .workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .is_none()
+            && stored
+                .group_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .is_none();
+        let (secret_workspace_id, secret_group_id) = if registry_secret_is_global {
+            (None, None)
+        } else {
+            (workspace_id, group_id)
+        };
         let secret = resolve_secret_ref_for_context(
             vault,
             &stored.secret_ref,
-            workspace_id,
-            group_id,
+            secret_workspace_id,
+            secret_group_id,
             Some("broker.credential.load"),
             Some("aivault-cli"),
         );
@@ -4253,6 +4342,7 @@ fn secret_material_from_bytes(auth: &AuthStrategy, raw: Vec<u8>) -> Result<Secre
 fn execute_planned_http_request(
     broker: &Broker,
     planned: &PlannedRequest,
+    timeout_ms: Option<u64>,
 ) -> Result<Value, String> {
     let mut url = reqwest::Url::parse(&format!(
         "{}://{}{}",
@@ -4276,6 +4366,9 @@ fn execute_planned_http_request(
     let client = build_http_client_with_dev_overrides()?;
 
     let mut req = client.request(method, url.clone());
+    if let Some(timeout_ms) = timeout_ms {
+        req = req.timeout(Duration::from_millis(timeout_ms.max(1)));
+    }
     let is_multipart = matches!(planned.body_mode, RequestBodyMode::Multipart { .. });
     for header in &planned.headers {
         if is_multipart && header.name.eq_ignore_ascii_case("content-type") {
@@ -4357,13 +4450,14 @@ fn execute_planned_http_request(
 fn execute_planned_http_request_streaming<F>(
     broker: &Broker,
     planned: &PlannedRequest,
+    timeout_ms: Option<u64>,
     mut on_chunk: F,
 ) -> Result<(), String>
 where
     F: FnMut(&[u8]) -> Result<(), String>,
 {
     if broker.response_body_policy_requires_buffering(&planned.capability) {
-        let response = execute_planned_http_request(broker, planned)?;
+        let response = execute_planned_http_request(broker, planned, timeout_ms)?;
         let bytes = extract_invoke_body_bytes(&response)?;
         return on_chunk(&bytes);
     }
@@ -4390,6 +4484,9 @@ where
     let client = build_http_client_with_dev_overrides()?;
 
     let mut req = client.request(method, url.clone());
+    if let Some(timeout_ms) = timeout_ms {
+        req = req.timeout(Duration::from_millis(timeout_ms.max(1)));
+    }
     let is_multipart = matches!(planned.body_mode, RequestBodyMode::Multipart { .. });
     for header in &planned.headers {
         if is_multipart && header.name.eq_ignore_ascii_case("content-type") {
@@ -4790,14 +4887,145 @@ mod tests {
     #[cfg(not(debug_assertions))]
     use super::build_http_client_with_dev_overrides;
     use super::{build_oauth_setup_plan, load_runtime_broker_for_context};
-    use crate::broker::{AuthStrategy, ProxyEnvelope, ProxyEnvelopeRequest, ProxyTokenMintRequest};
+    use crate::broker::{
+        AllowPolicy, AuthStrategy, Broker, Capability, PlannedRequest, ProxyEnvelope,
+        ProxyEnvelopeRequest, ProxyTokenMintRequest, RequestBodyMode,
+    };
     use crate::broker_store::{BrokerStore, StoredCredential};
-    use crate::cli::{CapabilityCommand, CredentialCommand, ScopeKind, SecretsCommand};
+    use crate::cli::{
+        CapabilityCommand, CredentialCommand, InvokeArgs, PolicyModeKind, ScopeKind, SecretsCommand,
+    };
+    use crate::daemon::DaemonRequest;
     use crate::test_support::{ScopedEnvVar, ENV_LOCK};
     use crate::vault::{SecretRef, SecretScope, VaultProviderConfig, VaultRuntime};
     use base64::Engine;
     use std::collections::HashMap;
+    use std::io::{Read, Write};
     use std::net::IpAddr;
+    use std::net::TcpListener;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    fn invoke_args(id: &str) -> InvokeArgs {
+        InvokeArgs {
+            id: id.to_string(),
+            request: None,
+            request_file: None,
+            method: None,
+            path: None,
+            header: Vec::new(),
+            body: None,
+            body_file_path: None,
+            stream: false,
+            multipart_field: Vec::new(),
+            multipart_file: Vec::new(),
+            timeout_ms: None,
+            credential: None,
+            workspace_id: None,
+            group_id: None,
+            client_ip: "127.0.0.1".to_string(),
+        }
+    }
+
+    #[test]
+    fn invoke_timeout_ms_is_transport_only_and_allows_manual_request_flags() {
+        let capability = Capability {
+            id: "openai/image-generation".to_string(),
+            provider: "openai".to_string(),
+            allow: AllowPolicy {
+                hosts: vec!["api.openai.com".to_string()],
+                methods: vec!["POST".to_string()],
+                path_prefixes: vec!["/v1/images".to_string()],
+            },
+        };
+        let mut args = invoke_args("openai/image-generation");
+        args.method = Some("POST".to_string());
+        args.path = Some("/v1/images/generations".to_string());
+        args.body = Some(r#"{"model":"gpt-image-2"}"#.to_string());
+        args.timeout_ms = Some(600_000);
+
+        let envelope = super::build_capability_call_envelope(&capability, args).unwrap();
+
+        assert_eq!(envelope.request.method, "POST");
+        assert_eq!(envelope.request.path, "/v1/images/generations");
+        assert_eq!(
+            envelope.request.body.as_deref(),
+            Some(r#"{"model":"gpt-image-2"}"#)
+        );
+    }
+
+    #[test]
+    fn daemon_execute_envelope_round_trips_timeout_ms() {
+        let request = DaemonRequest::ExecuteEnvelope {
+            envelope: ProxyEnvelope {
+                capability: "openai/image-generation".to_string(),
+                credential: None,
+                request: ProxyEnvelopeRequest {
+                    method: "POST".to_string(),
+                    path: "/v1/images/generations".to_string(),
+                    headers: Vec::new(),
+                    body: Some("{}".to_string()),
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            client_ip: "127.0.0.1".to_string(),
+            timeout_ms: Some(600_000),
+            workspace_id: Some("personal".to_string()),
+            group_id: Some("personal".to_string()),
+        };
+
+        let encoded = serde_json::to_string(&request).unwrap();
+        assert!(encoded.contains("\"timeoutMs\":600000"));
+
+        let decoded: DaemonRequest = serde_json::from_str(&encoded).unwrap();
+        match decoded {
+            DaemonRequest::ExecuteEnvelope { timeout_ms, .. } => {
+                assert_eq!(timeout_ms, Some(600_000));
+            }
+            DaemonRequest::ExecuteEnvelopeStream { .. } => panic!("unexpected stream request"),
+        }
+    }
+
+    #[test]
+    fn execute_planned_http_request_applies_timeout_ms() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let host = listener.local_addr().unwrap().to_string();
+        let server = thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut buffer = [0_u8; 512];
+            let _ = stream.read(&mut buffer);
+            thread::sleep(Duration::from_millis(250));
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}");
+        });
+
+        let planned = PlannedRequest {
+            capability: "test/slow".to_string(),
+            credential: "test".to_string(),
+            host,
+            scheme: "http".to_string(),
+            method: "GET".to_string(),
+            path: "/".to_string(),
+            headers: Vec::new(),
+            query: Vec::new(),
+            body_mode: RequestBodyMode::Empty,
+        };
+
+        let started = Instant::now();
+        let result = super::execute_planned_http_request(
+            &Broker::default_with_registry(None),
+            &planned,
+            Some(50),
+        );
+
+        assert!(result.is_err());
+        assert!(started.elapsed() < Duration::from_secs(2));
+        server.join().unwrap();
+    }
 
     #[test]
     fn oauth_setup_plan_builds_external_consent_url() {
@@ -4916,6 +5144,7 @@ mod tests {
             },
             hosts: vec!["api.openai.com".to_string()],
             secret_ref,
+            max_policy_mode: None,
         });
 
         let broker =
@@ -4987,6 +5216,7 @@ mod tests {
             },
             hosts: vec!["api.openai.com".to_string()],
             secret_ref,
+            max_policy_mode: None,
         });
 
         let broker = load_runtime_broker_for_context(&vault, &store, None, None, None).unwrap();
@@ -5044,6 +5274,7 @@ mod tests {
             },
             hosts: vec!["evil.example".to_string()],
             secret_ref,
+            max_policy_mode: None,
         });
         store.upsert_capability(crate::broker::Capability {
             id: "openai/transcription".to_string(),
@@ -5360,6 +5591,61 @@ mod tests {
     }
 
     #[test]
+    fn runtime_derives_global_registry_credentials_with_workspace_group_context() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+
+        let meta = vault
+            .create_secret("OPENAI_API_KEY", b"sk-direct", SecretScope::Global, vec![])
+            .unwrap();
+        let _ = vault
+            .pin_secret_to_provider(&meta.secret_id, "openai")
+            .unwrap();
+
+        let store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        let mut broker =
+            load_runtime_broker_for_context(&vault, &store, None, Some("personal"), Some("dev"))
+                .unwrap();
+        assert!(broker.credentials().iter().any(|c| c.id == "openai"));
+
+        let token = broker
+            .mint_proxy_token(
+                &crate::broker::RequestAuth::Operator("test".to_string()),
+                ProxyTokenMintRequest {
+                    capabilities: vec!["openai/image-generation".to_string()],
+                    credential: Some("openai".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .unwrap();
+
+        let envelope = ProxyEnvelope {
+            capability: "openai/image-generation".to_string(),
+            credential: Some("openai".to_string()),
+            request: ProxyEnvelopeRequest {
+                method: "POST".to_string(),
+                path: "/v1/images/generations".to_string(),
+                headers: Vec::new(),
+                body: None,
+                multipart: None,
+                multipart_files: Vec::new(),
+                body_file_path: None,
+                url: None,
+            },
+        };
+        let planned = broker
+            .execute_envelope(
+                &crate::broker::RequestAuth::Proxy(token.token),
+                envelope,
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(planned.credential, "openai");
+        assert_eq!(planned.host, "api.openai.com");
+    }
+
+    #[test]
     fn runtime_merges_new_registry_hosts_into_existing_registry_credentials() {
         let _lock = ENV_LOCK.lock().unwrap();
         let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
@@ -5534,6 +5820,7 @@ mod tests {
                 hmac_algorithm: None,
                 path_prefix_template: None,
                 auth_header: Vec::new(),
+                max_policy_mode: None,
             },
         )
         .unwrap_err();
@@ -5580,6 +5867,7 @@ mod tests {
                 secret_id: meta.secret_id,
             }
             .to_string(),
+            max_policy_mode: None,
         });
 
         // Not requested: invalid credential should be skipped (other valid credentials may load).
@@ -5588,6 +5876,60 @@ mod tests {
 
         // Requested: fail closed.
         assert!(load_runtime_broker_for_context(&vault, &store, Some("evil"), None, None).is_err());
+    }
+
+    #[test]
+    fn postgres_credential_create_persists_max_policy_mode() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+
+        let meta = vault
+            .create_secret(
+                "POSTGRES_URL",
+                br#"{"url":"postgresql://postgres:postgres@localhost:5432/app"}"#,
+                SecretScope::Workspace {
+                    workspace_id: "default".to_string(),
+                },
+                vec![],
+            )
+            .unwrap();
+
+        super::run_credential(
+            &vault,
+            CredentialCommand::Create {
+                id: "pg-app".to_string(),
+                provider: "postgres".to_string(),
+                secret_ref: SecretRef {
+                    secret_id: meta.secret_id,
+                }
+                .to_string(),
+                workspace_id: Some("default".to_string()),
+                group_id: None,
+                auth: None,
+                host: vec!["localhost:5432".to_string()],
+                header_name: None,
+                value_template: None,
+                query_param: None,
+                grant_type: None,
+                token_endpoint: None,
+                scope: Vec::new(),
+                aws_service: None,
+                aws_region: None,
+                hmac_algorithm: None,
+                path_prefix_template: None,
+                auth_header: Vec::new(),
+                max_policy_mode: Some(PolicyModeKind::Write),
+            },
+        )
+        .unwrap();
+
+        let store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        let credential = store
+            .credentials()
+            .iter()
+            .find(|credential| credential.id == "pg-app")
+            .unwrap();
+        assert_eq!(credential.max_policy_mode.as_deref(), Some("write"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "aivault-provider-postgres"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
 description = "Official aivault Postgres provider plugin"
 license = "Apache-2.0"
@@ -10,10 +10,14 @@ name = "aivault-provider-postgres"
 path = "src/main.rs"
 
 [dependencies]
+chrono = "0.4.44"
+csv = "1"
 native-tls = "0.2"
 percent-encoding = "2"
-postgres = "0.19"
+postgres = { version = "0.19.13", features = ["with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }
 postgres-native-tls = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sqlparser = "0.61.0"
 url = "2"
+uuid = "1.23.1"

@@ -74,7 +74,19 @@ aivault credential create my-api-staging \
   --auth header \
   --host api-staging.example.com \
   --workspace-id staging
+
+# Postgres policy ceiling
+aivault credential create app-db \
+  --provider postgres \
+  --secret-ref vault:secret:<secret-id> \
+  --host db.example.com:5432 \
+  --workspace-id staging \
+  --max-policy-mode read-only
 ```
+
+`--max-policy-mode` is currently supported for Postgres credentials. It accepts `read-only`,
+`write`, or `admin`; omitted values default to `read-only`, and the installed provider must also
+support the requested mode before a capability can run.
 
 ### When to create credentials manually
 

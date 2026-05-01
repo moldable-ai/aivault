@@ -120,6 +120,8 @@ pub enum DaemonRequest {
     ExecuteEnvelope {
         envelope: ProxyEnvelope,
         client_ip: String,
+        #[serde(default, rename = "timeoutMs")]
+        timeout_ms: Option<u64>,
         #[serde(default)]
         workspace_id: Option<String>,
         #[serde(default)]
@@ -128,6 +130,8 @@ pub enum DaemonRequest {
     ExecuteEnvelopeStream {
         envelope: ProxyEnvelope,
         client_ip: String,
+        #[serde(default, rename = "timeoutMs")]
+        timeout_ms: Option<u64>,
         #[serde(default)]
         workspace_id: Option<String>,
         #[serde(default)]
@@ -369,6 +373,7 @@ fn handle_request(request: DaemonRequest) -> DaemonResponse {
         DaemonRequest::ExecuteEnvelope {
             envelope,
             client_ip,
+            timeout_ms,
             workspace_id,
             group_id,
         } => {
@@ -395,6 +400,7 @@ fn handle_request(request: DaemonRequest) -> DaemonResponse {
                 &store,
                 envelope,
                 client_ip,
+                timeout_ms,
                 workspace_id.as_deref(),
                 group_id.as_deref(),
             ) {
@@ -412,6 +418,7 @@ fn handle_stream_request<W: Write>(request: DaemonRequest, writer: &mut W) -> Re
     let DaemonRequest::ExecuteEnvelopeStream {
         envelope,
         client_ip,
+        timeout_ms,
         workspace_id,
         group_id,
     } = request
@@ -433,8 +440,11 @@ fn handle_stream_request<W: Write>(request: DaemonRequest, writer: &mut W) -> Re
         &store,
         envelope,
         client_ip,
-        workspace_id.as_deref(),
-        group_id.as_deref(),
+        crate::app::CapabilityExecutionOptions {
+            timeout_ms,
+            workspace_id: workspace_id.as_deref(),
+            group_id: group_id.as_deref(),
+        },
         |chunk| write_stream_chunk(writer, chunk),
     )?;
 
