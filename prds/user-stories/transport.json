@@ -13,6 +13,15 @@
       ]
     },
     {
+      "id": "ev-broker-transport-query-params-decode-once-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/broker/tests.rs",
+      "tests": [
+        "story_transport_query_params_decode_once"
+      ]
+    },
+    {
       "id": "ev-broker-transport-passthrough-base-url-swap-test",
       "kind": "tests",
       "automated": true,
@@ -125,7 +134,7 @@
     {
       "id": "transport-envelope",
       "group": "Transport",
-      "title": "Envelope Mode",
+      "title": "Envelope And Query Handling",
       "stories": [
         {
           "slug": "transport-envelope-upstream-derived-from-policy",
@@ -169,6 +178,64 @@
               {
                 "evidenceId": "ev-broker-transport-envelope-upstream-derived-from-policy-test",
                 "test": "story_transport_envelope_upstream_derived_from_policy"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "transport-query-params-decode-once",
+          "story": "As an app developer, I want encoded query parameters decoded to their logical key/value form before the broker forwards them upstream, so provider mini-languages such as Gmail search survive proxy transport without double encoding.",
+          "evidenceLinks": [
+            "ev-broker-transport-query-params-decode-once-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              },
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_passthrough"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/helpers.rs",
+                "symbol": "normalize_path_and_query"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request_streaming"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::ensure_proxy_token"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::audit_records"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-broker-transport-query-params-decode-once-test",
+                "test": "story_transport_query_params_decode_once"
               }
             ]
           }

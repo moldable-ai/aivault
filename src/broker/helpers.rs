@@ -209,7 +209,7 @@ pub(super) fn normalize_path_and_query(
         ));
     }
 
-    let query = parse_query(query_raw);
+    let query = parse_query(query_raw)?;
     Ok((path_only.to_string(), query))
 }
 
@@ -222,18 +222,75 @@ fn path_has_traversal(path: &str) -> bool {
         .any(|segment| segment == "." || segment == "..")
 }
 
-fn parse_query(raw: &str) -> Vec<(String, String)> {
+fn parse_query(raw: &str) -> BrokerResult<Vec<(String, String)>> {
     if raw.trim().is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
     raw.split('&')
         .filter(|pair| !pair.is_empty())
         .map(|pair| {
             let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-            (k.to_string(), v.to_string())
+            Ok((decode_query_component(k)?, decode_query_component(v)?))
         })
         .collect()
+}
+
+fn decode_query_component(component: &str) -> BrokerResult<String> {
+    let bytes = component.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' => {
+                if i + 2 >= bytes.len() {
+                    return Err(BrokerError::new(
+                        ErrorCode::InvalidRequest,
+                        "query parameter contains invalid percent encoding",
+                    ));
+                }
+                let high = decode_hex_digit(bytes[i + 1]).ok_or_else(|| {
+                    BrokerError::new(
+                        ErrorCode::InvalidRequest,
+                        "query parameter contains invalid percent encoding",
+                    )
+                })?;
+                let low = decode_hex_digit(bytes[i + 2]).ok_or_else(|| {
+                    BrokerError::new(
+                        ErrorCode::InvalidRequest,
+                        "query parameter contains invalid percent encoding",
+                    )
+                })?;
+                out.push((high << 4) | low);
+                i += 3;
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+
+    String::from_utf8(out).map_err(|_| {
+        BrokerError::new(
+            ErrorCode::InvalidRequest,
+            "query parameter contains invalid utf-8",
+        )
+    })
+}
+
+fn decode_hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 pub(super) fn ensure_method_allowed(allowed: &[String], method: &str) -> BrokerResult<()> {

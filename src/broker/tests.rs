@@ -918,6 +918,66 @@ fn story_transport_envelope_upstream_derived_from_policy() {
 }
 
 #[test]
+fn story_transport_query_params_decode_once() {
+    let mut broker = base_broker();
+    let token = mint_token(
+        &mut broker,
+        vec!["openai/transcription"],
+        Some("openai"),
+        60_000,
+    );
+
+    let envelope = broker
+        .execute_envelope(
+            &RequestAuth::Proxy(token.token.clone()),
+            ProxyEnvelope {
+                capability: "openai/transcription".to_string(),
+                credential: None,
+                request: ProxyEnvelopeRequest {
+                    method: "POST".to_string(),
+                    path: "/v1/audio/transcriptions?q=has%3Aattachment&label=a%26b&space=a+b"
+                        .to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            loopback_ip(),
+        )
+        .unwrap();
+    assert!(envelope
+        .query
+        .iter()
+        .any(|(k, v)| k == "q" && v == "has:attachment"));
+    assert!(envelope
+        .query
+        .iter()
+        .any(|(k, v)| k == "label" && v == "a&b"));
+    assert!(envelope
+        .query
+        .iter()
+        .any(|(k, v)| k == "space" && v == "a b"));
+
+    let passthrough = broker
+        .execute_passthrough(
+            &RequestAuth::Proxy(token.token),
+            "POST",
+            "/v/openai/v1/audio/transcriptions?q=has%3Aattachment",
+            Vec::new(),
+            loopback_ip(),
+        )
+        .unwrap();
+    assert!(passthrough
+        .planned
+        .query
+        .iter()
+        .any(|(k, v)| k == "q" && v == "has:attachment"));
+}
+
+#[test]
 fn story_transport_passthrough_base_url_swap() {
     let mut broker = base_broker();
     let token = mint_token(
