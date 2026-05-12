@@ -10,15 +10,26 @@
       "value_template": "{{secret}}"
     }
   },
-  "hosts": ["myshopify.com"],
+  "hosts": [
+    "myshopify.com"
+  ],
   "capabilities": [
     {
       "id": "shopify/admin",
       "provider": "shopify",
       "allow": {
-        "hosts": ["myshopify.com"],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "pathPrefixes": ["/admin/api/"]
+        "hosts": [
+          "myshopify.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/admin/api/"
+        ]
       }
     }
   ]

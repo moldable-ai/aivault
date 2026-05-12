@@ -10,29 +10,53 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.spotify.com"],
+  "hosts": [
+    "api.spotify.com"
+  ],
   "capabilities": [
     {
       "id": "spotify/catalog",
       "provider": "spotify",
       "allow": {
-        "hosts": ["api.spotify.com"],
-        "methods": ["GET"],
+        "hosts": [
+          "api.spotify.com"
+        ],
+        "methods": [
+          "GET"
+        ],
         "pathPrefixes": [
-          "/v1/tracks",
           "/v1/albums",
           "/v1/artists",
-          "/v1/audio-features",
           "/v1/audio-analysis",
-          "/v1/search",
-          "/v1/browse",
-          "/v1/recommendations",
-          "/v1/shows",
-          "/v1/episodes",
+          "/v1/audio-features",
           "/v1/audiobooks",
+          "/v1/browse",
           "/v1/chapters",
+          "/v1/episodes",
           "/v1/genres",
-          "/v1/markets"
+          "/v1/markets",
+          "/v1/recommendations",
+          "/v1/search",
+          "/v1/shows",
+          "/v1/tracks"
+        ]
+      }
+    },
+    {
+      "id": "spotify/me",
+      "provider": "spotify",
+      "allow": {
+        "hosts": [
+          "api.spotify.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/v1/me"
         ]
       }
     },
@@ -40,27 +64,33 @@
       "id": "spotify/playlists",
       "provider": "spotify",
       "allow": {
-        "hosts": ["api.spotify.com"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/v1/playlists"]
-      }
-    },
-    {
-      "id": "spotify/me",
-      "provider": "spotify",
-      "allow": {
-        "hosts": ["api.spotify.com"],
-        "methods": ["GET", "PUT", "POST", "DELETE"],
-        "pathPrefixes": ["/v1/me"]
+        "hosts": [
+          "api.spotify.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/v1/playlists"
+        ]
       }
     },
     {
       "id": "spotify/users",
       "provider": "spotify",
       "allow": {
-        "hosts": ["api.spotify.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/users"]
+        "hosts": [
+          "api.spotify.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/users"
+        ]
       }
     }
   ]

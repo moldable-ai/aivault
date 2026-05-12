@@ -10,42 +10,79 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.resend.com"],
+  "hosts": [
+    "api.resend.com"
+  ],
   "capabilities": [
     {
-      "id": "resend/emails",
+      "id": "resend/broadcasts",
       "provider": "resend",
       "allow": {
-        "hosts": ["api.resend.com"],
-        "methods": ["POST", "GET", "PATCH"],
-        "pathPrefixes": ["/emails"]
+        "hosts": [
+          "api.resend.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/broadcasts"
+        ]
       }
     },
     {
       "id": "resend/contacts",
       "provider": "resend",
       "allow": {
-        "hosts": ["api.resend.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/contacts"]
-      }
-    },
-    {
-      "id": "resend/broadcasts",
-      "provider": "resend",
-      "allow": {
-        "hosts": ["api.resend.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/broadcasts"]
+        "hosts": [
+          "api.resend.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/contacts"
+        ]
       }
     },
     {
       "id": "resend/domains",
       "provider": "resend",
       "allow": {
-        "hosts": ["api.resend.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/domains"]
+        "hosts": [
+          "api.resend.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/domains"
+        ]
+      }
+    },
+    {
+      "id": "resend/emails",
+      "provider": "resend",
+      "allow": {
+        "hosts": [
+          "api.resend.com"
+        ],
+        "methods": [
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/emails"
+        ]
       }
     }
   ]

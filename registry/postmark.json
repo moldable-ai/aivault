@@ -10,51 +10,89 @@
       "value_template": "{{secret}}"
     }
   },
-  "hosts": ["api.postmarkapp.com"],
+  "hosts": [
+    "api.postmarkapp.com"
+  ],
   "capabilities": [
-    {
-      "id": "postmark/email",
-      "provider": "postmark",
-      "allow": {
-        "hosts": ["api.postmarkapp.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/email"]
-      }
-    },
     {
       "id": "postmark/bounces",
       "provider": "postmark",
       "allow": {
-        "hosts": ["api.postmarkapp.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/bounces"]
+        "hosts": [
+          "api.postmarkapp.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/bounces"
+        ]
       }
     },
     {
-      "id": "postmark/templates",
+      "id": "postmark/email",
       "provider": "postmark",
       "allow": {
-        "hosts": ["api.postmarkapp.com"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/templates"]
-      }
-    },
-    {
-      "id": "postmark/stats",
-      "provider": "postmark",
-      "allow": {
-        "hosts": ["api.postmarkapp.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/stats"]
+        "hosts": [
+          "api.postmarkapp.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/email"
+        ]
       }
     },
     {
       "id": "postmark/message-streams",
       "provider": "postmark",
       "allow": {
-        "hosts": ["api.postmarkapp.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/message-streams"]
+        "hosts": [
+          "api.postmarkapp.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/message-streams"
+        ]
+      }
+    },
+    {
+      "id": "postmark/stats",
+      "provider": "postmark",
+      "allow": {
+        "hosts": [
+          "api.postmarkapp.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/stats"
+        ]
+      }
+    },
+    {
+      "id": "postmark/templates",
+      "provider": "postmark",
+      "allow": {
+        "hosts": [
+          "api.postmarkapp.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/templates"
+        ]
       }
     }
   ]

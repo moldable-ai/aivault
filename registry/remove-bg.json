@@ -1,32 +1,31 @@
 {
   "$schema": "./schemas/registry-provider.schema.json",
-  "provider": "telegram",
+  "provider": "remove-bg",
   "vaultSecrets": {
-    "TELEGRAM_BOT_TOKEN": "secret"
+    "REMOVE_BG_API_KEY": "secret"
   },
   "auth": {
     "header": {
-      "header_name": "authorization",
-      "value_template": "Bearer {{secret}}"
+      "header_name": "X-Api-Key",
+      "value_template": "{{secret}}"
     }
   },
   "hosts": [
-    "api.telegram.org"
+    "api.remove.bg"
   ],
   "capabilities": [
     {
-      "id": "telegram/bot",
-      "provider": "telegram",
+      "id": "remove-bg/background-removal",
+      "provider": "remove-bg",
       "allow": {
         "hosts": [
-          "api.telegram.org"
+          "api.remove.bg"
         ],
         "methods": [
-          "GET",
           "POST"
         ],
         "pathPrefixes": [
-          "/bot"
+          "/v1.0/removebg"
         ]
       }
     }

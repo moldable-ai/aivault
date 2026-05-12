@@ -10,24 +10,39 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.linear.app", "uploads.linear.app"],
+  "hosts": [
+    "api.linear.app",
+    "uploads.linear.app"
+  ],
   "capabilities": [
     {
       "id": "linear/graphql",
       "provider": "linear",
       "allow": {
-        "hosts": ["api.linear.app"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/graphql"]
+        "hosts": [
+          "api.linear.app"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/graphql"
+        ]
       }
     },
     {
       "id": "linear/storage",
       "provider": "linear",
       "allow": {
-        "hosts": ["uploads.linear.app"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/"]
+        "hosts": [
+          "uploads.linear.app"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/"
+        ]
       }
     }
   ]

@@ -10,51 +10,92 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.x.com"],
+  "hosts": [
+    "api.x.com"
+  ],
   "capabilities": [
     {
-      "id": "x/tweets",
+      "id": "x/dm",
       "provider": "x",
       "allow": {
-        "hosts": ["api.x.com"],
-        "methods": ["POST", "GET", "DELETE"],
-        "pathPrefixes": ["/2/tweets"]
-      }
-    },
-    {
-      "id": "x/users",
-      "provider": "x",
-      "allow": {
-        "hosts": ["api.x.com"],
-        "methods": ["POST", "GET", "DELETE"],
-        "pathPrefixes": ["/2/users"]
+        "hosts": [
+          "api.x.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/2/dm_conversations",
+          "/2/dm_events"
+        ]
       }
     },
     {
       "id": "x/lists",
       "provider": "x",
       "allow": {
-        "hosts": ["api.x.com"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/2/lists"]
+        "hosts": [
+          "api.x.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/2/lists"
+        ]
       }
     },
     {
       "id": "x/spaces",
       "provider": "x",
       "allow": {
-        "hosts": ["api.x.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/2/spaces"]
+        "hosts": [
+          "api.x.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/2/spaces"
+        ]
       }
     },
     {
-      "id": "x/dm",
+      "id": "x/tweets",
       "provider": "x",
       "allow": {
-        "hosts": ["api.x.com"],
-        "methods": ["POST", "GET"],
-        "pathPrefixes": ["/2/dm_conversations", "/2/dm_events"]
+        "hosts": [
+          "api.x.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/2/tweets"
+        ]
+      }
+    },
+    {
+      "id": "x/users",
+      "provider": "x",
+      "allow": {
+        "hosts": [
+          "api.x.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/2/users"
+        ]
       }
     }
   ]

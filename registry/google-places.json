@@ -10,35 +10,54 @@
       "value_template": "{{secret}}"
     }
   },
-  "hosts": ["places.googleapis.com"],
+  "hosts": [
+    "places.googleapis.com"
+  ],
   "capabilities": [
     {
-      "id": "google-places/search-text",
+      "id": "google-places/autocomplete",
       "provider": "google-places",
       "allow": {
-        "hosts": ["places.googleapis.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/v1/places:searchText"]
+        "hosts": [
+          "places.googleapis.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/places:autocomplete"
+        ]
       }
     },
     {
       "id": "google-places/details",
       "provider": "google-places",
       "allow": {
-        "hosts": ["places.googleapis.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/places"]
+        "hosts": [
+          "places.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/places"
+        ]
       }
     },
     {
-      "id": "google-places/autocomplete",
+      "id": "google-places/search-text",
       "provider": "google-places",
       "allow": {
-        "hosts": ["places.googleapis.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/v1/places:autocomplete"]
+        "hosts": [
+          "places.googleapis.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/places:searchText"
+        ]
       }
     }
   ]
 }
-

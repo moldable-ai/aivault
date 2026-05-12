@@ -10,60 +10,102 @@
       "value_template": "Token {{secret}}"
     }
   },
-  "hosts": ["api.deepgram.com", "agent.deepgram.com"],
+  "hosts": [
+    "agent.deepgram.com",
+    "api.deepgram.com"
+  ],
   "capabilities": [
-    {
-      "id": "deepgram/transcription",
-      "provider": "deepgram",
-      "allow": {
-        "hosts": ["api.deepgram.com"],
-        "methods": ["POST", "GET"],
-        "pathPrefixes": ["/v1/listen"]
-      }
-    },
-    {
-      "id": "deepgram/text-to-speech",
-      "provider": "deepgram",
-      "allow": {
-        "hosts": ["api.deepgram.com"],
-        "methods": ["POST", "GET"],
-        "pathPrefixes": ["/v1/speak"]
-      }
-    },
-    {
-      "id": "deepgram/text-intelligence",
-      "provider": "deepgram",
-      "allow": {
-        "hosts": ["api.deepgram.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/v1/read"]
-      }
-    },
     {
       "id": "deepgram/models",
       "provider": "deepgram",
       "allow": {
-        "hosts": ["api.deepgram.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/models"]
+        "hosts": [
+          "api.deepgram.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/models"
+        ]
       }
     },
     {
       "id": "deepgram/projects",
       "provider": "deepgram",
       "allow": {
-        "hosts": ["api.deepgram.com"],
-        "methods": ["GET", "POST"],
-        "pathPrefixes": ["/v1/projects"]
+        "hosts": [
+          "api.deepgram.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/projects"
+        ]
+      }
+    },
+    {
+      "id": "deepgram/text-intelligence",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": [
+          "api.deepgram.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/read"
+        ]
+      }
+    },
+    {
+      "id": "deepgram/text-to-speech",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": [
+          "api.deepgram.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/speak"
+        ]
+      }
+    },
+    {
+      "id": "deepgram/transcription",
+      "provider": "deepgram",
+      "allow": {
+        "hosts": [
+          "api.deepgram.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/listen"
+        ]
       }
     },
     {
       "id": "deepgram/voice-agent",
       "provider": "deepgram",
       "allow": {
-        "hosts": ["agent.deepgram.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/agent"]
+        "hosts": [
+          "agent.deepgram.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/agent"
+        ]
       }
     }
   ]

@@ -10,33 +10,53 @@
       "value_template": "DeepL-Auth-Key {{secret}}"
     }
   },
-  "hosts": ["api-free.deepl.com"],
+  "hosts": [
+    "api-free.deepl.com"
+  ],
   "capabilities": [
-    {
-      "id": "deepl/translate",
-      "provider": "deepl",
-      "allow": {
-        "hosts": ["api-free.deepl.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/v2/translate"]
-      }
-    },
     {
       "id": "deepl/languages",
       "provider": "deepl",
       "allow": {
-        "hosts": ["api-free.deepl.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v2/languages"]
+        "hosts": [
+          "api-free.deepl.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v2/languages"
+        ]
+      }
+    },
+    {
+      "id": "deepl/translate",
+      "provider": "deepl",
+      "allow": {
+        "hosts": [
+          "api-free.deepl.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/translate"
+        ]
       }
     },
     {
       "id": "deepl/usage",
       "provider": "deepl",
       "allow": {
-        "hosts": ["api-free.deepl.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v2/usage"]
+        "hosts": [
+          "api-free.deepl.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v2/usage"
+        ]
       }
     }
   ]

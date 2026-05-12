@@ -10,24 +10,39 @@
       "value_template": "{{secret}}"
     }
   },
-  "hosts": ["api.anthropic.com"],
+  "hosts": [
+    "api.anthropic.com"
+  ],
   "capabilities": [
     {
       "id": "anthropic/messages",
       "provider": "anthropic",
       "allow": {
-        "hosts": ["api.anthropic.com"],
-        "methods": ["POST", "GET"],
-        "pathPrefixes": ["/v1/messages"]
+        "hosts": [
+          "api.anthropic.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/messages"
+        ]
       }
     },
     {
       "id": "anthropic/models",
       "provider": "anthropic",
       "allow": {
-        "hosts": ["api.anthropic.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/models"]
+        "hosts": [
+          "api.anthropic.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/models"
+        ]
       }
     }
   ]

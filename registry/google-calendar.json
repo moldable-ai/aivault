@@ -14,23 +14,40 @@
       ]
     }
   },
-  "hosts": ["www.googleapis.com", "auth.moldable.sh"],
+  "hosts": [
+    "auth.moldable.sh",
+    "www.googleapis.com"
+  ],
   "capabilities": [
     {
       "id": "google-calendar/events",
       "provider": "google-calendar",
       "allow": {
-        "hosts": ["www.googleapis.com"],
-        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
-        "pathPrefixes": ["/calendar/v3/calendars/"]
+        "hosts": [
+          "www.googleapis.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/calendar/v3/calendars/"
+        ]
       }
     },
     {
       "id": "google-calendar/lists",
       "provider": "google-calendar",
       "allow": {
-        "hosts": ["www.googleapis.com"],
-        "methods": ["GET"],
+        "hosts": [
+          "www.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
         "pathPrefixes": [
           "/calendar/v3/users/me/calendarList",
           "/calendar/v3/users/me/settings"

@@ -10,87 +10,163 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.github.com"],
+  "hosts": [
+    "api.github.com"
+  ],
   "capabilities": [
     {
-      "id": "github/repos",
+      "id": "github/gists",
       "provider": "github",
       "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["POST", "GET", "PUT", "PATCH", "DELETE"],
-        "pathPrefixes": ["/repos"]
-      }
-    },
-    {
-      "id": "github/orgs",
-      "provider": "github",
-      "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["POST", "GET", "PUT", "PATCH", "DELETE"],
-        "pathPrefixes": ["/orgs", "/organizations"]
-      }
-    },
-    {
-      "id": "github/issues",
-      "provider": "github",
-      "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/issues"]
-      }
-    },
-    {
-      "id": "github/search",
-      "provider": "github",
-      "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/search"]
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/gists"
+        ]
       }
     },
     {
       "id": "github/graphql",
       "provider": "github",
       "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/graphql"]
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/graphql"
+        ]
       }
     },
     {
-      "id": "github/gists",
+      "id": "github/issues",
       "provider": "github",
       "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/gists"]
-      }
-    },
-    {
-      "id": "github/users",
-      "provider": "github",
-      "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/users", "/user"]
-      }
-    },
-    {
-      "id": "github/notifications",
-      "provider": "github",
-      "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["GET", "PUT", "PATCH", "DELETE"],
-        "pathPrefixes": ["/notifications"]
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/issues"
+        ]
       }
     },
     {
       "id": "github/meta",
       "provider": "github",
       "allow": {
-        "hosts": ["api.github.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/meta", "/rate_limit", "/emojis", "/licenses", "/gitignore"]
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/emojis",
+          "/gitignore",
+          "/licenses",
+          "/meta",
+          "/rate_limit"
+        ]
+      }
+    },
+    {
+      "id": "github/notifications",
+      "provider": "github",
+      "allow": {
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/notifications"
+        ]
+      }
+    },
+    {
+      "id": "github/orgs",
+      "provider": "github",
+      "allow": {
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/organizations",
+          "/orgs"
+        ]
+      }
+    },
+    {
+      "id": "github/repos",
+      "provider": "github",
+      "allow": {
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/repos"
+        ]
+      }
+    },
+    {
+      "id": "github/search",
+      "provider": "github",
+      "allow": {
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/search"
+        ]
+      }
+    },
+    {
+      "id": "github/users",
+      "provider": "github",
+      "allow": {
+        "hosts": [
+          "api.github.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/user",
+          "/users"
+        ]
       }
     }
   ]

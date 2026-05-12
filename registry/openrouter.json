@@ -10,87 +10,148 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["openrouter.ai"],
+  "hosts": [
+    "openrouter.ai"
+  ],
   "capabilities": [
+    {
+      "id": "openrouter/api-keys",
+      "provider": "openrouter",
+      "allow": {
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/api_keys"
+        ]
+      }
+    },
     {
       "id": "openrouter/chat-completions",
       "provider": "openrouter",
       "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/api/v1/chat/completions"]
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/chat/completions"
+        ]
       }
     },
     {
       "id": "openrouter/completions",
       "provider": "openrouter",
       "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/api/v1/completions"]
-      }
-    },
-    {
-      "id": "openrouter/responses",
-      "provider": "openrouter",
-      "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["POST", "GET", "DELETE"],
-        "pathPrefixes": ["/api/v1/responses"]
-      }
-    },
-    {
-      "id": "openrouter/embeddings",
-      "provider": "openrouter",
-      "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/api/v1/embeddings"]
-      }
-    },
-    {
-      "id": "openrouter/models",
-      "provider": "openrouter",
-      "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/api/v1/models"]
-      }
-    },
-    {
-      "id": "openrouter/providers",
-      "provider": "openrouter",
-      "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/api/v1/providers"]
-      }
-    },
-    {
-      "id": "openrouter/generation",
-      "provider": "openrouter",
-      "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/api/v1/generation"]
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/completions"
+        ]
       }
     },
     {
       "id": "openrouter/credits",
       "provider": "openrouter",
       "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/api/v1/credits"]
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/api/v1/credits"
+        ]
       }
     },
     {
-      "id": "openrouter/api-keys",
+      "id": "openrouter/embeddings",
       "provider": "openrouter",
       "allow": {
-        "hosts": ["openrouter.ai"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/api/v1/api_keys"]
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/embeddings"
+        ]
+      }
+    },
+    {
+      "id": "openrouter/generation",
+      "provider": "openrouter",
+      "allow": {
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/api/v1/generation"
+        ]
+      }
+    },
+    {
+      "id": "openrouter/models",
+      "provider": "openrouter",
+      "allow": {
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/api/v1/models"
+        ]
+      }
+    },
+    {
+      "id": "openrouter/providers",
+      "provider": "openrouter",
+      "allow": {
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/api/v1/providers"
+        ]
+      }
+    },
+    {
+      "id": "openrouter/responses",
+      "provider": "openrouter",
+      "allow": {
+        "hosts": [
+          "openrouter.ai"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/responses"
+        ]
       }
     }
   ]

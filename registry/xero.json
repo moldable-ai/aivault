@@ -10,15 +10,26 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.xero.com"],
+  "hosts": [
+    "api.xero.com"
+  ],
   "capabilities": [
     {
       "id": "xero/accounting",
       "provider": "xero",
       "allow": {
-        "hosts": ["api.xero.com"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/api.xro/2.0/"]
+        "hosts": [
+          "api.xero.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/api.xro/2.0/"
+        ]
       }
     }
   ]

@@ -58,6 +58,25 @@ function validateAuth(auth, file, errors) {
     requireFields(value, ["param_name"]);
     return;
   }
+  if (key === "multi_query") {
+    if (!Array.isArray(value) || value.length === 0) {
+      push(errors, file, "auth.multi_query must be a non-empty array");
+      return;
+    }
+    for (const item of value) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        push(errors, file, "auth.multi_query[] entries must be objects");
+        continue;
+      }
+      if (!isNonEmptyString(item.param_name)) {
+        push(errors, file, "auth.multi_query[].param_name must be a non-empty string");
+      }
+      if (!isNonEmptyString(item.value_template)) {
+        push(errors, file, "auth.multi_query[].value_template must be a non-empty string");
+      }
+    }
+    return;
+  }
   if (key === "multi_header") {
     if (!Array.isArray(value) || value.length === 0) {
       push(errors, file, "auth.multi_header must be a non-empty array");

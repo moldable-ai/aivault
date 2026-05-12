@@ -10,42 +10,75 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.stripe.com"],
+  "hosts": [
+    "api.stripe.com"
+  ],
   "capabilities": [
     {
-      "id": "stripe/payments",
+      "id": "stripe/billing",
       "provider": "stripe",
       "allow": {
-        "hosts": ["api.stripe.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/payment_intents", "/v1/charges", "/v1/refunds", "/v1/balance_transactions"]
+        "hosts": [
+          "api.stripe.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/invoices",
+          "/v1/prices",
+          "/v1/products",
+          "/v1/subscriptions"
+        ]
       }
     },
     {
       "id": "stripe/customers",
       "provider": "stripe",
       "allow": {
-        "hosts": ["api.stripe.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/customers"]
-      }
-    },
-    {
-      "id": "stripe/billing",
-      "provider": "stripe",
-      "allow": {
-        "hosts": ["api.stripe.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/subscriptions", "/v1/invoices", "/v1/products", "/v1/prices"]
+        "hosts": [
+          "api.stripe.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/customers"
+        ]
       }
     },
     {
       "id": "stripe/disputes",
       "provider": "stripe",
       "allow": {
-        "hosts": ["api.stripe.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v1/disputes", "/v1/payouts"]
+        "hosts": [
+          "api.stripe.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/disputes",
+          "/v1/payouts"
+        ]
+      }
+    },
+    {
+      "id": "stripe/payments",
+      "provider": "stripe",
+      "allow": {
+        "hosts": [
+          "api.stripe.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/balance_transactions",
+          "/v1/charges",
+          "/v1/payment_intents",
+          "/v1/refunds"
+        ]
       }
     }
   ]

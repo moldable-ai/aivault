@@ -47,6 +47,12 @@ mod tests {
             .iter()
             .any(|cap| cap.id == "openai/transcription"));
 
+        let remove_bg = registry.provider("remove-bg").expect("remove-bg provider");
+        assert!(remove_bg
+            .capabilities
+            .iter()
+            .any(|cap| cap.id == "remove-bg/background-removal"));
+
         let deepgram = registry.provider("deepgram").expect("deepgram provider");
         assert!(deepgram
             .capabilities

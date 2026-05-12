@@ -10,41 +10,99 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.hubapi.com"],
+  "hosts": [
+    "api.hubapi.com"
+  ],
   "capabilities": [
     {
-      "id": "hubspot/crm-objects",
+      "id": "hubspot/account",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
-        "pathPrefixes": ["/crm/v3/objects/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/account-info/v3/"
+        ]
       }
     },
     {
-      "id": "hubspot/crm-pipelines",
+      "id": "hubspot/automation",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
-        "pathPrefixes": ["/crm/v3/pipelines/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/automation/v4/"
+        ]
       }
     },
     {
-      "id": "hubspot/crm-properties",
+      "id": "hubspot/cms",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
-        "pathPrefixes": ["/crm/v3/properties/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/cms/v3/blogs/",
+          "/cms/v3/domains/",
+          "/cms/v3/hubdb/",
+          "/cms/v3/pages/",
+          "/cms/v3/site-pages/",
+          "/cms/v3/source-code/",
+          "/cms/v3/url-redirects/"
+        ]
+      }
+    },
+    {
+      "id": "hubspot/conversations",
+      "provider": "hubspot",
+      "allow": {
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/conversations/v3/"
+        ]
       }
     },
     {
       "id": "hubspot/crm-associations",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
         "pathPrefixes": [
           "/crm/v4/associations/",
           "/crm/v4/objects/"
@@ -55,97 +113,144 @@
       "id": "hubspot/crm-object-library",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/crm/v3/object-library/"]
-      }
-    },
-    {
-      "id": "hubspot/marketing",
-      "provider": "hubspot",
-      "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "GET"
+        ],
         "pathPrefixes": [
-          "/marketing/v3/transactional/",
-          "/marketing/v3/email/",
-          "/marketing/v3/marketing-events/",
-          "/marketing/v3/forms/",
-          "/marketing/v3/campaigns/"
+          "/crm/v3/object-library/"
         ]
       }
     },
     {
-      "id": "hubspot/cms",
+      "id": "hubspot/crm-objects",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "PUT", "DELETE"],
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
         "pathPrefixes": [
-          "/cms/v3/blogs/",
-          "/cms/v3/pages/",
-          "/cms/v3/site-pages/",
-          "/cms/v3/hubdb/",
-          "/cms/v3/domains/",
-          "/cms/v3/url-redirects/",
-          "/cms/v3/source-code/"
+          "/crm/v3/objects/"
         ]
       }
     },
     {
-      "id": "hubspot/conversations",
+      "id": "hubspot/crm-pipelines",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
-        "pathPrefixes": ["/conversations/v3/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/crm/v3/pipelines/"
+        ]
       }
     },
     {
-      "id": "hubspot/automation",
+      "id": "hubspot/crm-properties",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
-        "pathPrefixes": ["/automation/v4/"]
-      }
-    },
-    {
-      "id": "hubspot/files",
-      "provider": "hubspot",
-      "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "DELETE"],
-        "pathPrefixes": ["/files/v3/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/crm/v3/properties/"
+        ]
       }
     },
     {
       "id": "hubspot/events",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
-        "pathPrefixes": ["/events/v3/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/events/v3/"
+        ]
       }
     },
     {
-      "id": "hubspot/account",
+      "id": "hubspot/files",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/account-info/v3/"]
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/files/v3/"
+        ]
+      }
+    },
+    {
+      "id": "hubspot/marketing",
+      "provider": "hubspot",
+      "allow": {
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/marketing/v3/campaigns/",
+          "/marketing/v3/email/",
+          "/marketing/v3/forms/",
+          "/marketing/v3/marketing-events/",
+          "/marketing/v3/transactional/"
+        ]
       }
     },
     {
       "id": "hubspot/settings",
       "provider": "hubspot",
       "allow": {
-        "hosts": ["api.hubapi.com"],
-        "methods": ["GET", "POST", "PATCH", "DELETE"],
+        "hosts": [
+          "api.hubapi.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
         "pathPrefixes": [
-          "/settings/v3/users/",
-          "/settings/v3/business-units/"
+          "/settings/v3/business-units/",
+          "/settings/v3/users/"
         ]
       }
     }

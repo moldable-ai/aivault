@@ -5,42 +5,78 @@
     "MAILGUN_API_KEY": "password"
   },
   "auth": "basic",
-  "hosts": ["api.mailgun.net"],
+  "hosts": [
+    "api.mailgun.net"
+  ],
   "capabilities": [
-    {
-      "id": "mailgun/sending",
-      "provider": "mailgun",
-      "allow": {
-        "hosts": ["api.mailgun.net"],
-        "methods": ["POST", "GET"],
-        "pathPrefixes": ["/v3/"]
-      }
-    },
     {
       "id": "mailgun/domains",
       "provider": "mailgun",
       "allow": {
-        "hosts": ["api.mailgun.net"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/v3/domains"]
-      }
-    },
-    {
-      "id": "mailgun/routes",
-      "provider": "mailgun",
-      "allow": {
-        "hosts": ["api.mailgun.net"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/v3/routes"]
+        "hosts": [
+          "api.mailgun.net"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/v3/domains"
+        ]
       }
     },
     {
       "id": "mailgun/lists",
       "provider": "mailgun",
       "allow": {
-        "hosts": ["api.mailgun.net"],
-        "methods": ["POST", "GET", "PUT", "DELETE"],
-        "pathPrefixes": ["/v3/lists"]
+        "hosts": [
+          "api.mailgun.net"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/v3/lists"
+        ]
+      }
+    },
+    {
+      "id": "mailgun/routes",
+      "provider": "mailgun",
+      "allow": {
+        "hosts": [
+          "api.mailgun.net"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/v3/routes"
+        ]
+      }
+    },
+    {
+      "id": "mailgun/sending",
+      "provider": "mailgun",
+      "allow": {
+        "hosts": [
+          "api.mailgun.net"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v3/"
+        ]
       }
     }
   ]

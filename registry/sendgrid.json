@@ -10,51 +10,91 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.sendgrid.com"],
+  "hosts": [
+    "api.sendgrid.com"
+  ],
   "capabilities": [
     {
       "id": "sendgrid/mail",
       "provider": "sendgrid",
       "allow": {
-        "hosts": ["api.sendgrid.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/v3/mail"]
+        "hosts": [
+          "api.sendgrid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v3/mail"
+        ]
       }
     },
     {
       "id": "sendgrid/marketing",
       "provider": "sendgrid",
       "allow": {
-        "hosts": ["api.sendgrid.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/v3/marketing"]
-      }
-    },
-    {
-      "id": "sendgrid/templates",
-      "provider": "sendgrid",
-      "allow": {
-        "hosts": ["api.sendgrid.com"],
-        "methods": ["POST", "GET", "PATCH", "DELETE"],
-        "pathPrefixes": ["/v3/templates"]
+        "hosts": [
+          "api.sendgrid.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v3/marketing"
+        ]
       }
     },
     {
       "id": "sendgrid/stats",
       "provider": "sendgrid",
       "allow": {
-        "hosts": ["api.sendgrid.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/v3/stats", "/v3/categories"]
+        "hosts": [
+          "api.sendgrid.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v3/categories",
+          "/v3/stats"
+        ]
       }
     },
     {
       "id": "sendgrid/suppressions",
       "provider": "sendgrid",
       "allow": {
-        "hosts": ["api.sendgrid.com"],
-        "methods": ["GET", "DELETE"],
-        "pathPrefixes": ["/v3/suppression"]
+        "hosts": [
+          "api.sendgrid.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v3/suppression"
+        ]
+      }
+    },
+    {
+      "id": "sendgrid/templates",
+      "provider": "sendgrid",
+      "allow": {
+        "hosts": [
+          "api.sendgrid.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v3/templates"
+        ]
       }
     }
   ]

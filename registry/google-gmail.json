@@ -15,35 +15,40 @@
       ]
     }
   },
-  "hosts": ["gmail.googleapis.com", "people.googleapis.com", "auth.moldable.sh"],
+  "hosts": [
+    "auth.moldable.sh",
+    "gmail.googleapis.com",
+    "people.googleapis.com"
+  ],
   "capabilities": [
     {
-      "id": "google-gmail/profile",
+      "id": "google-gmail/contacts-read",
       "provider": "google-gmail",
       "allow": {
-        "hosts": ["gmail.googleapis.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/gmail/v1/users/me/profile"]
+        "hosts": [
+          "people.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v1/people/me/connections",
+          "/v1/people:searchContacts"
+        ]
       }
     },
     {
       "id": "google-gmail/labels",
       "provider": "google-gmail",
       "allow": {
-        "hosts": ["gmail.googleapis.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/gmail/v1/users/me/labels"]
-      }
-    },
-    {
-      "id": "google-gmail/messages-read",
-      "provider": "google-gmail",
-      "allow": {
-        "hosts": ["gmail.googleapis.com"],
-        "methods": ["GET"],
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
         "pathPrefixes": [
-          "/gmail/v1/users/me/messages",
-          "/gmail/v1/users/me/messages/"
+          "/gmail/v1/users/me/labels"
         ]
       }
     },
@@ -51,29 +56,60 @@
       "id": "google-gmail/messages-modify",
       "provider": "google-gmail",
       "allow": {
-        "hosts": ["gmail.googleapis.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/gmail/v1/users/me/messages/"]
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/messages/"
+        ]
+      }
+    },
+    {
+      "id": "google-gmail/messages-read",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/messages",
+          "/gmail/v1/users/me/messages/"
+        ]
+      }
+    },
+    {
+      "id": "google-gmail/profile",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/profile"
+        ]
       }
     },
     {
       "id": "google-gmail/send",
       "provider": "google-gmail",
       "allow": {
-        "hosts": ["gmail.googleapis.com"],
-        "methods": ["POST"],
-        "pathPrefixes": ["/gmail/v1/users/me/messages/send"]
-      }
-    },
-    {
-      "id": "google-gmail/contacts-read",
-      "provider": "google-gmail",
-      "allow": {
-        "hosts": ["people.googleapis.com"],
-        "methods": ["GET"],
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "POST"
+        ],
         "pathPrefixes": [
-          "/v1/people/me/connections",
-          "/v1/people:searchContacts"
+          "/gmail/v1/users/me/messages/send"
         ]
       }
     }

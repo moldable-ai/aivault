@@ -10,42 +10,58 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["oauth.reddit.com"],
+  "hosts": [
+    "oauth.reddit.com"
+  ],
   "capabilities": [
     {
       "id": "reddit/api",
       "provider": "reddit",
       "allow": {
-        "hosts": ["oauth.reddit.com"],
-        "methods": ["POST", "GET", "PATCH", "PUT", "DELETE"],
-        "pathPrefixes": ["/api/"]
+        "hosts": [
+          "oauth.reddit.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "PATCH",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/api/"
+        ]
       }
     },
     {
       "id": "reddit/content",
       "provider": "reddit",
       "allow": {
-        "hosts": ["oauth.reddit.com"],
-        "methods": ["GET"],
+        "hosts": [
+          "oauth.reddit.com"
+        ],
+        "methods": [
+          "GET"
+        ],
         "pathPrefixes": [
-          "/r/",
-          "/comments/",
-          "/subreddits/",
-          "/user/",
-          "/users/",
-          "/search",
-          "/message/",
-          "/wiki/",
+          "/about/",
+          "/best",
           "/by_id/",
+          "/comments/",
+          "/controversial",
           "/duplicates/",
           "/hot",
+          "/message/",
           "/new",
-          "/top",
-          "/best",
+          "/prefs/",
+          "/r/",
           "/rising",
-          "/controversial",
-          "/about/",
-          "/prefs/"
+          "/search",
+          "/subreddits/",
+          "/top",
+          "/user/",
+          "/users/",
+          "/wiki/"
         ]
       }
     }

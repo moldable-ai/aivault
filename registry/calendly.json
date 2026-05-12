@@ -10,78 +10,134 @@
       "value_template": "Bearer {{secret}}"
     }
   },
-  "hosts": ["api.calendly.com"],
+  "hosts": [
+    "api.calendly.com"
+  ],
   "capabilities": [
     {
-      "id": "calendly/scheduled_events",
+      "id": "calendly/availability",
       "provider": "calendly",
       "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/scheduled_events"]
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/user_availability_schedules",
+          "/user_busy_times"
+        ]
       }
     },
     {
       "id": "calendly/event_types",
       "provider": "calendly",
       "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/event_types", "/event_type_available_times"]
-      }
-    },
-    {
-      "id": "calendly/users",
-      "provider": "calendly",
-      "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/users"]
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/event_type_available_times",
+          "/event_types"
+        ]
       }
     },
     {
       "id": "calendly/organizations",
       "provider": "calendly",
       "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/organizations"]
-      }
-    },
-    {
-      "id": "calendly/availability",
-      "provider": "calendly",
-      "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/user_availability_schedules", "/user_busy_times"]
-      }
-    },
-    {
-      "id": "calendly/webhooks",
-      "provider": "calendly",
-      "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET", "POST", "DELETE"],
-        "pathPrefixes": ["/webhook_subscriptions"]
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/organizations"
+        ]
       }
     },
     {
       "id": "calendly/routing_forms",
       "provider": "calendly",
       "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET"],
-        "pathPrefixes": ["/routing_forms"]
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/routing_forms"
+        ]
+      }
+    },
+    {
+      "id": "calendly/scheduled_events",
+      "provider": "calendly",
+      "allow": {
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/scheduled_events"
+        ]
       }
     },
     {
       "id": "calendly/scheduling_links",
       "provider": "calendly",
       "allow": {
-        "hosts": ["api.calendly.com"],
-        "methods": ["GET", "POST", "DELETE"],
-        "pathPrefixes": ["/scheduling_links"]
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/scheduling_links"
+        ]
+      }
+    },
+    {
+      "id": "calendly/users",
+      "provider": "calendly",
+      "allow": {
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/users"
+        ]
+      }
+    },
+    {
+      "id": "calendly/webhooks",
+      "provider": "calendly",
+      "allow": {
+        "hosts": [
+          "api.calendly.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/webhook_subscriptions"
+        ]
       }
     }
   ]
