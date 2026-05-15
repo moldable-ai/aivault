@@ -1,0 +1,57 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "fal",
+  "vaultSecrets": {
+    "FAL_KEY": "secret"
+  },
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Key {{secret}}"
+    }
+  },
+  "hosts": [
+    "queue.fal.run"
+  ],
+  "credentialAlternatives": [
+    {
+      "id": "fal-api-key",
+      "auth": {
+        "header": {
+          "header_name": "authorization",
+          "value_template": "Key {{secret}}"
+        }
+      },
+      "hosts": [
+        "queue.fal.run"
+      ],
+      "vaultSecrets": {
+        "FAL_API_KEY": "secret"
+      },
+      "capabilities": [
+        "fal/image-to-3d"
+      ],
+      "priority": 5
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "fal/image-to-3d",
+      "provider": "fal",
+      "allow": {
+        "hosts": [
+          "queue.fal.run"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d",
+          "/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d",
+          "/fal-ai/hunyuan-3d/requests"
+        ]
+      }
+    }
+  ]
+}

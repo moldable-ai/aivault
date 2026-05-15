@@ -1,0 +1,28 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "tripo",
+  "vaultSecrets": {
+    "TRIPO_API_KEY": "secret"
+  },
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": ["api.tripo3d.ai"],
+  "capabilities": [
+    {
+      "id": "tripo/image-to-3d",
+      "provider": "tripo",
+      "allow": {
+        "hosts": ["api.tripo3d.ai"],
+        "methods": ["GET", "POST"],
+        "pathPrefixes": [
+          "/v2/openapi/upload/sts",
+          "/v2/openapi/task"
+        ]
+      }
+    }
+  ]
+}
