@@ -91,4 +91,32 @@ mod tests {
             .iter()
             .any(|cap| cap.id == "google-calendar/events"));
     }
+
+    #[test]
+    fn builtin_registry_contains_firecrawl_provider() {
+        let registry = builtin_registry().expect("registry should load");
+
+        let firecrawl = registry.provider("firecrawl").expect("firecrawl provider");
+        assert_eq!(
+            firecrawl.vault_secrets.get("FIRECRAWL_API_KEY"),
+            Some(&"secret".to_string())
+        );
+
+        for expected in [
+            "firecrawl/agent",
+            "firecrawl/batch-scrape",
+            "firecrawl/browser",
+            "firecrawl/crawl",
+            "firecrawl/map",
+            "firecrawl/parse",
+            "firecrawl/scrape",
+            "firecrawl/search",
+            "firecrawl/support",
+        ] {
+            assert!(
+                firecrawl.capabilities.iter().any(|cap| cap.id == expected),
+                "missing {expected}"
+            );
+        }
+    }
 }

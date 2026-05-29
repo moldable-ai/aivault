@@ -1,0 +1,160 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "firecrawl",
+  "vaultSecrets": {
+    "FIRECRAWL_API_KEY": "secret"
+  },
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": [
+    "api.firecrawl.dev"
+  ],
+  "capabilities": [
+    {
+      "id": "firecrawl/agent",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/agent"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/batch-scrape",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/batch/scrape"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/browser",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/browser"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/crawl",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/crawl"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/map",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/map"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/parse",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/parse"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/scrape",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/scrape"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/search",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/search"
+        ]
+      }
+    },
+    {
+      "id": "firecrawl/support",
+      "provider": "firecrawl",
+      "allow": {
+        "hosts": [
+          "api.firecrawl.dev"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/support"
+        ]
+      }
+    }
+  ]
+}

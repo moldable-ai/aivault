@@ -19,8 +19,8 @@
         "hosts": ["api.tripo3d.ai"],
         "methods": ["GET", "POST"],
         "pathPrefixes": [
-          "/v2/openapi/upload/sts",
-          "/v2/openapi/task"
+          "/v2/openapi/task",
+          "/v2/openapi/upload/sts"
         ]
       }
     }
