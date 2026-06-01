@@ -63,7 +63,8 @@
           "POST"
         ],
         "pathPrefixes": [
-          "/gmail/v1/users/me/messages/"
+          "/gmail/v1/users/me/messages/",
+          "/gmail/v1/users/me/threads/"
         ]
       }
     },
@@ -79,7 +80,9 @@
         ],
         "pathPrefixes": [
           "/gmail/v1/users/me/messages",
-          "/gmail/v1/users/me/messages/"
+          "/gmail/v1/users/me/messages/",
+          "/gmail/v1/users/me/threads",
+          "/gmail/v1/users/me/threads/"
         ]
       }
     },
