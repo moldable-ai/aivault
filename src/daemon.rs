@@ -301,7 +301,35 @@ pub fn client_execute_envelope_typed(
 pub fn serve(socket_path: &Path, once: bool) -> Result<(), String> {
     use std::io::{Read, Write};
     use std::os::unix::fs::PermissionsExt;
-    use std::os::unix::net::UnixListener;
+    use std::os::unix::net::{UnixListener, UnixStream};
+
+    fn handle_connection(mut stream: UnixStream) -> Result<(), String> {
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+
+        match serde_json::from_slice::<DaemonRequest>(&buf) {
+            Ok(request @ DaemonRequest::ExecuteEnvelopeStream { .. }) => {
+                if let Err(err) = handle_stream_request(request, &mut stream) {
+                    let _ =
+                        write_stream_frame(&mut stream, &DaemonStreamFrame::Error { error: err });
+                }
+            }
+            Ok(request) => {
+                let response = handle_request(request);
+                let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
+                stream.write_all(&raw).map_err(|e| e.to_string())?;
+                let _ = stream.flush();
+            }
+            Err(err) => {
+                let response = DaemonResponse::err(format!("invalid request JSON: {}", err));
+                let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
+                stream.write_all(&raw).map_err(|e| e.to_string())?;
+                let _ = stream.flush();
+            }
+        }
+
+        Ok(())
+    }
 
     if let Some(parent) = socket_path.parent() {
         let parent_existed = parent.exists();
@@ -330,34 +358,18 @@ pub fn serve(socket_path: &Path, once: bool) -> Result<(), String> {
     let _ = std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(socket_mode));
 
     for stream in listener.incoming() {
-        let mut stream = stream.map_err(|e| e.to_string())?;
-        let mut buf = Vec::new();
-        stream.read_to_end(&mut buf).map_err(|e| e.to_string())?;
-
-        match serde_json::from_slice::<DaemonRequest>(&buf) {
-            Ok(request @ DaemonRequest::ExecuteEnvelopeStream { .. }) => {
-                if let Err(err) = handle_stream_request(request, &mut stream) {
-                    let _ =
-                        write_stream_frame(&mut stream, &DaemonStreamFrame::Error { error: err });
-                }
-            }
-            Ok(request) => {
-                let response = handle_request(request);
-                let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
-                stream.write_all(&raw).map_err(|e| e.to_string())?;
-                let _ = stream.flush();
-            }
-            Err(err) => {
-                let response = DaemonResponse::err(format!("invalid request JSON: {}", err));
-                let raw = serde_json::to_vec(&response).map_err(|e| e.to_string())?;
-                stream.write_all(&raw).map_err(|e| e.to_string())?;
-                let _ = stream.flush();
-            }
-        }
+        let stream = stream.map_err(|e| e.to_string())?;
 
         if once {
+            handle_connection(stream)?;
             break;
         }
+
+        std::thread::spawn(move || {
+            if let Err(err) = handle_connection(stream) {
+                eprintln!("{}", err);
+            }
+        });
     }
 
     Ok(())

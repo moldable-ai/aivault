@@ -595,6 +595,150 @@ fn e2e_streaming_invoke_via_aivaultd_unix_socket() {
 }
 
 #[test]
+fn e2e_aivaultd_serves_requests_while_streaming_request_is_open() {
+    let dir = TempDir::new().expect("temp dir");
+    let server = LocalTlsServer::start("daemon.concurrent");
+    let mut envs = server.env_pairs();
+
+    let created = run_ok_json(
+        &dir,
+        &[
+            "secrets",
+            "create",
+            "--name",
+            "DAEMON_CONCURRENT_TOKEN",
+            "--value",
+            "sk-daemon-concurrent",
+            "--scope",
+            "global",
+        ],
+        &envs,
+    );
+    let secret_id = created["secretId"].as_str().unwrap().to_string();
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "daemon-concurrent-cred",
+            "--provider",
+            "daemon-concurrent-provider",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "header",
+            "--host",
+            "daemon.concurrent",
+        ],
+        &envs,
+    );
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "daemon/concurrent-stream",
+            "--credential",
+            "daemon-concurrent-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/stream",
+        ],
+        &envs,
+    );
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "daemon/concurrent-echo",
+            "--credential",
+            "daemon-concurrent-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/v1/echo",
+        ],
+        &envs,
+    );
+
+    let sock_path = dir.path().join("aivaultd-concurrent.sock");
+    let mut daemon_cmd = Command::new(env!("CARGO_BIN_EXE_aivaultd"));
+    daemon_cmd.env("AIVAULT_DIR", dir.path());
+    for (key, value) in &envs {
+        daemon_cmd.env(key, value);
+    }
+    daemon_cmd
+        .arg("--socket")
+        .arg(sock_path.to_string_lossy().to_string());
+    let mut daemon_child = daemon_cmd.spawn().expect("spawn aivaultd");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline && !sock_path.exists() {
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(sock_path.exists(), "daemon socket was not created");
+
+    envs.push((
+        "AIVAULTD_SOCKET".to_string(),
+        sock_path.display().to_string(),
+    ));
+    envs.push(("AIVAULTD_AUTOSTART".to_string(), "0".to_string()));
+
+    let mut stream_cmd = Command::new(env!("CARGO_BIN_EXE_aivault"));
+    stream_cmd
+        .env("AIVAULT_DIR", dir.path())
+        .args([
+            "invoke",
+            "daemon/concurrent-stream",
+            "--stream",
+            "--path",
+            "/stream",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in &envs {
+        stream_cmd.env(key, value);
+    }
+
+    let mut stream_child = stream_cmd.spawn().expect("spawn streaming invoke");
+    let mut stream_stdout = stream_child.stdout.take().expect("stream stdout");
+    let mut first = vec![0u8; b"data: daemon-1\n\n".len()];
+    stream_stdout
+        .read_exact(&mut first)
+        .expect("read first stream chunk");
+    assert_eq!(String::from_utf8(first).unwrap(), "data: daemon-1\n\n");
+
+    let started = Instant::now();
+    let out = run_ok_json(
+        &dir,
+        &["invoke", "daemon/concurrent-echo", "--path", "/v1/echo"],
+        &envs,
+    );
+    let elapsed = started.elapsed();
+    assert_eq!(out["response"]["status"].as_u64(), Some(200));
+    assert!(
+        elapsed < Duration::from_millis(900),
+        "non-stream request waited behind open stream for {:?}",
+        elapsed
+    );
+
+    let mut rest = String::new();
+    stream_stdout
+        .read_to_string(&mut rest)
+        .expect("read stream rest");
+    let status = stream_child.wait().expect("wait stream child");
+    assert!(status.success(), "streaming invoke failed");
+    assert!(rest.contains("data: daemon-2\n\n"));
+
+    let _ = daemon_child.kill();
+    let _ = daemon_child.wait();
+}
+
+#[test]
 fn e2e_invoke_falls_back_to_shared_socket_when_autostart_disabled() {
     let dir = TempDir::new().expect("temp dir");
     let server = LocalTlsServer::start("daemon.shared");

@@ -55,7 +55,17 @@ aivault invoke openai/chat-completions \
 aivault invoke openai/chat-completions \
   --header "X-Custom: value" \
   --body '...'
+
+# Streaming with a longer upstream timeout
+aivault invoke openai/codex-responses \
+  --stream \
+  --timeout-ms 420000 \
+  --method POST \
+  --path /responses \
+  --body-file-path /tmp/body.json
 ```
+
+Use `--timeout-ms` for long-running upstream calls, including streamed responses. The value is in milliseconds and applies to the upstream request duration.
 
 ## json
 

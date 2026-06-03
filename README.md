@@ -130,6 +130,7 @@ Provider-specific docs:
 
 - `aivault invoke <id> ... [--workspace-id ... --group-id ...]` — execute a proxied request (top-level shortcut)
 - `aivault invoke <id> --stream ...` — stream the raw upstream response body to stdout as chunks arrive through `aivaultd`
+- `aivault invoke <id> --timeout-ms <milliseconds> ...` — set the upstream request timeout for long-running calls
 - `aivault json <id> ...` — invoke and print response as JSON
 - `aivault markdown <id> ...` (alias: `md`) — invoke and print response as markdown
 - `aivault capability invoke <id> ...` (alias: `call`) — same as `aivault invoke`
@@ -433,6 +434,8 @@ For progressive text/SSE use cases, pass `--stream` with raw `invoke`; streaming
 uses the same `aivaultd` daemon boundary as non-streaming invoke. Response body
 policies that require full-body inspection, such as response blocklists or maximum
 response body bytes, intentionally fall back to buffered output.
+For long-running upstream work, pass `--timeout-ms <milliseconds>`; for example,
+`--timeout-ms 420000` allows a streamed request to run for seven minutes.
 
 ### Daemon boundary (`aivaultd`)
 
