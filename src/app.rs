@@ -1359,7 +1359,8 @@ fn derive_registry_credentials_from_vault(
                 if !complete {
                     continue;
                 }
-                if alternative.id == "codex-cli" && !codex_oauth_secret_is_current(vault, by_name)?
+                if alternative.id == "codex-oauth"
+                    && !codex_oauth_secret_is_current(vault, by_name)?
                 {
                     continue;
                 }
