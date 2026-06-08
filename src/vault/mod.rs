@@ -1508,6 +1508,38 @@ fn store_kek_keychain(service: &str, account: &str, kek: &[u8; 32]) -> Result<()
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn load_kek_keychain_password(service: &str, account: &str) -> Result<String, keyring::Error> {
+    let output = std::process::Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", service, "-a", account, "-w"])
+        .output()
+        .map_err(|err| keyring::Error::PlatformFailure(Box::new(err)))?;
+
+    if output.status.success() {
+        let password = String::from_utf8(output.stdout)
+            .map_err(|err| keyring::Error::BadEncoding(err.into_bytes()))?;
+        return Ok(password.trim_end_matches(['\r', '\n']).to_string());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("could not be found")
+        || stderr.contains("The specified item could not be found")
+    {
+        return Err(keyring::Error::NoEntry);
+    }
+
+    let message = if stderr.trim().is_empty() {
+        format!("security exited with status {}", output.status)
+    } else {
+        stderr.trim().to_string()
+    };
+
+    Err(keyring::Error::PlatformFailure(Box::new(
+        std::io::Error::other(message),
+    )))
+}
+
+#[cfg(not(target_os = "macos"))]
 fn load_kek_keychain_password(service: &str, account: &str) -> Result<String, keyring::Error> {
     let entry = keyring::Entry::new(service, account)?;
     entry.get_password()

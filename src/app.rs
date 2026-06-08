@@ -692,6 +692,13 @@ fn run_invoke_thin_or_local(args: InvokeArgs, mode: InvokeOutputMode) -> Result<
         }
     };
 
+    if (env_var_nonempty("AIVAULTD_SOCKET") || env_var_nonempty("AIVAULTD_SHARED_SOCKET"))
+        && !thin_err.contains("policy not available locally")
+        && !thin_err.contains("is not available locally")
+    {
+        return Err(thin_err);
+    }
+
     // Fall back to local execution (which will use the daemon boundary if available).
     let vault = VaultRuntime::discover();
     vault.load().map_err(|e| e.to_string())?;
@@ -1870,6 +1877,11 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
                     local_map.insert(capability.id.clone(), capability);
                 }
             }
+            if credentialed_providers.contains("plaid") {
+                for capability in crate::plaid_capabilities::builtin_capabilities() {
+                    local_map.insert(capability.id.clone(), capability);
+                }
+            }
             let local_capabilities: Vec<Capability> = local_map.into_values().collect();
             let local_ids: HashSet<&str> =
                 local_capabilities.iter().map(|c| c.id.as_str()).collect();
@@ -1883,6 +1895,11 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
                 }
             }
             for capability in crate::postgres_capabilities::builtin_capabilities() {
+                if !local_ids.contains(capability.id.as_str()) {
+                    registry_capabilities.push(capability);
+                }
+            }
+            for capability in crate::plaid_capabilities::builtin_capabilities() {
                 if !local_ids.contains(capability.id.as_str()) {
                     registry_capabilities.push(capability);
                 }
@@ -2257,6 +2274,7 @@ fn invoke_via_daemon_thin(args: InvokeArgs) -> Result<Value, String> {
         build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
     } else {
         let registry_capability = crate::postgres_capabilities::builtin_capability(&capability_id)
+            .or_else(|| crate::plaid_capabilities::builtin_capability(&capability_id))
             .or_else(|| {
                 crate::registry::builtin_registry()
                     .ok()
@@ -2367,6 +2385,7 @@ fn invoke_stream_via_daemon_thin(args: InvokeArgs) -> Result<(), String> {
         build_capability_call_envelope_without_local_capability(&capability_id, args.clone())?
     } else {
         let registry_capability = crate::postgres_capabilities::builtin_capability(&capability_id)
+            .or_else(|| crate::plaid_capabilities::builtin_capability(&capability_id))
             .or_else(|| {
                 crate::registry::builtin_registry()
                     .ok()
@@ -2478,6 +2497,7 @@ fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), Strin
         .find_capability(id)
         .cloned()
         .or_else(|| crate::postgres_capabilities::builtin_capability(id))
+        .or_else(|| crate::plaid_capabilities::builtin_capability(id))
         .or_else(|| {
             crate::registry::builtin_registry()
                 .ok()
@@ -2695,6 +2715,7 @@ fn lookup_capability_for_invoke(store: &BrokerStore, id: &str) -> Option<Capabil
         .find_capability(id)
         .cloned()
         .or_else(|| crate::postgres_capabilities::builtin_capability(id))
+        .or_else(|| crate::plaid_capabilities::builtin_capability(id))
         .or_else(|| {
             crate::registry::builtin_registry()
                 .ok()
@@ -3069,6 +3090,16 @@ pub(crate) fn run_capability_envelope(
             group_id,
         );
     }
+    if crate::plaid_capabilities::is_plaid_capability(&envelope.capability) {
+        return crate::plaid_capabilities::run_plaid_capability(
+            vault,
+            store,
+            envelope,
+            client_ip,
+            workspace_id,
+            group_id,
+        );
+    }
 
     let retry_envelope = envelope.clone();
     let (broker, planned) =
@@ -3111,6 +3142,9 @@ where
 {
     if crate::postgres_capabilities::is_postgres_capability(&envelope.capability) {
         return Err("postgres capabilities do not support streaming output".to_string());
+    }
+    if crate::plaid_capabilities::is_plaid_capability(&envelope.capability) {
+        return Err("plaid capabilities do not support streaming output".to_string());
     }
 
     let (broker, planned) = plan_capability_envelope(

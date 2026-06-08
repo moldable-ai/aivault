@@ -1,0 +1,297 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "plaid",
+  "vaultSecrets": {
+    "PLAID_CLIENT_ID": "client_id",
+    "PLAID_SECRET": "secret"
+  },
+  "auth": {
+    "multi_header": [
+      {
+        "header_name": "PLAID-CLIENT-ID",
+        "value_template": "{{client_id}}"
+      },
+      {
+        "header_name": "PLAID-SECRET",
+        "value_template": "{{secret}}"
+      }
+    ]
+  },
+  "hosts": [
+    "production.plaid.com"
+  ],
+  "capabilities": [
+    {
+      "id": "plaid/accounts",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/accounts"
+        ]
+      }
+    },
+    {
+      "id": "plaid/assets",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/asset_report"
+        ]
+      }
+    },
+    {
+      "id": "plaid/auth",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/auth"
+        ]
+      }
+    },
+    {
+      "id": "plaid/categories",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/categories"
+        ]
+      }
+    },
+    {
+      "id": "plaid/identity",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/identity"
+        ]
+      }
+    },
+    {
+      "id": "plaid/institutions",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/institutions"
+        ]
+      }
+    },
+    {
+      "id": "plaid/investments",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/investments"
+        ]
+      }
+    },
+    {
+      "id": "plaid/investments-sync",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/investments/holdings/get"
+        ]
+      }
+    },
+    {
+      "id": "plaid/item-public-token-exchange",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/item/public_token/exchange"
+        ]
+      }
+    },
+    {
+      "id": "plaid/item-remove",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/item/remove"
+        ]
+      }
+    },
+    {
+      "id": "plaid/items",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/item"
+        ]
+      }
+    },
+    {
+      "id": "plaid/liabilities",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/liabilities"
+        ]
+      }
+    },
+    {
+      "id": "plaid/liabilities-sync",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/liabilities/get"
+        ]
+      }
+    },
+    {
+      "id": "plaid/link-token",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/link/token"
+        ]
+      }
+    },
+    {
+      "id": "plaid/link-token-create",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/link/token/create"
+        ]
+      }
+    },
+    {
+      "id": "plaid/link-token-update",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/link/token/create"
+        ]
+      }
+    },
+    {
+      "id": "plaid/statements",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/statements"
+        ]
+      }
+    },
+    {
+      "id": "plaid/transactions",
+      "provider": "plaid",
+      "allow": {
+        "hosts": [
+          "production.plaid.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/transactions"
+        ]
+      }
+    }
+  ]
+}

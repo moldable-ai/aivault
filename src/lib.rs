@@ -9,6 +9,7 @@ pub mod log_retention;
 pub mod markdown;
 pub mod migrations;
 pub mod paths;
+pub mod plaid_capabilities;
 pub mod postgres_capabilities;
 pub mod provider_plugins;
 pub mod registry;

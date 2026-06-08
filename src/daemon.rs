@@ -389,6 +389,13 @@ fn handle_request(request: DaemonRequest) -> DaemonResponse {
             workspace_id,
             group_id,
         } => {
+            if envelope.capability == "__aivault/health" {
+                return DaemonResponse::ok(serde_json::json!({
+                    "ok": true,
+                    "capability": "__aivault/health"
+                }));
+            }
+
             let client_ip = match client_ip.parse::<std::net::IpAddr>() {
                 Ok(ip) => ip,
                 Err(_) => return DaemonResponse::err("invalid clientIp".to_string()),
