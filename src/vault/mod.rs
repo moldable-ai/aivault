@@ -5,6 +5,7 @@ mod refs;
 mod store;
 
 use std::collections::HashSet;
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -1255,6 +1256,12 @@ impl VaultRuntime {
             return Err(VaultError::Other("secret not found".to_string()));
         }
         let raw = std::fs::read_to_string(&path)?;
+        if raw.trim().is_empty() {
+            return Err(VaultError::Other(format!(
+                "secret record '{}' is empty or corrupt",
+                secret_id
+            )));
+        }
         Ok(serde_json::from_str::<SecretRecord>(&raw)?)
     }
 
@@ -1271,13 +1278,23 @@ impl VaultRuntime {
         }
         let raw = serde_json::to_string_pretty(rec)?;
         let path = self.paths.secret_path(&rec.secret_id);
-        std::fs::write(&path, raw)?;
+        let tmp_path = path.with_extension(format!(
+            "json.tmp.{}.{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        {
+            let mut tmp = std::fs::File::create(&tmp_path)?;
+            tmp.write_all(raw.as_bytes())?;
+            tmp.sync_all()?;
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             let file_perm = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(path, file_perm)?;
+            std::fs::set_permissions(&tmp_path, file_perm)?;
         }
+        std::fs::rename(tmp_path, path)?;
         Ok(())
     }
 
