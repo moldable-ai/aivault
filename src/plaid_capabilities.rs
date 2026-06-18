@@ -130,6 +130,7 @@ pub fn is_plaid_capability(id: &str) -> bool {
             | "plaid/liabilities-sync"
             | "plaid/investments-sync"
             | "plaid/transactions-sync"
+            | "plaid/transactions-recurring"
     )
 }
 
@@ -148,6 +149,7 @@ pub fn builtin_capabilities() -> Vec<Capability> {
         ("plaid/liabilities-sync", "/liabilities/get"),
         ("plaid/investments-sync", "/investments/holdings/get"),
         ("plaid/transactions-sync", "/transactions/sync"),
+        ("plaid/transactions-recurring", "/transactions/recurring/get"),
     ]
     .into_iter()
     .map(|(id, path)| Capability {
@@ -219,6 +221,15 @@ pub fn run_plaid_capability(
             &capability,
         ),
         "plaid/investments-sync" => run_item_scoped_call(
+            vault,
+            stored,
+            app_secret,
+            request,
+            workspace_id,
+            group_id,
+            &capability,
+        ),
+        "plaid/transactions-recurring" => run_item_scoped_call(
             vault,
             stored,
             app_secret,
@@ -419,6 +430,7 @@ fn run_item_scoped_call(
         "plaid/accounts-sync" => "/accounts/get",
         "plaid/liabilities-sync" => "/liabilities/get",
         "plaid/investments-sync" => "/investments/holdings/get",
+        "plaid/transactions-recurring" => "/transactions/recurring/get",
         other => return Err(format!("unsupported Plaid item capability '{}'", other)),
     };
     let started = Instant::now();
@@ -965,5 +977,6 @@ mod tests {
         assert!(builtin_capability("plaid/liabilities-sync").is_some());
         assert!(builtin_capability("plaid/investments-sync").is_some());
         assert!(builtin_capability("plaid/transactions-sync").is_some());
+        assert!(builtin_capability("plaid/transactions-recurring").is_some());
     }
 }
