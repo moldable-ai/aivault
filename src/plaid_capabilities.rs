@@ -149,7 +149,10 @@ pub fn builtin_capabilities() -> Vec<Capability> {
         ("plaid/liabilities-sync", "/liabilities/get"),
         ("plaid/investments-sync", "/investments/holdings/get"),
         ("plaid/transactions-sync", "/transactions/sync"),
-        ("plaid/transactions-recurring", "/transactions/recurring/get"),
+        (
+            "plaid/transactions-recurring",
+            "/transactions/recurring/get",
+        ),
     ]
     .into_iter()
     .map(|(id, path)| Capability {
