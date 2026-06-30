@@ -212,6 +212,15 @@
       ]
     },
     {
+      "id": "ev-vault-codex-oauth-registry-alternative-refresh-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative"
+      ]
+    },
+    {
       "id": "ev-e2e-vault-oauth-upstream-401-refresh-retry-test",
       "kind": "tests",
       "automated": true,
@@ -506,7 +515,8 @@
           "slug": "vault-broker-auth-secret-writeback",
           "story": "As an operator, I want broker-side auth flows (like oauth2 token refresh) to write updated access tokens and expiry back into vault secret material atomically, so token refresh can be baked into proxy execution without external orchestration.",
           "evidenceLinks": [
-            "ev-e2e-vault-oauth-secret-writeback-test"
+            "ev-e2e-vault-oauth-secret-writeback-test",
+            "ev-vault-codex-oauth-registry-alternative-refresh-test"
           ],
           "trace": {
             "proofLevel": "e2e",
@@ -520,6 +530,10 @@
               {
                 "file": "src/app.rs",
                 "symbol": "refresh_oauth2_and_writeback"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "refresh_codex_oauth_secret"
               },
               {
                 "file": "src/vault/mod.rs",
@@ -543,6 +557,10 @@
               {
                 "evidenceId": "ev-e2e-vault-oauth-secret-writeback-test",
                 "test": "e2e_oauth2_refresh_exchanges_token_writes_back_and_reuses_cache"
+              },
+              {
+                "evidenceId": "ev-vault-codex-oauth-registry-alternative-refresh-test",
+                "test": "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative"
               }
             ]
           }
