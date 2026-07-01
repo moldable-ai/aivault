@@ -1,0 +1,96 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "vercel",
+  "vaultSecrets": {
+    "VERCEL_TOKEN": "secret"
+  },
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": [
+    "api.vercel.com"
+  ],
+  "capabilities": [
+    {
+      "id": "vercel/deployments",
+      "provider": "vercel",
+      "allow": {
+        "hosts": [
+          "api.vercel.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v13/deployments"
+        ]
+      }
+    },
+    {
+      "id": "vercel/files",
+      "provider": "vercel",
+      "allow": {
+        "hosts": [
+          "api.vercel.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v2/files"
+        ]
+      }
+    },
+    {
+      "id": "vercel/projects",
+      "provider": "vercel",
+      "allow": {
+        "hosts": [
+          "api.vercel.com"
+        ],
+        "methods": [
+          "GET",
+          "PATCH",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v9/projects"
+        ]
+      }
+    },
+    {
+      "id": "vercel/teams",
+      "provider": "vercel",
+      "allow": {
+        "hosts": [
+          "api.vercel.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v2/teams"
+        ]
+      }
+    },
+    {
+      "id": "vercel/user",
+      "provider": "vercel",
+      "allow": {
+        "hosts": [
+          "api.vercel.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/v2/user"
+        ]
+      }
+    }
+  ]
+}

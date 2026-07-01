@@ -1,0 +1,67 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "netlify",
+  "vaultSecrets": {
+    "NETLIFY_TOKEN": "secret"
+  },
+  "auth": {
+    "header": {
+      "header_name": "authorization",
+      "value_template": "Bearer {{secret}}"
+    }
+  },
+  "hosts": [
+    "api.netlify.com"
+  ],
+  "capabilities": [
+    {
+      "id": "netlify/deploys",
+      "provider": "netlify",
+      "allow": {
+        "hosts": [
+          "api.netlify.com"
+        ],
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/deploys",
+          "/api/v1/sites"
+        ]
+      }
+    },
+    {
+      "id": "netlify/sites",
+      "provider": "netlify",
+      "allow": {
+        "hosts": [
+          "api.netlify.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/api/v1/sites"
+        ]
+      }
+    },
+    {
+      "id": "netlify/user",
+      "provider": "netlify",
+      "allow": {
+        "hosts": [
+          "api.netlify.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/api/v1/user"
+        ]
+      }
+    }
+  ]
+}
