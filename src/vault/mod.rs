@@ -147,7 +147,9 @@ pub enum VaultError {
 pub struct VaultRuntime {
     paths: VaultPaths,
     cfg: Arc<Mutex<Option<VaultConfig>>>,
-    // For passphrase provider only: derived KEK (cleared on lock).
+    // Process-scoped KEK cache. Passphrase-derived keys are populated by
+    // unlock; macOS Keychain keys are cached after their first authorized
+    // read so a long-lived broker does not repeatedly prompt the user.
     unlocked_kek: Arc<Mutex<Option<[u8; 32]>>>,
     audit_enabled: Arc<AtomicBool>,
 }
@@ -1247,9 +1249,9 @@ impl VaultRuntime {
 
     fn get_kek(&self, cfg: &VaultConfig) -> Result<[u8; 32], VaultError> {
         match &cfg.provider {
-            VaultProviderConfig::MacosKeychain { service, account } => {
-                load_kek_keychain(service, account).map_err(VaultError::Provider)
-            }
+            VaultProviderConfig::MacosKeychain { service, account } => self
+                .cached_kek_or_else(|| load_kek_keychain(service, account))
+                .map_err(VaultError::Provider),
             VaultProviderConfig::Env { env_var } => {
                 load_kek_from_env(env_var).map_err(VaultError::Provider)
             }
@@ -1260,6 +1262,19 @@ impl VaultRuntime {
                 self.unlocked_kek.lock().unwrap().ok_or(VaultError::Locked)
             }
         }
+    }
+
+    fn cached_kek_or_else(
+        &self,
+        load: impl FnOnce() -> Result<[u8; 32], String>,
+    ) -> Result<[u8; 32], String> {
+        let mut cached = self.unlocked_kek.lock().unwrap();
+        if let Some(kek) = *cached {
+            return Ok(kek);
+        }
+        let kek = load()?;
+        *cached = Some(kek);
+        Ok(kek)
     }
 
     fn write_config(&self, cfg: &VaultConfig) -> Result<(), VaultError> {
@@ -1840,6 +1855,35 @@ mod tests {
                 .sign_hmac_sha256(&secret_ref, b"payload", Some("test.sign"), Some("unit"))
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn process_kek_cache_only_loads_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = VaultRuntime::new(VaultPaths {
+            root_dir: tmp.path().to_path_buf(),
+        });
+        let loads = AtomicUsize::new(0);
+        let expected = [7_u8; 32];
+
+        let first = vault
+            .cached_kek_or_else(|| {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok(expected)
+            })
+            .unwrap();
+        let second = vault
+            .cached_kek_or_else(|| {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok([8_u8; 32])
+            })
+            .unwrap();
+
+        assert_eq!(first, expected);
+        assert_eq!(second, expected);
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
     }
 
     #[test]
