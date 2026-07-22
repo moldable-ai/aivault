@@ -35,7 +35,22 @@ pub fn builtin_registry() -> BrokerResult<Registry> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
+    use crate::broker::{
+        AuthStrategy, Broker, BrokerConfig, CredentialInput, ErrorCode, ProxyEnvelope,
+        ProxyEnvelopeRequest, ProxyTokenMintRequest, RequestAuth, SecretMaterial,
+    };
+
+    const TELEGRAM_OPERATIONS: [(&str, &str); 6] = [
+        ("telegram/get-me", "/getMe"),
+        ("telegram/get-updates", "/getUpdates"),
+        ("telegram/send-message", "/sendMessage"),
+        ("telegram/edit-message-text", "/editMessageText"),
+        ("telegram/delete-message", "/deleteMessage"),
+        ("telegram/send-chat-action", "/sendChatAction"),
+    ];
 
     #[test]
     fn builtin_registry_contains_initial_transcription_providers() {
@@ -118,5 +133,127 @@ mod tests {
                 "missing {expected}"
             );
         }
+    }
+
+    #[test]
+    fn builtin_telegram_registry_is_path_authenticated_and_least_privilege() {
+        let registry = builtin_registry().expect("registry should load");
+        let telegram = registry.provider("telegram").expect("telegram provider");
+
+        assert_eq!(
+            telegram.auth,
+            AuthStrategy::Path {
+                prefix_template: "/bot{{secret}}".to_string(),
+            }
+        );
+
+        let mut actual = telegram
+            .capabilities
+            .iter()
+            .map(|capability| {
+                assert_eq!(capability.provider, "telegram");
+                assert_eq!(capability.allow.hosts, ["api.telegram.org"]);
+                assert_eq!(capability.allow.methods, ["POST"]);
+                assert_eq!(capability.allow.path_prefixes.len(), 1);
+                (
+                    capability.id.as_str(),
+                    capability.allow.path_prefixes[0].as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+        actual.sort_unstable();
+
+        let mut expected = TELEGRAM_OPERATIONS.to_vec();
+        expected.sort_unstable();
+        assert_eq!(actual, expected);
+        assert!(registry.capability("telegram/bot").is_none());
+    }
+
+    #[test]
+    fn builtin_telegram_capabilities_inject_path_auth_and_reject_broad_methods() {
+        let registry = builtin_registry().expect("registry should load");
+        let mut broker = Broker::new(BrokerConfig::default(), Some(registry));
+        let operator = RequestAuth::Operator("test".to_string());
+        broker
+            .create_credential(
+                &operator,
+                CredentialInput {
+                    id: "telegram-test".to_string(),
+                    provider: "telegram".to_string(),
+                    auth: None,
+                    hosts: None,
+                },
+                SecretMaterial::String("123456789:telegram-test-token".to_string()),
+            )
+            .expect("registry credential should be created");
+
+        let proxy = broker
+            .mint_proxy_token(
+                &operator,
+                ProxyTokenMintRequest {
+                    capabilities: TELEGRAM_OPERATIONS
+                        .iter()
+                        .map(|(capability, _)| (*capability).to_string())
+                        .collect(),
+                    credential: Some("telegram-test".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .expect("proxy token should be minted");
+        let auth = RequestAuth::Proxy(proxy.token);
+
+        for (capability, logical_path) in TELEGRAM_OPERATIONS {
+            let planned = broker
+                .execute_envelope(
+                    &auth,
+                    ProxyEnvelope {
+                        capability: capability.to_string(),
+                        credential: Some("telegram-test".to_string()),
+                        request: ProxyEnvelopeRequest {
+                            method: "POST".to_string(),
+                            path: logical_path.to_string(),
+                            headers: Vec::new(),
+                            body: Some("{}".to_string()),
+                            multipart: None,
+                            multipart_files: Vec::new(),
+                            body_file_path: None,
+                            url: None,
+                        },
+                    },
+                    "127.0.0.1".parse().unwrap(),
+                )
+                .expect("Telegram operation should plan");
+
+            assert_eq!(
+                planned.path,
+                format!("/bot123456789:telegram-test-token{logical_path}")
+            );
+            assert_eq!(planned.host, "api.telegram.org");
+            assert!(planned.headers.is_empty());
+            assert!(planned.query.is_empty());
+        }
+
+        let error = broker
+            .execute_envelope(
+                &auth,
+                ProxyEnvelope {
+                    capability: "telegram/get-me".to_string(),
+                    credential: Some("telegram-test".to_string()),
+                    request: ProxyEnvelopeRequest {
+                        method: "POST".to_string(),
+                        path: "/setWebhook".to_string(),
+                        headers: Vec::new(),
+                        body: Some("{}".to_string()),
+                        multipart: None,
+                        multipart_files: Vec::new(),
+                        body_file_path: None,
+                        url: None,
+                    },
+                },
+                "127.0.0.1".parse().unwrap(),
+            )
+            .expect_err("unregistered Telegram methods must be rejected");
+        assert_eq!(error.error, ErrorCode::PolicyViolation);
     }
 }

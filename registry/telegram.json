@@ -5,9 +5,8 @@
     "TELEGRAM_BOT_TOKEN": "secret"
   },
   "auth": {
-    "header": {
-      "header_name": "authorization",
-      "value_template": "Bearer {{secret}}"
+    "path": {
+      "prefix_template": "/bot{{secret}}"
     }
   },
   "hosts": [
@@ -15,18 +14,92 @@
   ],
   "capabilities": [
     {
-      "id": "telegram/bot",
+      "id": "telegram/delete-message",
       "provider": "telegram",
       "allow": {
         "hosts": [
           "api.telegram.org"
         ],
         "methods": [
-          "GET",
           "POST"
         ],
         "pathPrefixes": [
-          "/bot"
+          "/deleteMessage"
+        ]
+      }
+    },
+    {
+      "id": "telegram/edit-message-text",
+      "provider": "telegram",
+      "allow": {
+        "hosts": [
+          "api.telegram.org"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/editMessageText"
+        ]
+      }
+    },
+    {
+      "id": "telegram/get-me",
+      "provider": "telegram",
+      "allow": {
+        "hosts": [
+          "api.telegram.org"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/getMe"
+        ]
+      }
+    },
+    {
+      "id": "telegram/get-updates",
+      "provider": "telegram",
+      "allow": {
+        "hosts": [
+          "api.telegram.org"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/getUpdates"
+        ]
+      }
+    },
+    {
+      "id": "telegram/send-chat-action",
+      "provider": "telegram",
+      "allow": {
+        "hosts": [
+          "api.telegram.org"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/sendChatAction"
+        ]
+      }
+    },
+    {
+      "id": "telegram/send-message",
+      "provider": "telegram",
+      "allow": {
+        "hosts": [
+          "api.telegram.org"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/sendMessage"
         ]
       }
     }

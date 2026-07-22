@@ -40,7 +40,7 @@ Providers currently in the built-in registry include:
 - **Slack** — messages, channels, users, files, reactions, conversations, views, reminders, bookmarks, pins, search, team info, bots, auth test, user groups
 - **Discord** — channels, messages, guilds, users, interactions, webhooks
 - **Twilio** — messages, calls, accounts
-- **Telegram** — messages, updates, webhooks, chat management, stickers, files, bot info
+- **Telegram** — bot identity, polling updates, sending/editing/deleting messages, chat actions
 
 ### Productivity
 - **Notion** — pages, databases, blocks, search, users, comments

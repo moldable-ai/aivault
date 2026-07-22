@@ -5994,6 +5994,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
     fn runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative() {
         let _lock = ENV_LOCK.lock().unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();

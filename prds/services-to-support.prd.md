@@ -49,7 +49,7 @@
 | X | `x.json` | Social | Bearer (app-only) |
 | YouTube Data | `youtube.json` | Video | Query param (`key`) |
 | Spotify | `spotify.json` | Media | Bearer (OAuth2 token) |
-| Telegram | `telegram.json` | Messaging | Bearer (placeholder — needs token-in-path) |
+| Telegram | `telegram.json` | Messaging | Path (`/bot{{secret}}`) |
 | Reddit | `reddit.json` | Social | Bearer (OAuth2 token) |
 | Mistral | `mistral.json` | AI / ML | Bearer |
 | Groq | `groq.json` | AI / ML | Bearer |
@@ -231,8 +231,8 @@ agents already know how to call them directly.
 
 ## Notes on tricky auth patterns
 
-- **Telegram**: Token is part of the URL path (`/bot{token}/sendMessage`), not a
-  header. Registry exists with Bearer placeholder; needs token-in-path auth strategy.
+- **Telegram**: Token is injected into the URL path (`/bot{token}/method`) by the
+  broker. The registry exposes only the six operations used by Remote Control.
 - **Shopify / Jira / Zendesk / Mailchimp / Supabase**: Host varies per user
   (store, site, subdomain, project). Registry defines the pattern; user configures
   their specific host at secret-binding time.
