@@ -20,6 +20,16 @@
       "tests": [
         "builtin_registry_contains_initial_transcription_providers"
       ]
+    },
+    {
+      "id": "ev-regsvc-telegram-path-auth",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/registry.rs",
+      "tests": [
+        "builtin_telegram_registry_is_path_authenticated_and_least_privilege",
+        "builtin_telegram_capabilities_inject_path_auth_and_reject_broad_methods"
+      ]
     }
   ],
   "sections": [
@@ -656,16 +666,22 @@
         },
         {
           "slug": "regsvc-telegram",
-          "story": "As an operator, I want Telegram Bot API capabilities available in the built-in registry, so agents can access Telegram messaging APIs with zero policy authoring.",
-          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "story": "As an operator, I want Telegram Remote Control operations available through narrow path-authenticated capabilities, so the bot token stays broker-managed and cannot authorize unrelated Telegram Bot API methods.",
+          "evidenceLinks": ["ev-regsvc-telegram-path-auth"],
           "trace": {
             "proofLevel": "runtime",
             "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
-            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
-            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
-            "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
-            "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
-            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+            "runtime": [{ "file": "src/broker/runtime.rs", "symbol": "Broker::execute_envelope" }],
+            "guards": [
+              { "file": "src/broker/runtime.rs", "symbol": "ensure_path_allowed" },
+              { "file": "src/broker/helpers.rs", "symbol": "apply_auth" }
+            ],
+            "stateEffects": [{ "file": "src/broker/runtime.rs", "symbol": "Broker::execute_envelope" }],
+            "userSurface": [{ "file": "src/broker/runtime.rs", "symbol": "PlannedRequest" }],
+            "assertions": [
+              { "evidenceId": "ev-regsvc-telegram-path-auth", "test": "builtin_telegram_registry_is_path_authenticated_and_least_privilege" },
+              { "evidenceId": "ev-regsvc-telegram-path-auth", "test": "builtin_telegram_capabilities_inject_path_auth_and_reject_broad_methods" }
+            ]
           }
         },
         {
@@ -720,7 +736,7 @@
         "regsvc-github", "regsvc-stripe", "regsvc-resend",
         "regsvc-sendgrid", "regsvc-postmark", "regsvc-mailgun",
         "regsvc-shopify", "regsvc-square", "regsvc-quickbooks", "regsvc-xero",
-        "regsvc-x", "regsvc-youtube", "regsvc-spotify", "regsvc-telegram", "regsvc-reddit",
+        "regsvc-x", "regsvc-youtube", "regsvc-spotify", "regsvc-reddit",
         "regsvc-mistral", "regsvc-groq", "regsvc-cohere", "regsvc-perplexity",
         "regsvc-fireworks", "regsvc-together", "regsvc-huggingface",
         "regsvc-stability", "regsvc-assemblyai"
@@ -731,11 +747,6 @@
       "description": "Shopify registry uses static host 'myshopify.com' but actual requests target store-specific subdomains ({store}.myshopify.com). Per-tenant host binding or wildcard host matching is needed for production use.",
       "storySlugs": ["regsvc-shopify"],
       "references": ["registry/shopify.json"]
-    },
-    {
-      "description": "Telegram registry uses Bearer auth as a placeholder. Telegram Bot API actually embeds the token in the URL path (/bot{token}/methodName). A new token-in-path auth strategy is needed.",
-      "storySlugs": ["regsvc-telegram"],
-      "references": ["registry/telegram.json"]
     },
     {
       "description": "QuickBooks and Xero registries use Bearer auth (pre-obtained OAuth2 access token). The vault does not yet handle OAuth2 token exchange or refresh; users must provide a valid access token directly.",
