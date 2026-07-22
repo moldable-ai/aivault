@@ -1,6 +1,6 @@
 [package]
 name = "aivault"
-version = "0.1.22"
+version = "0.1.23"
 edition = "2021"
 description = "Standalone CLI for local vault lifecycle and secret management"
 license = "Apache-2.0"
@@ -23,6 +23,7 @@ clap = { version = "4.5", features = ["derive"] }
 colored = "3.1.1"
 dirs = "6"
 hex = "0.4"
+hmac = "0.12"
 include_dir = "0.7"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }

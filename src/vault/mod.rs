@@ -11,7 +11,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::Engine;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use uuid::Uuid;
 use zeroize::Zeroize;
 
@@ -1101,6 +1103,31 @@ impl VaultRuntime {
         Ok(value)
     }
 
+    /// Produce an HMAC-SHA256 signature without returning the secret to the
+    /// caller. The secret is decrypted only inside aivault and zeroized after
+    /// the MAC is finalized.
+    pub fn sign_hmac_sha256(
+        &self,
+        secret_ref: &str,
+        payload: &[u8],
+        capability: Option<&str>,
+        consumer: Option<&str>,
+    ) -> Result<String, VaultError> {
+        const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
+        if payload.len() > MAX_PAYLOAD_BYTES {
+            return Err(VaultError::Other("HMAC payload is too large".to_string()));
+        }
+        let mut key = self.resolve_secret_ref(secret_ref, capability, consumer)?;
+        let result = (|| {
+            let mut mac = Hmac::<Sha256>::new_from_slice(&key)
+                .map_err(|_| VaultError::Other("invalid HMAC key".to_string()))?;
+            mac.update(payload);
+            Ok(hex::encode(mac.finalize().into_bytes()))
+        })();
+        key.zeroize();
+        result
+    }
+
     /// Resolve a secret ref for a specific group context (workspace + group_id).
     ///
     /// This enforces a minimal access policy:
@@ -1772,6 +1799,47 @@ mod tests {
             .resolve_secret_ref(&sr, Some("test"), Some("unit"))
             .unwrap();
         assert_eq!(value, b"sk-test".to_vec());
+    }
+
+    #[test]
+    fn signs_payload_without_exposing_the_secret() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = random_key_32();
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+        let meta = vault
+            .create_system_secret("SIGNING_KEY", b"test-key", SecretScope::Global, vec![])
+            .unwrap();
+        let secret_ref = SecretRef {
+            secret_id: meta.secret_id,
+        }
+        .to_string();
+
+        assert_eq!(
+            vault
+                .sign_hmac_sha256(&secret_ref, b"payload", Some("test.sign"), Some("unit"))
+                .unwrap(),
+            "ce216971565342fd63ad7106fbea61bcda701ceac70c809b84adf50647026998"
+        );
+        assert_ne!(
+            vault
+                .sign_hmac_sha256(&secret_ref, b"other", Some("test.sign"), Some("unit"))
+                .unwrap(),
+            vault
+                .sign_hmac_sha256(&secret_ref, b"payload", Some("test.sign"), Some("unit"))
+                .unwrap()
+        );
     }
 
     #[test]
