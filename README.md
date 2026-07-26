@@ -116,6 +116,9 @@ offline install.
 
 For local development, use `pnpm install:local` to build release binaries, update local
 `aivault`/`aivaultd` symlinks, install bundled providers, and restart running daemon instances.
+On macOS, release builds automatically select an available Developer ID or Apple Development
+identity, sign and verify the runtime binaries, then preserve those signatures when staging a
+local Moldable runtime. Set `AIVAULT_MACOS_SIGNING_IDENTITY` to override the selected identity.
 
 Provider-specific docs:
 - [Postgres provider](docs/providers/postgres.md)

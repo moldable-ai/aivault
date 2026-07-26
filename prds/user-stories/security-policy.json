@@ -234,6 +234,15 @@
       ]
     },
     {
+      "id": "ev-sec-local-build-signing-contract-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/release_signing_contract.rs",
+      "tests": [
+        "local_build_and_install_sign_macos_runtime_artifacts"
+      ]
+    },
+    {
       "id": "ev-daemon-e2e-invoke-via-unix-socket-test",
       "kind": "tests",
       "automated": true,
@@ -1083,6 +1092,56 @@
               {
                 "evidenceId": "ev-broker-adv-response-body-filtering-test",
                 "test": "story_adv_response_body_filtering"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "sec-local-macos-builds-are-signed",
+          "story": "As a local Moldable developer, I want aivault release builds signed before they are staged into the desktop app, so local test bundles pass the same trust checks as published runtimes.",
+          "evidenceLinks": [
+            "ev-sec-local-build-signing-contract-test"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "package.json",
+                "symbol": "build:release"
+              },
+              {
+                "file": "scripts/install-local.sh",
+                "symbol": "Signing local macOS release artifacts"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "scripts/sign-local-macos.sh",
+                "symbol": "find_signing_identity"
+              }
+            ],
+            "guards": [
+              {
+                "file": "scripts/sign-local-macos.sh",
+                "symbol": "codesign --verify --strict"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "scripts/install-local.sh",
+                "symbol": "install_moldable_runtime"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "scripts/install-local.sh",
+                "symbol": "Local install complete"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-sec-local-build-signing-contract-test",
+                "test": "local_build_and_install_sign_macos_runtime_artifacts"
               }
             ]
           }

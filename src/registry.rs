@@ -108,6 +108,36 @@ mod tests {
     }
 
     #[test]
+    fn builtin_openai_registry_scopes_codex_usage_to_read_only_oauth() {
+        let registry = builtin_registry().expect("registry should load");
+        let openai = registry.provider("openai").expect("openai provider");
+        let usage = openai
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "openai/codex-usage")
+            .expect("codex usage capability");
+
+        assert_eq!(usage.allow.hosts, ["chatgpt.com"]);
+        assert_eq!(usage.allow.methods, ["GET"]);
+        assert_eq!(usage.allow.path_prefixes, ["/wham/usage"]);
+
+        let credential = openai
+            .credential_alternatives
+            .iter()
+            .find(|alternative| alternative.id == "codex-oauth-usage")
+            .expect("codex usage credential");
+        assert_eq!(credential.capabilities, ["openai/codex-usage"]);
+        assert_eq!(
+            credential.upstream_path_prefix.as_deref(),
+            Some("/backend-api")
+        );
+        assert_eq!(
+            credential.vault_secrets.get("CODEX_OAUTH_JSON"),
+            Some(&"oauth".to_string())
+        );
+    }
+
+    #[test]
     fn builtin_registry_contains_firecrawl_provider() {
         let registry = builtin_registry().expect("registry should load");
 

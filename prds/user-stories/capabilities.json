@@ -35,6 +35,15 @@
       ]
     },
     {
+      "id": "ev-openai-codex-usage-capability-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/registry.rs",
+      "tests": [
+        "builtin_openai_registry_scopes_codex_usage_to_read_only_oauth"
+      ]
+    },
+    {
       "id": "ev-broker-cap-id-uniqueness-with-overlap-test",
       "kind": "tests",
       "automated": true,
@@ -182,7 +191,8 @@
           "slug": "cap-provider-binding",
           "story": "As an implementer, I want capabilities bound to providers instead of individual credentials, so multiple accounts can share one provider capability set.",
           "evidenceLinks": [
-            "ev-broker-cap-provider-binding-test"
+            "ev-broker-cap-provider-binding-test",
+            "ev-openai-codex-usage-capability-test"
           ],
           "trace": {
             "proofLevel": "runtime",
@@ -220,6 +230,10 @@
               {
                 "evidenceId": "ev-broker-cap-provider-binding-test",
                 "test": "story_cap_provider_binding"
+              },
+              {
+                "evidenceId": "ev-openai-codex-usage-capability-test",
+                "test": "builtin_openai_registry_scopes_codex_usage_to_read_only_oauth"
               }
             ]
           }

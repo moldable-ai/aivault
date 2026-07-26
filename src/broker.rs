@@ -267,13 +267,15 @@ impl Registry {
                 if let Some(existing) =
                     claimed_secret_names.insert(name.to_string(), template.provider.clone())
                 {
-                    return Err(BrokerError::new(
-                        ErrorCode::InvalidRequest,
-                        format!(
-                            "duplicate vault secret name '{}' claimed by providers '{}' and '{}'",
-                            name, existing, template.provider
-                        ),
-                    ));
+                    if existing != template.provider {
+                        return Err(BrokerError::new(
+                            ErrorCode::InvalidRequest,
+                            format!(
+                                "duplicate vault secret name '{}' claimed by providers '{}' and '{}'",
+                                name, existing, template.provider
+                            ),
+                        ));
+                    }
                 }
             }
         }

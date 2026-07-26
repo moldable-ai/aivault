@@ -10,7 +10,11 @@ fi
 INSTALL_DIR="${AIVAULT_LOCAL_BIN_DIR:-$DEFAULT_INSTALL_DIR}"
 INSTALL_POSTGRES=1
 INSTALL_MOLDABLE=1
-MOLDABLE_REPO_DIR="${MOLDABLE_REPO_DIR:-$HOME/moldable}"
+DEFAULT_MOLDABLE_REPO_DIR="$HOME/moldable"
+if [[ -d "$HOME/moldable-desktop/desktop/src-tauri" ]]; then
+  DEFAULT_MOLDABLE_REPO_DIR="$HOME/moldable-desktop"
+fi
+MOLDABLE_REPO_DIR="${MOLDABLE_REPO_DIR:-$DEFAULT_MOLDABLE_REPO_DIR}"
 RESTART_SHARED=1
 SMOKE_TEST=1
 
@@ -30,7 +34,9 @@ Options:
 
 Environment:
   AIVAULT_LOCAL_BIN_DIR  Same as --install-dir
-  MOLDABLE_REPO_DIR      Local Moldable checkout to refresh (default: ~/moldable)
+  AIVAULT_MACOS_SIGNING_IDENTITY
+                         Optional macOS identity override; otherwise the best local Developer ID or Apple Development identity is selected
+  MOLDABLE_REPO_DIR      Local Moldable checkout to refresh (prefers ~/moldable-desktop, then ~/moldable)
 EOF
 }
 
@@ -123,6 +129,9 @@ if [[ "$INSTALL_POSTGRES" -eq 1 ]]; then
   log "Building release Postgres provider"
   cargo build --manifest-path "$ROOT/providers/postgres/Cargo.toml" --release
 fi
+
+log "Signing local macOS release artifacts"
+bash "$ROOT/scripts/sign-local-macos.sh"
 
 log "Installing symlinks into $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"

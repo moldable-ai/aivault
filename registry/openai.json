@@ -39,6 +39,32 @@
       ],
       "priority": 100,
       "upstreamPathPrefix": "/backend-api/codex"
+    },
+    {
+      "id": "codex-oauth-usage",
+      "vaultSecrets": {
+        "CODEX_OAUTH_JSON": "oauth"
+      },
+      "auth": {
+        "multi_header": [
+          {
+            "header_name": "authorization",
+            "value_template": "Bearer {{access_token}}"
+          },
+          {
+            "header_name": "ChatGPT-Account-Id",
+            "value_template": "{{account_id}}"
+          }
+        ]
+      },
+      "hosts": [
+        "chatgpt.com"
+      ],
+      "capabilities": [
+        "openai/codex-usage"
+      ],
+      "priority": 100,
+      "upstreamPathPrefix": "/backend-api"
     }
   ],
   "capabilities": [
@@ -104,6 +130,21 @@
         ],
         "pathPrefixes": [
           "/responses"
+        ]
+      }
+    },
+    {
+      "id": "openai/codex-usage",
+      "provider": "openai",
+      "allow": {
+        "hosts": [
+          "chatgpt.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/wham/usage"
         ]
       }
     },

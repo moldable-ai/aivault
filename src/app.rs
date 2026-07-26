@@ -1426,6 +1426,10 @@ fn codex_oauth_secret_is_current(
     Ok(codex_oauth_expires_ms(&refreshed) > now_ms)
 }
 
+fn is_codex_oauth_alternative(alternative: &crate::broker::ProviderCredentialTemplate) -> bool {
+    alternative.vault_secrets.contains_key("CODEX_OAUTH_JSON")
+}
+
 fn derive_registry_credentials_from_vault(
     vault: &VaultRuntime,
     store: Option<&BrokerStore>,
@@ -1507,7 +1511,7 @@ fn derive_registry_credentials_from_vault(
                 if !complete {
                     continue;
                 }
-                if alternative.id == "codex-oauth"
+                if is_codex_oauth_alternative(alternative)
                     && !codex_oauth_secret_is_current(vault, by_name, refresh_expired_codex_oauth)?
                 {
                     continue;
