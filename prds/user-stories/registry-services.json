@@ -18,7 +18,17 @@
       "automated": true,
       "file": "src/registry.rs",
       "tests": [
-        "builtin_registry_contains_initial_transcription_providers"
+        "builtin_registry_contains_initial_transcription_providers",
+        "builtin_openai_registry_scopes_codex_realtime_to_call_creation"
+      ]
+    },
+    {
+      "id": "ev-regsvc-codex-realtime-call-planning",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative"
       ]
     },
     {
@@ -40,18 +50,25 @@
       "stories": [
         {
           "slug": "regsvc-openai",
-          "story": "As an operator, I want OpenAI capabilities (chat, responses, embeddings, images, audio, files, models, batches) available in the built-in registry, so agents can access OpenAI APIs with zero policy authoring.",
-          "evidenceLinks": ["ev-regsvc-e2e-builtin-registry-activation", "ev-regsvc-builtin-registry-loads"],
+          "story": "As an operator, I want OpenAI capabilities (chat, responses, embeddings, images, audio, files, models, batches, Realtime, and ChatGPT-backed realtime call creation) available in the built-in registry, so agents can access OpenAI APIs with zero policy authoring.",
+          "evidenceLinks": ["ev-regsvc-e2e-builtin-registry-activation", "ev-regsvc-builtin-registry-loads", "ev-regsvc-codex-realtime-call-planning"],
           "trace": {
             "proofLevel": "e2e",
             "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
-            "runtime": [{ "file": "src/registry.rs", "symbol": "parse_provider_template" }],
-            "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
+            "runtime": [
+              { "file": "src/registry.rs", "symbol": "parse_provider_template" },
+              { "file": "src/app.rs", "symbol": "plan_capability_envelope" }
+            ],
+            "guards": [
+              { "file": "src/registry.rs", "symbol": "Registry::from_templates" },
+              { "file": "src/broker/runtime.rs", "symbol": "Broker::execute_envelope" }
+            ],
             "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
             "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
             "assertions": [
               { "evidenceId": "ev-regsvc-e2e-builtin-registry-activation", "test": "e2e_builtin_registry_activates_initial_transcription_capabilities" },
-              { "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }
+              { "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" },
+              { "evidenceId": "ev-regsvc-codex-realtime-call-planning", "test": "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative" }
             ]
           }
         },

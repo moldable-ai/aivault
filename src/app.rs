@@ -6093,6 +6093,60 @@ mod tests {
             .iter()
             .any(|header| { header.name == "chatgpt-account-id" && header.value == "acct-test" }));
 
+        let realtime_token = broker
+            .mint_proxy_token(
+                &crate::broker::RequestAuth::Operator("test".to_string()),
+                ProxyTokenMintRequest {
+                    capabilities: vec!["openai/codex-realtime".to_string()],
+                    credential: Some("openai:codex-oauth".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .unwrap();
+        let realtime = broker
+            .execute_envelope(
+                &crate::broker::RequestAuth::Proxy(realtime_token.token),
+                ProxyEnvelope {
+                    capability: "openai/codex-realtime".to_string(),
+                    credential: Some("openai:codex-oauth".to_string()),
+                    request: ProxyEnvelopeRequest {
+                        method: "POST".to_string(),
+                        path: "/realtime/calls?intent=quicksilver&architecture=avas".to_string(),
+                        headers: vec![crate::broker::Header {
+                            name: "content-type".to_string(),
+                            value: "application/json".to_string(),
+                        }],
+                        body: Some(
+                            r#"{"sdp":"v=offer\r\n","session":{"model":"gpt-live"}}"#.to_string(),
+                        ),
+                        multipart: None,
+                        multipart_files: Vec::new(),
+                        body_file_path: None,
+                        url: None,
+                    },
+                },
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(realtime.host, "chatgpt.com");
+        assert_eq!(realtime.path, "/backend-api/codex/realtime/calls");
+        assert_eq!(
+            realtime.query,
+            [
+                ("intent".to_string(), "quicksilver".to_string()),
+                ("architecture".to_string(), "avas".to_string()),
+            ]
+        );
+        assert!(realtime
+            .headers
+            .iter()
+            .any(|header| header.name == "authorization" && header.value == "Bearer access-new"));
+        assert!(realtime
+            .headers
+            .iter()
+            .any(|header| header.name == "chatgpt-account-id" && header.value == "acct-test"));
+
         let meta = vault
             .list_secrets()
             .unwrap()

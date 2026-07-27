@@ -483,6 +483,17 @@ fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
         assert_eq!(described["call"]["defaults"]["path"].as_str(), path);
     }
 
+    let codex_realtime = run_ok_json(&dir, &["capability", "describe", "openai/codex-realtime"]);
+    assert_eq!(codex_realtime["provider"].as_str(), Some("openai"));
+    assert_eq!(
+        codex_realtime["call"]["defaults"]["method"].as_str(),
+        Some("POST")
+    );
+    assert_eq!(
+        codex_realtime["call"]["defaults"]["path"].as_str(),
+        Some("/realtime/calls")
+    );
+
     // Multi-method capabilities have null default method but still resolve the path.
     let multi_method_expectations = [
         (

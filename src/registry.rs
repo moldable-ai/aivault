@@ -138,6 +138,35 @@ mod tests {
     }
 
     #[test]
+    fn builtin_openai_registry_scopes_codex_realtime_to_call_creation() {
+        let registry = builtin_registry().expect("registry should load");
+        let openai = registry.provider("openai").expect("openai provider");
+        let realtime = openai
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "openai/codex-realtime")
+            .expect("codex realtime capability");
+
+        assert_eq!(realtime.allow.hosts, ["chatgpt.com"]);
+        assert_eq!(realtime.allow.methods, ["POST"]);
+        assert_eq!(realtime.allow.path_prefixes, ["/realtime/calls"]);
+
+        let credential = openai
+            .credential_alternatives
+            .iter()
+            .find(|alternative| alternative.id == "codex-oauth")
+            .expect("codex oauth credential");
+        assert!(credential
+            .capabilities
+            .iter()
+            .any(|capability| capability == "openai/codex-realtime"));
+        assert_eq!(
+            credential.upstream_path_prefix.as_deref(),
+            Some("/backend-api/codex")
+        );
+    }
+
+    #[test]
     fn builtin_registry_contains_firecrawl_provider() {
         let registry = builtin_registry().expect("registry should load");
 

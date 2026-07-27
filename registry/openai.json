@@ -35,7 +35,8 @@
         "chatgpt.com"
       ],
       "capabilities": [
-        "openai/codex-responses"
+        "openai/codex-responses",
+        "openai/codex-realtime"
       ],
       "priority": 100,
       "upstreamPathPrefix": "/backend-api/codex"
@@ -115,6 +116,21 @@
         ],
         "pathPrefixes": [
           "/v1/chat/completions"
+        ]
+      }
+    },
+    {
+      "id": "openai/codex-realtime",
+      "provider": "openai",
+      "allow": {
+        "hosts": [
+          "chatgpt.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/realtime/calls"
         ]
       }
     },
