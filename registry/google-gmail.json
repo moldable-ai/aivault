@@ -38,6 +38,24 @@
       }
     },
     {
+      "id": "google-gmail/drafts",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "DELETE",
+          "GET",
+          "POST",
+          "PUT"
+        ],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/drafts"
+        ]
+      }
+    },
+    {
       "id": "google-gmail/labels",
       "provider": "google-gmail",
       "allow": {

@@ -97,6 +97,19 @@ mod tests {
             .capabilities
             .iter()
             .any(|cap| cap.id == "google-gmail/contacts-read"));
+        let drafts = gmail
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "google-gmail/drafts")
+            .expect("google-gmail drafts capability");
+        assert_eq!(
+            drafts.allow.methods,
+            ["DELETE", "GET", "POST", "PUT"].map(str::to_string)
+        );
+        assert_eq!(
+            drafts.allow.path_prefixes,
+            ["/gmail/v1/users/me/drafts".to_string()]
+        );
 
         let calendar = registry
             .provider("google-calendar")
