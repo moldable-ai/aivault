@@ -893,7 +893,13 @@ impl VaultRuntime {
         let entries = std::fs::read_dir(&dir)?;
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_file() {
+            // Secret updates are written through a sibling `*.json.tmp.*`
+            // file before being atomically renamed into place. A crashed or
+            // interrupted writer can leave that staging file behind; it must
+            // never be treated as a second, live secret record.
+            if !path.is_file()
+                || path.extension().and_then(|extension| extension.to_str()) != Some("json")
+            {
                 continue;
             }
             let raw = std::fs::read_to_string(&path).unwrap_or_default();
@@ -2078,6 +2084,37 @@ mod tests {
             .resolve_secret_ref(&sr, Some("test.rotate_secret"), Some("unit"))
             .unwrap();
         assert_eq!(value, b"sk-v2".to_vec());
+    }
+
+    #[test]
+    fn list_secrets_ignores_interrupted_atomic_write_staging_files() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _vault_dir = ScopedEnvVar::set("AIVAULT_DIR", tmp.path());
+        let key = random_key_32();
+        let _vault_key = ScopedEnvVar::set(
+            "AIVAULT_KEY",
+            base64::engine::general_purpose::STANDARD.encode(key),
+        );
+
+        let vault = VaultRuntime::discover();
+        vault.load().unwrap();
+        vault
+            .init(VaultProviderConfig::Env {
+                env_var: "AIVAULT_KEY".to_string(),
+            })
+            .unwrap();
+        let meta = vault
+            .create_secret("OPENAI_API_KEY", b"sk-current", SecretScope::Global, vec![])
+            .unwrap();
+
+        let secret_path = vault.paths().secret_path(&meta.secret_id);
+        let stale_path = secret_path.with_extension("json.tmp.interrupted-write");
+        std::fs::copy(&secret_path, stale_path).unwrap();
+
+        let secrets = vault.list_secrets().unwrap();
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].secret_id, meta.secret_id);
     }
 
     #[test]

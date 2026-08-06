@@ -38,6 +38,15 @@
       ]
     },
     {
+      "id": "ev-vault-secret-listing-ignores-staging-files-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/vault/mod.rs",
+      "tests": [
+        "list_secrets_ignores_interrupted_atomic_write_staging_files"
+      ]
+    },
+    {
       "id": "ev-vault-audit-tests",
       "kind": "tests",
       "automated": true,
@@ -1301,6 +1310,47 @@
               {
                 "evidenceId": "ev-vault-foundation-secret-files-encrypted-and-restrictive-permissions-test",
                 "test": "secret_files_are_not_plaintext_and_use_restrictive_permissions"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-foundation-secret-listing-ignores-atomic-write-staging-files",
+          "story": "As an operator, I want vault secret listings to ignore interrupted atomic-write staging files, so an orphaned temporary record cannot create a duplicate or stale credential.",
+          "evidenceLinks": [
+            "ev-vault-secret-listing-ignores-staging-files-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_secrets"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::list_secrets"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::list_secrets"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/display.rs",
+                "symbol": "print_secrets_list"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-secret-listing-ignores-staging-files-test",
+                "test": "list_secrets_ignores_interrupted_atomic_write_staging_files"
               }
             ]
           }
