@@ -69,6 +69,7 @@
       "tests": [
         "story_env_streaming_response_forwarding",
         "e2e_local_tls_invoke_stream_prints_first_chunk_before_response_completes",
+        "e2e_streaming_non_oauth_401_preserves_the_upstream_body",
         "e2e_streaming_invoke_via_aivaultd_unix_socket"
       ]
     },
@@ -518,6 +519,10 @@
               {
                 "evidenceId": "ev-broker-env-streaming-response-forwarding-test",
                 "test": "e2e_streaming_invoke_via_aivaultd_unix_socket"
+              },
+              {
+                "evidenceId": "ev-broker-env-streaming-response-forwarding-test",
+                "test": "e2e_streaming_non_oauth_401_preserves_the_upstream_body"
               }
             ]
           }

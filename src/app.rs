@@ -3293,6 +3293,7 @@ where
         return Err("plaid capabilities do not support streaming output".to_string());
     }
 
+    let retry_envelope = envelope.clone();
     let (broker, planned) = plan_capability_envelope(
         vault,
         store,
@@ -3301,7 +3302,45 @@ where
         execution.workspace_id,
         execution.group_id,
     )?;
-    execute_planned_http_request_streaming(&broker, &planned, execution.timeout_ms, on_chunk)
+    let mut on_chunk = on_chunk;
+    let first = execute_planned_http_request_streaming(
+        &broker,
+        &planned,
+        execution.timeout_ms,
+        &mut on_chunk,
+    )?;
+
+    if first.status == 401
+        && force_refresh_oauth2_credential_for_retry(
+            vault,
+            store,
+            &planned.credential,
+            execution.workspace_id,
+            execution.group_id,
+        )?
+    {
+        let (retry_broker, retry_planned) = plan_capability_envelope(
+            vault,
+            store,
+            retry_envelope,
+            client_ip,
+            execution.workspace_id,
+            execution.group_id,
+        )?;
+        let retry = execute_planned_http_request_streaming(
+            &retry_broker,
+            &retry_planned,
+            execution.timeout_ms,
+            &mut on_chunk,
+        )?;
+        if let Some(body) = retry.deferred_body {
+            on_chunk(&body)?;
+        }
+    } else if let Some(body) = first.deferred_body {
+        on_chunk(&body)?;
+    }
+
+    Ok(())
 }
 
 fn plan_capability_envelope(
@@ -4790,19 +4829,37 @@ fn execute_planned_http_request(
     }))
 }
 
+const MAX_DEFERRED_STREAM_RETRY_BODY_BYTES: usize = 1024 * 1024;
+
+struct StreamingExecutionResult {
+    status: u16,
+    deferred_body: Option<Vec<u8>>,
+}
+
 fn execute_planned_http_request_streaming<F>(
     broker: &Broker,
     planned: &PlannedRequest,
     timeout_ms: Option<u64>,
     mut on_chunk: F,
-) -> Result<(), String>
+) -> Result<StreamingExecutionResult, String>
 where
     F: FnMut(&[u8]) -> Result<(), String>,
 {
     if broker.response_body_policy_requires_buffering(&planned.capability) {
         let response = execute_planned_http_request(broker, planned, timeout_ms)?;
+        let status = response_status(&response).unwrap_or_default();
         let bytes = extract_invoke_body_bytes(&response)?;
-        return on_chunk(&bytes);
+        if status == 401 {
+            return Ok(StreamingExecutionResult {
+                status,
+                deferred_body: Some(bytes),
+            });
+        }
+        on_chunk(&bytes)?;
+        return Ok(StreamingExecutionResult {
+            status,
+            deferred_body: None,
+        });
     }
 
     let mut url = reqwest::Url::parse(&format!(
@@ -4869,8 +4926,9 @@ where
         format_reqwest_error_with_url_replacement(&e, &from, &safe_url)
     })?;
 
+    let status = response.status().as_u16();
     let _forwarded_headers = Broker::forward_response(UpstreamResponse {
-        status: response.status().as_u16(),
+        status,
         headers: response
             .headers()
             .iter()
@@ -4882,6 +4940,28 @@ where
         body_chunks: Vec::new(),
     });
 
+    // Keep the rejected response private until the caller has had one chance
+    // to refresh an OAuth credential and replay the request. This prevents a
+    // stale-token error body from being interleaved with a successful retry.
+    if status == 401 {
+        let mut body = Vec::new();
+        let mut buffer = [0u8; 16 * 1024];
+        loop {
+            let read = response.read(&mut buffer).map_err(|e| e.to_string())?;
+            if read == 0 {
+                break;
+            }
+            if body.len().saturating_add(read) > MAX_DEFERRED_STREAM_RETRY_BODY_BYTES {
+                return Err("upstream 401 response exceeds the deferred retry limit".to_string());
+            }
+            body.extend_from_slice(&buffer[..read]);
+        }
+        return Ok(StreamingExecutionResult {
+            status,
+            deferred_body: Some(body),
+        });
+    }
+
     let mut buffer = [0u8; 16 * 1024];
     loop {
         let read = response.read(&mut buffer).map_err(|e| e.to_string())?;
@@ -4891,7 +4971,10 @@ where
         on_chunk(&buffer[..read])?;
     }
 
-    Ok(())
+    Ok(StreamingExecutionResult {
+        status,
+        deferred_body: None,
+    })
 }
 
 fn planned_url_for_output(broker: &Broker, planned: &PlannedRequest) -> Result<String, String> {

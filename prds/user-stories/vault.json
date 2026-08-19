@@ -235,7 +235,8 @@
       "automated": true,
       "file": "tests/e2e_cli_local_tls.rs",
       "tests": [
-        "e2e_oauth2_upstream_401_forces_refresh_and_retries_once"
+        "e2e_oauth2_upstream_401_forces_refresh_and_retries_once",
+        "e2e_streaming_oauth2_upstream_401_forces_refresh_and_retries_once"
       ]
     },
     {
@@ -533,6 +534,10 @@
               {
                 "file": "src/app.rs",
                 "symbol": "run_capability_envelope"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope_streaming"
               }
             ],
             "runtime": [
@@ -560,6 +565,10 @@
               {
                 "file": "src/app.rs",
                 "symbol": "execute_planned_http_request"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request_streaming"
               }
             ],
             "assertions": [
@@ -624,6 +633,10 @@
               {
                 "evidenceId": "ev-e2e-vault-oauth-upstream-401-refresh-retry-test",
                 "test": "e2e_oauth2_upstream_401_forces_refresh_and_retries_once"
+              },
+              {
+                "evidenceId": "ev-e2e-vault-oauth-upstream-401-refresh-retry-test",
+                "test": "e2e_streaming_oauth2_upstream_401_forces_refresh_and_retries_once"
               }
             ]
           }

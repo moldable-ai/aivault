@@ -115,6 +115,10 @@ async fn echo_handler(
         return (axum::http::StatusCode::UNAUTHORIZED, "expired access token").into_response();
     }
 
+    if uri.path() == "/always-unauthorized" {
+        return (axum::http::StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+
     Json(serde_json::json!({
         "method": method.as_str(),
         "path": uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/"),
@@ -254,6 +258,15 @@ fn run_aivault_with_env(dir: &TempDir, args: &[&str], envs: &[(String, String)])
     command
         .env("AIVAULT_DIR", dir.path())
         .args(rewrite_invoke_to_json(args));
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().expect("failed to run aivault binary")
+}
+
+fn run_aivault_raw(dir: &TempDir, args: &[&str], envs: &[(String, String)]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_aivault"));
+    command.env("AIVAULT_DIR", dir.path()).args(args);
     for (key, value) in envs {
         command.env(key, value);
     }
@@ -510,6 +523,42 @@ fn e2e_local_tls_invoke_stream_prints_first_chunk_before_response_completes() {
         rest.contains("data: 2\n\n"),
         "remaining stdout should contain second chunk, got: {}",
         rest
+    );
+}
+
+#[test]
+fn e2e_streaming_non_oauth_401_preserves_the_upstream_body() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+    setup_tls_capability(
+        &dir,
+        &envs,
+        &upstream_authority,
+        "local/tls-unauthorized",
+        "local-tls-unauthorized-cred",
+        &["GET"],
+        &["/always-unauthorized"],
+    );
+
+    let output = run_aivault_raw(
+        &dir,
+        &[
+            "invoke",
+            "local/tls-unauthorized",
+            "--stream",
+            "--path",
+            "/always-unauthorized",
+        ],
+        &envs,
+    );
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stream output utf8"),
+        "unauthorized"
     );
 }
 
@@ -875,6 +924,116 @@ fn e2e_oauth2_upstream_401_forces_refresh_and_retries_once() {
             .map(|req| req.path.as_str())
             .collect::<Vec<_>>()
     );
+    assert_eq!(
+        protected_calls[0]
+            .headers
+            .get("authorization")
+            .map(String::as_str),
+        Some("Bearer at-1")
+    );
+    assert_eq!(
+        protected_calls[1]
+            .headers
+            .get("authorization")
+            .map(String::as_str),
+        Some("Bearer at-2")
+    );
+}
+
+#[test]
+fn e2e_streaming_oauth2_upstream_401_forces_refresh_and_retries_once() {
+    let server = LocalTlsEchoServer::start("upstream.test");
+    let envs = server.env_pairs();
+    let upstream_authority = format!("upstream.test:{}", server.addr.port());
+
+    let dir = TempDir::new().expect("temp dir");
+    let valid_until = chrono::Utc::now().timestamp_millis() + 60 * 60 * 1000;
+    let secret_id = create_secret(
+        &dir,
+        &envs,
+        "OAUTH_STALE_STREAM_SECRET",
+        &format!(
+            r#"{{"clientId":"cid","clientSecret":"csec","refreshToken":"rt-stale","accessToken":"at-1","accessTokenExpiresAtMs":{valid_until}}}"#
+        ),
+    );
+    let secret_ref = format!("vault:secret:{secret_id}");
+
+    run_ok_json(
+        &dir,
+        &[
+            "credential",
+            "create",
+            "oauth-stale-stream-cred",
+            "--provider",
+            "oauth",
+            "--secret-ref",
+            &secret_ref,
+            "--auth",
+            "oauth2",
+            "--grant-type",
+            "refresh_token",
+            "--token-endpoint",
+            &format!("https://{}/oauth/token", upstream_authority),
+            "--host",
+            &upstream_authority,
+        ],
+        &envs,
+    );
+
+    run_ok_json(
+        &dir,
+        &[
+            "capability",
+            "create",
+            "oauth/stale-stream-retry",
+            "--credential",
+            "oauth-stale-stream-cred",
+            "--method",
+            "GET",
+            "--path",
+            "/requires-fresh-token",
+        ],
+        &envs,
+    );
+
+    let output = run_aivault_raw(
+        &dir,
+        &[
+            "invoke",
+            "oauth/stale-stream-retry",
+            "--stream",
+            "--path",
+            "/requires-fresh-token",
+        ],
+        &envs,
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stream output utf8");
+    let stderr = String::from_utf8(output.stderr).expect("stream error utf8");
+    assert!(
+        output.status.success(),
+        "streaming command failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        !stdout.contains("expired access token"),
+        "the rejected 401 body must not leak before the retry: {stdout}"
+    );
+    let upstream: Value = serde_json::from_str(&stdout).expect("successful upstream json");
+    assert_eq!(
+        upstream["headers"]["authorization"].as_str(),
+        Some("Bearer at-2")
+    );
+
+    let captured = server.captured_requests();
+    let token_calls = captured
+        .iter()
+        .filter(|request| request.path.starts_with("/oauth/token"))
+        .count();
+    assert_eq!(token_calls, 1, "expected exactly one forced refresh");
+    let protected_calls: Vec<_> = captured
+        .iter()
+        .filter(|request| request.path.contains("/requires-fresh-token"))
+        .collect();
+    assert_eq!(protected_calls.len(), 2, "expected exactly one retry");
     assert_eq!(
         protected_calls[0]
             .headers
