@@ -40,6 +40,19 @@
         "builtin_telegram_registry_is_path_authenticated_and_least_privilege",
         "builtin_telegram_capabilities_inject_path_auth_and_reject_broad_methods"
       ]
+    },
+    {
+      "id": "ev-regsvc-agentmail-pinned-oauth-mcp",
+      "kind": "tests",
+      "automated": true,
+      "files": [
+        "src/registry.rs",
+        "src/app.rs"
+      ],
+      "tests": [
+        "builtin_agentmail_registry_is_oauth_and_mcp_scoped",
+        "runtime_accepts_pinned_agentmail_oauth_for_compiled_mcp_provider"
+      ]
     }
   ],
   "sections": [
@@ -492,6 +505,29 @@
       "group": "Registry Services",
       "title": "Email Providers",
       "stories": [
+        {
+          "slug": "regsvc-agentmail",
+          "story": "As an operator, I want AgentMail's hosted MCP server available through a provider-pinned OAuth credential, so agents can use a shared email identity without receiving or exposing the bearer token.",
+          "evidenceLinks": ["ev-regsvc-agentmail-pinned-oauth-mcp"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/app.rs", "symbol": "load_runtime_broker_for_context" }],
+            "runtime": [
+              { "file": "src/app.rs", "symbol": "derive_registry_credentials_from_vault" },
+              { "file": "src/broker/runtime.rs", "symbol": "Broker::execute_envelope" }
+            ],
+            "guards": [
+              { "file": "src/app.rs", "symbol": "load_runtime_broker_for_context" },
+              { "file": "src/broker/runtime.rs", "symbol": "ensure_path_allowed" }
+            ],
+            "stateEffects": [{ "file": "src/vault/mod.rs", "symbol": "VaultRuntime::pin_secret_to_provider" }],
+            "userSurface": [{ "file": "src/broker.rs", "symbol": "PlannedRequest" }],
+            "assertions": [
+              { "evidenceId": "ev-regsvc-agentmail-pinned-oauth-mcp", "test": "builtin_agentmail_registry_is_oauth_and_mcp_scoped" },
+              { "evidenceId": "ev-regsvc-agentmail-pinned-oauth-mcp", "test": "runtime_accepts_pinned_agentmail_oauth_for_compiled_mcp_provider" }
+            ]
+          }
+        },
         {
           "slug": "regsvc-resend",
           "story": "As an operator, I want Resend capabilities (emails, contacts, broadcasts, domains) available in the built-in registry, so agents can access Resend APIs with zero policy authoring.",

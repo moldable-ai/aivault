@@ -5971,6 +5971,99 @@ mod tests {
     }
 
     #[test]
+    fn runtime_accepts_pinned_agentmail_oauth_for_compiled_mcp_provider() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();
+        let oauth = serde_json::to_vec(&serde_json::json!({
+            "clientId": "agentmail-client",
+            "refreshToken": "agentmail-refresh",
+            "accessToken": "agentmail-access",
+            "accessTokenExpiresAtMs": chrono::Utc::now().timestamp_millis() + 60_000,
+        }))
+        .unwrap();
+        let meta = vault
+            .create_system_secret(
+                "AGENTMAIL_OAUTH_JSON",
+                &oauth,
+                SecretScope::Global,
+                vec!["agentmail.oauth.json".to_string()],
+            )
+            .unwrap();
+        vault
+            .pin_secret_to_provider(&meta.secret_id, "agentmail")
+            .unwrap();
+
+        let secret_ref = SecretRef {
+            secret_id: meta.secret_id,
+        }
+        .to_string();
+        let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        store.upsert_credential(StoredCredential {
+            id: "agentmail".to_string(),
+            provider: "agentmail".to_string(),
+            workspace_id: None,
+            group_id: None,
+            auth: AuthStrategy::OAuth2 {
+                grant_type: "refresh_token".to_string(),
+                token_endpoint: "https://clerk.console.agentmail.to/oauth/token".to_string(),
+                scopes: Vec::new(),
+            },
+            hosts: vec![
+                "mcp.agentmail.to".to_string(),
+                "clerk.console.agentmail.to".to_string(),
+            ],
+            capabilities: vec!["agentmail/mcp".to_string()],
+            priority: 0,
+            upstream_path_prefix: None,
+            secret_ref,
+            max_policy_mode: None,
+        });
+
+        let mut broker =
+            load_runtime_broker_for_context(&vault, &store, Some("agentmail"), None, None).unwrap();
+        let proxy = broker
+            .mint_proxy_token(
+                &crate::broker::RequestAuth::Operator("moldable-test".to_string()),
+                ProxyTokenMintRequest {
+                    capabilities: vec!["agentmail/mcp".to_string()],
+                    credential: Some("agentmail".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .unwrap();
+        let planned = broker
+            .execute_envelope(
+                &crate::broker::RequestAuth::Proxy(proxy.token),
+                ProxyEnvelope {
+                    capability: "agentmail/mcp".to_string(),
+                    credential: Some("agentmail".to_string()),
+                    request: ProxyEnvelopeRequest {
+                        method: "POST".to_string(),
+                        path: "/mcp".to_string(),
+                        headers: vec![crate::broker::Header {
+                            name: "content-type".to_string(),
+                            value: "application/json".to_string(),
+                        }],
+                        body: Some(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#.to_string()),
+                        multipart: None,
+                        multipart_files: Vec::new(),
+                        body_file_path: None,
+                        url: None,
+                    },
+                },
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(planned.host, "mcp.agentmail.to");
+        assert_eq!(planned.path, "/mcp");
+        assert!(planned.headers.iter().any(|header| {
+            header.name == "authorization" && header.value == "Bearer agentmail-access"
+        }));
+    }
+
+    #[test]
     fn runtime_derives_registry_credentials_from_vault_when_store_is_empty() {
         let _lock = ENV_LOCK.lock().unwrap();
         let (_tmp, vault, _vault_dir, _vault_key) = init_test_vault();

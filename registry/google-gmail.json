@@ -121,21 +121,6 @@
       }
     },
     {
-      "id": "google-gmail/send-as-read",
-      "provider": "google-gmail",
-      "allow": {
-        "hosts": [
-          "gmail.googleapis.com"
-        ],
-        "methods": [
-          "GET"
-        ],
-        "pathPrefixes": [
-          "/gmail/v1/users/me/settings/sendAs"
-        ]
-      }
-    },
-    {
       "id": "google-gmail/send",
       "provider": "google-gmail",
       "allow": {
@@ -147,6 +132,21 @@
         ],
         "pathPrefixes": [
           "/gmail/v1/users/me/messages/send"
+        ]
+      }
+    },
+    {
+      "id": "google-gmail/send-as-read",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/settings/sendAs"
         ]
       }
     }

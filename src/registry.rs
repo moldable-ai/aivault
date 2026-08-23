@@ -218,6 +218,38 @@ mod tests {
     }
 
     #[test]
+    fn builtin_agentmail_registry_is_oauth_and_mcp_scoped() {
+        let registry = builtin_registry().expect("registry should load");
+        let agentmail = registry.provider("agentmail").expect("agentmail provider");
+
+        assert_eq!(
+            agentmail.vault_secrets.get("AGENTMAIL_OAUTH_JSON"),
+            Some(&"secret".to_string())
+        );
+        assert_eq!(
+            agentmail.auth,
+            AuthStrategy::OAuth2 {
+                grant_type: "refresh_token".to_string(),
+                token_endpoint: "https://clerk.console.agentmail.to/oauth/token".to_string(),
+                scopes: ["openid", "profile", "email", "offline_access"]
+                    .map(str::to_string)
+                    .to_vec(),
+            }
+        );
+        assert_eq!(
+            agentmail.hosts,
+            ["clerk.console.agentmail.to", "mcp.agentmail.to"]
+        );
+
+        let mcp = registry
+            .capability("agentmail/mcp")
+            .expect("agentmail MCP capability");
+        assert_eq!(mcp.allow.hosts, ["mcp.agentmail.to"]);
+        assert_eq!(mcp.allow.methods, ["DELETE", "POST"]);
+        assert_eq!(mcp.allow.path_prefixes, ["/mcp"]);
+    }
+
+    #[test]
     fn builtin_telegram_registry_is_path_authenticated_and_least_privilege() {
         let registry = builtin_registry().expect("registry should load");
         let telegram = registry.provider("telegram").expect("telegram provider");

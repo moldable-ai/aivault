@@ -55,6 +55,7 @@ Providers currently in the built-in registry include:
 - **Intercom** — contacts, conversations, admins, tags, segments, events
 
 ### Email
+- **AgentMail** — hosted MCP access for agent-owned inboxes, messages, threads, drafts, and attachments through OAuth
 - **Resend** — send email, domains, API keys, audiences, contacts, broadcasts
 - **SendGrid** — send mail, contacts, lists, templates
 - **Postmark** — send email, templates, servers, message streams, domains, webhooks

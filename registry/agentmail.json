@@ -1,0 +1,41 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "agentmail",
+  "vaultSecrets": {
+    "AGENTMAIL_OAUTH_JSON": "secret"
+  },
+  "auth": {
+    "o_auth2": {
+      "grant_type": "refresh_token",
+      "token_endpoint": "https://clerk.console.agentmail.to/oauth/token",
+      "scopes": [
+        "openid",
+        "profile",
+        "email",
+        "offline_access"
+      ]
+    }
+  },
+  "hosts": [
+    "clerk.console.agentmail.to",
+    "mcp.agentmail.to"
+  ],
+  "capabilities": [
+    {
+      "id": "agentmail/mcp",
+      "provider": "agentmail",
+      "allow": {
+        "hosts": [
+          "mcp.agentmail.to"
+        ],
+        "methods": [
+          "DELETE",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/mcp"
+        ]
+      }
+    }
+  ]
+}
