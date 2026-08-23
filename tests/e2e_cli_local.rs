@@ -462,6 +462,7 @@ fn e2e_builtin_registry_activates_initial_transcription_capabilities() {
             Some("POST"),
             Some("/v1/images"),
         ),
+        ("openai/gpt-live", "openai", Some("POST"), Some("/v1/live")),
         (
             "openai/moderation",
             "openai",

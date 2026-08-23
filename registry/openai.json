@@ -66,6 +66,31 @@
       ],
       "priority": 100,
       "upstreamPathPrefix": "/backend-api"
+    },
+    {
+      "id": "codex-oauth-live",
+      "vaultSecrets": {
+        "CODEX_OAUTH_JSON": "oauth"
+      },
+      "auth": {
+        "multi_header": [
+          {
+            "header_name": "authorization",
+            "value_template": "Bearer {{access_token}}"
+          },
+          {
+            "header_name": "ChatGPT-Account-Id",
+            "value_template": "{{account_id}}"
+          }
+        ]
+      },
+      "hosts": [
+        "api.openai.com"
+      ],
+      "capabilities": [
+        "openai/gpt-live"
+      ],
+      "priority": 100
     }
   ],
   "capabilities": [
@@ -210,6 +235,21 @@
         ],
         "pathPrefixes": [
           "/v1/fine_tuning"
+        ]
+      }
+    },
+    {
+      "id": "openai/gpt-live",
+      "provider": "openai",
+      "allow": {
+        "hosts": [
+          "api.openai.com"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/v1/live"
         ]
       }
     },

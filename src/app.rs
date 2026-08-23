@@ -6229,6 +6229,10 @@ mod tests {
             .credentials()
             .iter()
             .any(|c| c.id == "openai:codex-oauth"));
+        assert!(broker
+            .credentials()
+            .iter()
+            .any(|c| c.id == "openai:codex-oauth-live"));
 
         let token = broker
             .mint_proxy_token(
@@ -6324,6 +6328,55 @@ mod tests {
             .headers
             .iter()
             .any(|header| header.name == "chatgpt-account-id" && header.value == "acct-test"));
+
+        let gpt_live_token = broker
+            .mint_proxy_token(
+                &crate::broker::RequestAuth::Operator("test".to_string()),
+                ProxyTokenMintRequest {
+                    capabilities: vec!["openai/gpt-live".to_string()],
+                    credential: Some("openai:codex-oauth-live".to_string()),
+                    ttl_ms: 60_000,
+                    context: HashMap::new(),
+                },
+            )
+            .unwrap();
+        let gpt_live = broker
+            .execute_envelope(
+                &crate::broker::RequestAuth::Proxy(gpt_live_token.token),
+                ProxyEnvelope {
+                    capability: "openai/gpt-live".to_string(),
+                    credential: Some("openai:codex-oauth-live".to_string()),
+                    request: ProxyEnvelopeRequest {
+                        method: "POST".to_string(),
+                        path: "/v1/live".to_string(),
+                        headers: vec![crate::broker::Header {
+                            name: "content-type".to_string(),
+                            value: "multipart/form-data; boundary=test".to_string(),
+                        }],
+                        body: Some("--test--\r\n".to_string()),
+                        multipart: None,
+                        multipart_files: Vec::new(),
+                        body_file_path: None,
+                        url: None,
+                    },
+                },
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(gpt_live.host, "api.openai.com");
+        assert_eq!(gpt_live.path, "/v1/live");
+        assert!(gpt_live.query.is_empty());
+        assert!(gpt_live
+            .headers
+            .iter()
+            .any(|header| header.name == "authorization" && header.value == "Bearer access-new"));
+        assert!(gpt_live
+            .headers
+            .iter()
+            .any(|header| header.name == "chatgpt-account-id" && header.value == "acct-test"));
+        assert!(gpt_live.headers.iter().any(|header| {
+            header.name == "content-type" && header.value == "multipart/form-data; boundary=test"
+        }));
 
         let meta = vault
             .list_secrets()

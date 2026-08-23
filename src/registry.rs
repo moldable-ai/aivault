@@ -193,6 +193,34 @@ mod tests {
     }
 
     #[test]
+    fn builtin_openai_registry_scopes_gpt_live_to_native_oauth_call_creation() {
+        let registry = builtin_registry().expect("registry should load");
+        let openai = registry.provider("openai").expect("openai provider");
+        let gpt_live = openai
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "openai/gpt-live")
+            .expect("GPT-Live capability");
+
+        assert_eq!(gpt_live.allow.hosts, ["api.openai.com"]);
+        assert_eq!(gpt_live.allow.methods, ["POST"]);
+        assert_eq!(gpt_live.allow.path_prefixes, ["/v1/live"]);
+
+        let credential = openai
+            .credential_alternatives
+            .iter()
+            .find(|alternative| alternative.id == "codex-oauth-live")
+            .expect("GPT-Live OAuth credential");
+        assert_eq!(credential.hosts, ["api.openai.com"]);
+        assert_eq!(credential.capabilities, ["openai/gpt-live"]);
+        assert_eq!(credential.upstream_path_prefix, None);
+        assert_eq!(
+            credential.vault_secrets.get("CODEX_OAUTH_JSON"),
+            Some(&"oauth".to_string())
+        );
+    }
+
+    #[test]
     fn builtin_registry_contains_firecrawl_provider() {
         let registry = builtin_registry().expect("registry should load");
 
