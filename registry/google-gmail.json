@@ -11,6 +11,7 @@
       "scopes": [
         "https://www.googleapis.com/auth/gmail.modify",
         "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.settings.basic",
         "https://www.googleapis.com/auth/contacts.readonly"
       ]
     }
@@ -116,6 +117,21 @@
         ],
         "pathPrefixes": [
           "/gmail/v1/users/me/profile"
+        ]
+      }
+    },
+    {
+      "id": "google-gmail/send-as-read",
+      "provider": "google-gmail",
+      "allow": {
+        "hosts": [
+          "gmail.googleapis.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/gmail/v1/users/me/settings/sendAs"
         ]
       }
     },

@@ -97,6 +97,16 @@ mod tests {
             .capabilities
             .iter()
             .any(|cap| cap.id == "google-gmail/contacts-read"));
+        let send_as = gmail
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "google-gmail/send-as-read")
+            .expect("google-gmail send-as capability");
+        assert_eq!(send_as.allow.methods, ["GET"].map(str::to_string));
+        assert_eq!(
+            send_as.allow.path_prefixes,
+            ["/gmail/v1/users/me/settings/sendAs".to_string()]
+        );
         let drafts = gmail
             .capabilities
             .iter()
