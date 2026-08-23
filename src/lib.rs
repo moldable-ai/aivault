@@ -3,6 +3,7 @@ pub mod broker;
 pub mod broker_store;
 pub mod capabilities;
 pub mod cli;
+pub mod codex_oauth;
 pub mod daemon;
 pub mod display;
 pub mod log_retention;

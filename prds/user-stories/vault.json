@@ -546,7 +546,7 @@
                 "symbol": "refresh_oauth2_and_writeback"
               },
               {
-                "file": "src/app.rs",
+                "file": "src/codex_oauth.rs",
                 "symbol": "refresh_codex_oauth_secret"
               },
               {

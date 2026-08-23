@@ -27,17 +27,14 @@ use crate::cli::{
     InvokeArgs, OauthCommand, ProviderCommand, ProviderKind, ScopeKind, SecretsCommand,
     SetupCommand,
 };
+use crate::codex_oauth::codex_oauth_secret_is_current;
 use crate::daemon::{self, DaemonRequest};
 use crate::markdown::{to_markdown, ToMarkdownOptions};
 use crate::vault::{
-    read_audit_events, read_audit_events_before, SecretMeta, SecretRef, SecretScope,
-    VaultProviderConfig, VaultRuntime,
+    read_audit_events, read_audit_events_before, SecretRef, SecretScope, VaultProviderConfig,
+    VaultRuntime,
 };
 
-const CODEX_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
-const CODEX_OAUTH_TOKEN_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
-const CODEX_OAUTH_REFRESH_SKEW_MS: i64 = 10 * 60 * 1000;
-const CODEX_DEFAULT_EXPIRES_IN_SECONDS: i64 = 60 * 60;
 const OAUTH2_REFRESH_SKEW_MS: i64 = 5 * 60 * 1000;
 
 #[derive(Clone, Copy)]
@@ -1262,168 +1259,6 @@ fn registry_secret_ref_for_scope(
     };
 
     Ok(secret_ref)
-}
-
-fn codex_oauth_token_endpoint() -> String {
-    #[cfg(debug_assertions)]
-    {
-        if let Some(endpoint) = std::env::var("AIVAULT_DEV_CODEX_OAUTH_TOKEN_ENDPOINT")
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-        {
-            return endpoint;
-        }
-    }
-
-    CODEX_OAUTH_TOKEN_ENDPOINT.to_string()
-}
-
-fn value_string_field(value: &Value, keys: &[&str]) -> Option<String> {
-    for key in keys {
-        if let Some(text) = value.get(*key).and_then(|v| v.as_str()) {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-    None
-}
-
-fn codex_oauth_expires_ms(value: &Value) -> i64 {
-    value
-        .get("expires")
-        .or_else(|| value.get("expires_at"))
-        .or_else(|| value.get("expiresMs"))
-        .or_else(|| value.get("accessTokenExpiresAtMs"))
-        .and_then(|v| v.as_i64())
-        .unwrap_or(i64::MIN)
-}
-
-fn read_codex_oauth_secret_value(vault: &VaultRuntime, meta: &SecretMeta) -> Result<Value, String> {
-    let sr = SecretRef {
-        secret_id: meta.secret_id.clone(),
-    }
-    .to_string();
-    let raw = vault
-        .resolve_secret_ref(&sr, Some("secret.codex_oauth.check"), Some("aivault-cli"))
-        .map_err(|e| e.to_string())?;
-    serde_json::from_slice(&raw).map_err(|_| "CODEX_OAUTH_JSON must be JSON".to_string())
-}
-
-fn refresh_codex_oauth_secret(
-    vault: &VaultRuntime,
-    meta: &SecretMeta,
-    value: &Value,
-) -> Result<Value, String> {
-    let refresh_token = value_string_field(value, &["refresh_token", "refreshToken"])
-        .ok_or_else(|| "CODEX_OAUTH_JSON is expired and missing refresh_token".to_string())?;
-    let token_endpoint = codex_oauth_token_endpoint();
-    let token_url = reqwest::Url::parse(&token_endpoint)
-        .map_err(|_| "invalid Codex OAuth token endpoint url".to_string())?;
-    if token_url.scheme() != "https" && !dev_flag_true("AIVAULT_DEV_ALLOW_HTTP_LOCAL") {
-        return Err("Codex OAuth token endpoint must use https".to_string());
-    }
-
-    let client = build_http_client_with_dev_overrides()?;
-    let response = client
-        .post(token_url)
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh_token.as_str()),
-            ("client_id", CODEX_OAUTH_CLIENT_ID),
-        ])
-        .send()
-        .map_err(|e| {
-            format!(
-                "Codex OAuth token refresh failed: {}",
-                format_reqwest_error(&e)
-            )
-        })?;
-
-    let status = response.status().as_u16();
-    let body_bytes = response.bytes().map_err(|e| e.to_string())?.to_vec();
-    let body_text = String::from_utf8_lossy(&body_bytes).to_string();
-    if !(200..300).contains(&status) {
-        return Err(format!(
-            "Codex OAuth token endpoint returned {}: {}",
-            status, body_text
-        ));
-    }
-
-    let json: Value = serde_json::from_slice(&body_bytes)
-        .map_err(|_| "Codex OAuth token response must be JSON".to_string())?;
-    let access_token = json
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "Codex OAuth token response missing access_token".to_string())?
-        .to_string();
-    let expires_in = json
-        .get("expires_in")
-        .and_then(|v| v.as_i64())
-        .filter(|seconds| *seconds > 0)
-        .unwrap_or(CODEX_DEFAULT_EXPIRES_IN_SECONDS);
-    let next_refresh_token = json
-        .get("refresh_token")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .unwrap_or(refresh_token.as_str())
-        .to_string();
-    let expires_at = chrono::Utc::now().timestamp_millis() + expires_in * 1000;
-    let account_id = value_string_field(value, &["account_id", "accountId"]);
-    let email = value_string_field(value, &["email"]);
-
-    let mut updated = serde_json::Map::new();
-    updated.insert("access_token".to_string(), Value::String(access_token));
-    updated.insert(
-        "refresh_token".to_string(),
-        Value::String(next_refresh_token),
-    );
-    updated.insert(
-        "expires_at".to_string(),
-        Value::Number(serde_json::Number::from(expires_at)),
-    );
-    if let Some(account_id) = account_id {
-        updated.insert("account_id".to_string(), Value::String(account_id));
-    }
-    if let Some(email) = email {
-        updated.insert("email".to_string(), Value::String(email));
-    }
-    updated.insert(
-        "updated_at".to_string(),
-        Value::String(chrono::Utc::now().to_rfc3339()),
-    );
-    let updated = Value::Object(updated);
-    let updated_bytes = serde_json::to_vec_pretty(&updated).map_err(|e| e.to_string())?;
-    vault
-        .rotate_secret_value(&meta.secret_id, &updated_bytes)
-        .map_err(|e| e.to_string())?;
-    Ok(updated)
-}
-
-fn codex_oauth_secret_is_current(
-    vault: &VaultRuntime,
-    by_name: &HashMap<String, SecretMeta>,
-    refresh_expired: bool,
-) -> Result<bool, String> {
-    let Some(meta) = by_name.get("CODEX_OAUTH_JSON") else {
-        return Ok(false);
-    };
-    let value = read_codex_oauth_secret_value(vault, meta)?;
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    if codex_oauth_expires_ms(&value) > now_ms + CODEX_OAUTH_REFRESH_SKEW_MS {
-        return Ok(true);
-    }
-    if !refresh_expired {
-        return Ok(false);
-    }
-
-    let refreshed = refresh_codex_oauth_secret(vault, meta, &value)?;
-    Ok(codex_oauth_expires_ms(&refreshed) > now_ms)
 }
 
 fn is_codex_oauth_alternative(alternative: &crate::broker::ProviderCredentialTemplate) -> bool {
@@ -6210,7 +6045,7 @@ mod tests {
             SecretsCommand::Create {
                 name: "CODEX_OAUTH_JSON".to_string(),
                 value: Some(
-                    r#"{"access_token":"access-old","refresh_token":"refresh-old","expires_at":0,"account_id":"acct-test","email":"user@example.com"}"#
+                    r#"{"access_token":"access-old","refresh_token":"refresh-old","expires_at":0,"account_id":"acct-test","email":"user@example.com","id_token":"id-token-old"}"#
                         .to_string(),
                 ),
                 value_file: None,
@@ -6384,15 +6219,16 @@ mod tests {
             .into_iter()
             .find(|m| m.name == "CODEX_OAUTH_JSON")
             .unwrap();
+        let secret_ref = SecretRef {
+            secret_id: meta.secret_id.clone(),
+        }
+        .to_string();
+        let access = crate::codex_oauth::prepare_codex_oauth_access(&vault, &secret_ref).unwrap();
+        assert_eq!(access.access_token, "access-new");
+        assert_eq!(access.account_id, "acct-test");
+        assert_eq!(access.email.as_deref(), Some("user@example.com"));
         let raw = vault
-            .resolve_secret_ref(
-                &SecretRef {
-                    secret_id: meta.secret_id,
-                }
-                .to_string(),
-                Some("test"),
-                Some("test"),
-            )
+            .resolve_secret_ref(&secret_ref, Some("test"), Some("test"))
             .unwrap();
         let refreshed: serde_json::Value = serde_json::from_slice(&raw).unwrap();
         assert_eq!(
@@ -6402,6 +6238,10 @@ mod tests {
         assert_eq!(
             refreshed.get("refresh_token").and_then(|v| v.as_str()),
             Some("refresh-new")
+        );
+        assert_eq!(
+            refreshed.get("id_token").and_then(|v| v.as_str()),
+            Some("id-token-old")
         );
         assert!(refreshed
             .get("expires_at")
