@@ -5332,6 +5332,8 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
+    include!("app/managed_mcp_tests.rs");
+
     fn invoke_args(id: &str) -> InvokeArgs {
         InvokeArgs {
             id: id.to_string(),

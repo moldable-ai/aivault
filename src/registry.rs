@@ -34,6 +34,9 @@ pub fn builtin_registry() -> BrokerResult<Registry> {
 }
 
 #[cfg(test)]
+mod managed_mcp_tests;
+
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 

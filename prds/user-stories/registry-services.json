@@ -53,6 +53,19 @@
         "builtin_agentmail_registry_is_oauth_and_mcp_scoped",
         "runtime_accepts_pinned_agentmail_oauth_for_compiled_mcp_provider"
       ]
+    },
+    {
+      "id": "ev-regsvc-granola-pinned-oauth-mcp",
+      "kind": "tests",
+      "automated": true,
+      "files": [
+        "src/registry/managed_mcp_tests.rs",
+        "src/app/managed_mcp_tests.rs"
+      ],
+      "tests": [
+        "builtin_granola_registry_is_oauth_and_mcp_scoped",
+        "runtime_accepts_pinned_granola_oauth_for_compiled_mcp_provider"
+      ]
     }
   ],
   "sections": [
@@ -351,6 +364,29 @@
       "group": "Registry Services",
       "title": "Productivity & CRM Providers",
       "stories": [
+        {
+          "slug": "regsvc-granola",
+          "story": "As an operator, I want Granola's hosted MCP server available through a provider-pinned OAuth credential, so agents can chat with meeting notes without receiving or exposing the bearer token.",
+          "evidenceLinks": ["ev-regsvc-granola-pinned-oauth-mcp"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/app.rs", "symbol": "load_runtime_broker_for_context" }],
+            "runtime": [
+              { "file": "src/app.rs", "symbol": "derive_registry_credentials_from_vault" },
+              { "file": "src/broker/runtime.rs", "symbol": "Broker::execute_envelope" }
+            ],
+            "guards": [
+              { "file": "src/app.rs", "symbol": "load_runtime_broker_for_context" },
+              { "file": "src/broker/runtime.rs", "symbol": "ensure_path_allowed" }
+            ],
+            "stateEffects": [{ "file": "src/vault/mod.rs", "symbol": "VaultRuntime::pin_secret_to_provider" }],
+            "userSurface": [{ "file": "src/broker.rs", "symbol": "PlannedRequest" }],
+            "assertions": [
+              { "evidenceId": "ev-regsvc-granola-pinned-oauth-mcp", "test": "builtin_granola_registry_is_oauth_and_mcp_scoped" },
+              { "evidenceId": "ev-regsvc-granola-pinned-oauth-mcp", "test": "runtime_accepts_pinned_granola_oauth_for_compiled_mcp_provider" }
+            ]
+          }
+        },
         {
           "slug": "regsvc-notion",
           "story": "As an operator, I want Notion capabilities (pages, databases, blocks, users, search, comments) available in the built-in registry, so agents can access Notion APIs with zero policy authoring.",

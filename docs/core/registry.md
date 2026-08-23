@@ -44,6 +44,7 @@ Providers currently in the built-in registry include:
 
 ### Productivity
 - **Notion** — pages, databases, blocks, search, users, comments
+- **Granola** — hosted MCP access to meeting notes and transcripts through OAuth
 - **Airtable** — records, tables, bases
 - **Linear** — GraphQL API
 - **Todoist** — tasks, projects, sections, comments, labels

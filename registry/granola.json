@@ -1,0 +1,41 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "granola",
+  "vaultSecrets": {
+    "GRANOLA_OAUTH_JSON": "secret"
+  },
+  "auth": {
+    "o_auth2": {
+      "grant_type": "refresh_token",
+      "token_endpoint": "https://mcp-auth.granola.ai/oauth2/token",
+      "scopes": [
+        "mcp",
+        "offline_access",
+        "openid",
+        "profile",
+        "email"
+      ]
+    }
+  },
+  "hosts": [
+    "mcp-auth.granola.ai",
+    "mcp.granola.ai"
+  ],
+  "capabilities": [
+    {
+      "id": "granola/mcp",
+      "provider": "granola",
+      "allow": {
+        "hosts": [
+          "mcp.granola.ai"
+        ],
+        "methods": [
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/mcp"
+        ]
+      }
+    }
+  ]
+}
