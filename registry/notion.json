@@ -13,6 +13,30 @@
   "hosts": [
     "api.notion.com"
   ],
+  "credentialAlternatives": [
+    {
+      "id": "mcp-oauth",
+      "vaultSecrets": {
+        "NOTION_OAUTH_JSON": "secret"
+      },
+      "auth": {
+        "o_auth2": {
+          "grant_type": "refresh_token",
+          "token_endpoint": "https://mcp.notion.com/token",
+          "scopes": [
+            "default"
+          ]
+        }
+      },
+      "hosts": [
+        "mcp.notion.com"
+      ],
+      "capabilities": [
+        "notion/mcp"
+      ],
+      "priority": 100
+    }
+  ],
   "capabilities": [
     {
       "id": "notion/blocks",
@@ -61,6 +85,22 @@
         ],
         "pathPrefixes": [
           "/v1/databases"
+        ]
+      }
+    },
+    {
+      "id": "notion/mcp",
+      "provider": "notion",
+      "allow": {
+        "hosts": [
+          "mcp.notion.com"
+        ],
+        "methods": [
+          "DELETE",
+          "POST"
+        ],
+        "pathPrefixes": [
+          "/mcp"
         ]
       }
     },

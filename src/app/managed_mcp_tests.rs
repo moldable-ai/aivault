@@ -1,5 +1,6 @@
 struct ManagedMcpProviderFixture {
     provider: &'static str,
+    credential: &'static str,
     secret_name: &'static str,
     secret_alias: &'static str,
     token_endpoint: &'static str,
@@ -37,7 +38,7 @@ fn assert_runtime_accepts_pinned_managed_mcp_oauth(fixture: ManagedMcpProviderFi
     .to_string();
     let mut store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
     store.upsert_credential(StoredCredential {
-        id: fixture.provider.to_string(),
+        id: fixture.credential.to_string(),
         provider: fixture.provider.to_string(),
         workspace_id: None,
         group_id: None,
@@ -59,14 +60,14 @@ fn assert_runtime_accepts_pinned_managed_mcp_oauth(fixture: ManagedMcpProviderFi
     });
 
     let mut broker =
-        load_runtime_broker_for_context(&vault, &store, Some(fixture.provider), None, None)
+        load_runtime_broker_for_context(&vault, &store, Some(fixture.credential), None, None)
             .unwrap();
     let proxy = broker
         .mint_proxy_token(
             &crate::broker::RequestAuth::Operator("moldable-test".to_string()),
             ProxyTokenMintRequest {
                 capabilities: vec![fixture.capability.to_string()],
-                credential: Some(fixture.provider.to_string()),
+                credential: Some(fixture.credential.to_string()),
                 ttl_ms: 60_000,
                 context: HashMap::new(),
             },
@@ -77,7 +78,7 @@ fn assert_runtime_accepts_pinned_managed_mcp_oauth(fixture: ManagedMcpProviderFi
             &crate::broker::RequestAuth::Proxy(proxy.token),
             ProxyEnvelope {
                 capability: fixture.capability.to_string(),
-                credential: Some(fixture.provider.to_string()),
+                credential: Some(fixture.credential.to_string()),
                 request: ProxyEnvelopeRequest {
                     method: "POST".to_string(),
                     path: "/mcp".to_string(),
@@ -96,6 +97,7 @@ fn assert_runtime_accepts_pinned_managed_mcp_oauth(fixture: ManagedMcpProviderFi
         )
         .unwrap();
 
+    assert_eq!(planned.credential, fixture.credential);
     assert_eq!(planned.host, fixture.upstream_host);
     assert_eq!(planned.path, "/mcp");
     assert!(planned.headers.iter().any(|header| {
@@ -107,6 +109,7 @@ fn assert_runtime_accepts_pinned_managed_mcp_oauth(fixture: ManagedMcpProviderFi
 fn runtime_accepts_pinned_granola_oauth_for_compiled_mcp_provider() {
     assert_runtime_accepts_pinned_managed_mcp_oauth(ManagedMcpProviderFixture {
         provider: "granola",
+        credential: "granola",
         secret_name: "GRANOLA_OAUTH_JSON",
         secret_alias: "granola.oauth.json",
         token_endpoint: "https://mcp-auth.granola.ai/oauth2/token",
@@ -114,5 +117,20 @@ fn runtime_accepts_pinned_granola_oauth_for_compiled_mcp_provider() {
         capability: "granola/mcp",
         upstream_host: "mcp.granola.ai",
         access_token: "granola-access",
+    });
+}
+
+#[test]
+fn runtime_accepts_pinned_notion_oauth_for_compiled_mcp_alternative() {
+    assert_runtime_accepts_pinned_managed_mcp_oauth(ManagedMcpProviderFixture {
+        provider: "notion",
+        credential: "notion:mcp-oauth",
+        secret_name: "NOTION_OAUTH_JSON",
+        secret_alias: "notion.oauth.json",
+        token_endpoint: "https://mcp.notion.com/token",
+        hosts: &["mcp.notion.com"],
+        capability: "notion/mcp",
+        upstream_host: "mcp.notion.com",
+        access_token: "notion-access",
     });
 }

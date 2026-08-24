@@ -43,7 +43,7 @@ Providers currently in the built-in registry include:
 - **Telegram** — bot identity, polling updates, sending/editing/deleting messages, chat actions
 
 ### Productivity
-- **Notion** — pages, databases, blocks, search, users, comments
+- **Notion** — pages, databases, blocks, search, users, comments, plus hosted MCP access through OAuth
 - **Granola** — hosted MCP access to meeting notes and transcripts through OAuth
 - **Airtable** — records, tables, bases
 - **Linear** — GraphQL API

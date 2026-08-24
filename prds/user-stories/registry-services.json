@@ -67,6 +67,19 @@
         "builtin_granola_registry_is_oauth_and_mcp_scoped",
         "runtime_accepts_pinned_granola_oauth_for_compiled_mcp_provider"
       ]
+    },
+    {
+      "id": "ev-regsvc-notion-pinned-oauth-mcp",
+      "kind": "tests",
+      "automated": true,
+      "files": [
+        "src/registry/managed_mcp_tests.rs",
+        "src/app/managed_mcp_tests.rs"
+      ],
+      "tests": [
+        "builtin_notion_registry_keeps_rest_auth_and_scopes_oauth_to_mcp",
+        "runtime_accepts_pinned_notion_oauth_for_compiled_mcp_alternative"
+      ]
     }
   ],
   "sections": [
@@ -386,6 +399,29 @@
             "assertions": [
               { "evidenceId": "ev-regsvc-granola-pinned-oauth-mcp", "test": "builtin_granola_registry_is_oauth_and_mcp_scoped" },
               { "evidenceId": "ev-regsvc-granola-pinned-oauth-mcp", "test": "runtime_accepts_pinned_granola_oauth_for_compiled_mcp_provider" }
+            ]
+          }
+        },
+        {
+          "slug": "regsvc-notion-mcp",
+          "story": "As an operator, I want Notion's hosted MCP server available through a provider-pinned OAuth credential alternative, so agents can work across my Notion workspace without receiving or exposing the bearer token or disrupting REST-token access.",
+          "evidenceLinks": ["ev-regsvc-notion-pinned-oauth-mcp"],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [{ "file": "src/app.rs", "symbol": "load_runtime_broker_for_context" }],
+            "runtime": [
+              { "file": "src/app.rs", "symbol": "derive_registry_credentials_from_vault" },
+              { "file": "src/broker/runtime.rs", "symbol": "Broker::execute_envelope" }
+            ],
+            "guards": [
+              { "file": "src/app.rs", "symbol": "load_runtime_broker_for_context" },
+              { "file": "src/broker/runtime.rs", "symbol": "ensure_path_allowed" }
+            ],
+            "stateEffects": [{ "file": "src/vault/mod.rs", "symbol": "VaultRuntime::pin_secret_to_provider" }],
+            "userSurface": [{ "file": "src/broker.rs", "symbol": "PlannedRequest" }],
+            "assertions": [
+              { "evidenceId": "ev-regsvc-notion-pinned-oauth-mcp", "test": "builtin_notion_registry_keeps_rest_auth_and_scopes_oauth_to_mcp" },
+              { "evidenceId": "ev-regsvc-notion-pinned-oauth-mcp", "test": "runtime_accepts_pinned_notion_oauth_for_compiled_mcp_alternative" }
             ]
           }
         },
