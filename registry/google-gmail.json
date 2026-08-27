@@ -98,6 +98,7 @@
           "GET"
         ],
         "pathPrefixes": [
+          "/gmail/v1/users/me/history",
           "/gmail/v1/users/me/messages",
           "/gmail/v1/users/me/messages/",
           "/gmail/v1/users/me/threads",

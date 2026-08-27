@@ -134,6 +134,25 @@ mod tests {
     }
 
     #[test]
+    fn builtin_google_gmail_registry_allows_read_only_history_cursor() {
+        let registry = builtin_registry().expect("registry should load");
+        let gmail = registry
+            .provider("google-gmail")
+            .expect("google-gmail provider");
+        let messages_read = gmail
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "google-gmail/messages-read")
+            .expect("google-gmail messages-read capability");
+
+        assert_eq!(messages_read.allow.methods, ["GET"].map(str::to_string));
+        assert!(messages_read
+            .allow
+            .path_prefixes
+            .contains(&"/gmail/v1/users/me/history".to_string()));
+    }
+
+    #[test]
     fn builtin_openai_registry_scopes_codex_usage_to_read_only_oauth() {
         let registry = builtin_registry().expect("registry should load");
         let openai = registry.provider("openai").expect("openai provider");

@@ -120,6 +120,24 @@
         "registry_credential_alternatives_prefer_highest_priority_scoped_credential",
         "registry_credential_alternatives_do_not_satisfy_unscoped_capabilities"
       ]
+    },
+    {
+      "id": "ev-reg-google-gmail-history-read-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/registry.rs",
+      "tests": [
+        "builtin_google_gmail_registry_allows_read_only_history_cursor"
+      ]
+    },
+    {
+      "id": "ev-cli-reg-canonical-capability-lookup-test",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app.rs",
+      "tests": [
+        "registry_capability_lookup_ignores_stale_persisted_policy"
+      ]
     }
   ],
   "sections": [
@@ -734,6 +752,52 @@
               {
                 "evidenceId": "ev-broker-reg-host-pattern-matching-test",
                 "test": "story_reg_host_pattern_matching"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "reg-google-gmail-history-read",
+          "story": "As a Gmail synchronization client, I want the built-in Gmail read capability to permit the read-only history endpoint, so event consumers can advance their cursors without receiving write authority.",
+          "evidenceLinks": [
+            "ev-reg-google-gmail-history-read-test",
+            "ev-cli-reg-canonical-capability-lookup-test"
+          ],
+          "trace": {
+            "proofLevel": "runtime",
+            "entrypoints": [
+              {
+                "file": "registry/google-gmail.json",
+                "symbol": "google-gmail/messages-read"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::execute_envelope"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/broker/runtime.rs",
+                "symbol": "Broker::validate_capability"
+              }
+            ],
+            "stateEffects": [],
+            "userSurface": [
+              {
+                "file": "src/broker.rs",
+                "symbol": "PlannedRequest"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-reg-google-gmail-history-read-test",
+                "test": "builtin_google_gmail_registry_allows_read_only_history_cursor"
+              },
+              {
+                "evidenceId": "ev-cli-reg-canonical-capability-lookup-test",
+                "test": "registry_capability_lookup_ignores_stale_persisted_policy"
               }
             ]
           }

@@ -2474,16 +2474,7 @@ fn extract_invoke_body_bytes(envelope_response: &Value) -> Result<Vec<u8>, Strin
 
 fn print_capability_call_args(store: &BrokerStore, id: &str) -> Result<(), String> {
     let id = id.trim();
-    let capability = store
-        .find_capability(id)
-        .cloned()
-        .or_else(|| crate::postgres_capabilities::builtin_capability(id))
-        .or_else(|| crate::plaid_capabilities::builtin_capability(id))
-        .or_else(|| {
-            crate::registry::builtin_registry()
-                .ok()
-                .and_then(|r| r.capability(id))
-        })
+    let capability = lookup_capability_for_invoke(store, id)
         .ok_or_else(|| format!("capability '{}' not found", id))?;
 
     // `describe` is primarily a "how do I call this?" UX. Defaults must only be set when the
@@ -2692,16 +2683,12 @@ fn lookup_capability_for_invoke(store: &BrokerStore, id: &str) -> Option<Capabil
     if id.is_empty() {
         return None;
     }
-    store
-        .find_capability(id)
-        .cloned()
+    crate::registry::builtin_registry()
+        .ok()
+        .and_then(|registry| registry.capability(id))
         .or_else(|| crate::postgres_capabilities::builtin_capability(id))
         .or_else(|| crate::plaid_capabilities::builtin_capability(id))
-        .or_else(|| {
-            crate::registry::builtin_registry()
-                .ok()
-                .and_then(|r| r.capability(id))
-        })
+        .or_else(|| store.find_capability(id).cloned())
 }
 
 fn build_capability_call_envelope(
@@ -5147,7 +5134,9 @@ fn print_json<T: Serialize>(value: &T) -> Result<(), String> {
 mod tests {
     #[cfg(not(debug_assertions))]
     use super::build_http_client_with_dev_overrides;
-    use super::{build_oauth_setup_plan, load_runtime_broker_for_context};
+    use super::{
+        build_oauth_setup_plan, load_runtime_broker_for_context, lookup_capability_for_invoke,
+    };
     use crate::broker::{
         AllowPolicy, AuthStrategy, Broker, Capability, PlannedRequest, ProxyEnvelope,
         ProxyEnvelopeRequest, ProxyTokenMintRequest, RequestBodyMode,
@@ -5168,6 +5157,29 @@ mod tests {
     use std::time::{Duration, Instant};
 
     include!("app/managed_mcp_tests.rs");
+
+    #[test]
+    fn registry_capability_lookup_ignores_stale_persisted_policy() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut store = BrokerStore::open_under(temp.path()).unwrap();
+        store.upsert_capability(Capability {
+            id: "google-gmail/messages-read".to_string(),
+            provider: "google-gmail".to_string(),
+            allow: AllowPolicy {
+                hosts: vec!["gmail.googleapis.com".to_string()],
+                methods: vec!["GET".to_string()],
+                path_prefixes: vec!["/gmail/v1/users/me/messages".to_string()],
+            },
+        });
+
+        let capability =
+            lookup_capability_for_invoke(&store, "google-gmail/messages-read").unwrap();
+
+        assert!(capability
+            .allow
+            .path_prefixes
+            .contains(&"/gmail/v1/users/me/history".to_string()));
+    }
 
     fn invoke_args(id: &str) -> InvokeArgs {
         InvokeArgs {
