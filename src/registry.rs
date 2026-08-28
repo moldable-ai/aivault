@@ -153,6 +153,47 @@ mod tests {
     }
 
     #[test]
+    fn builtin_x_registry_scopes_bookmarks_to_read_only_user_oauth() {
+        let registry = builtin_registry().expect("registry should load");
+        let x_user = registry.provider("x-user").expect("x user provider");
+        let bookmarks = x_user
+            .capabilities
+            .iter()
+            .find(|cap| cap.id == "x/bookmarks")
+            .expect("x bookmarks capability");
+
+        assert_eq!(bookmarks.allow.hosts, ["api.x.com"]);
+        assert_eq!(bookmarks.allow.methods, ["GET"]);
+        assert_eq!(bookmarks.allow.path_prefixes, ["/2/users/me", "/2/users/"]);
+
+        assert_eq!(
+            x_user.vault_secrets.get("X_OAUTH_JSON"),
+            Some(&"secret".to_string())
+        );
+        assert!(matches!(
+            &x_user.auth,
+            AuthStrategy::OAuth2 {
+                grant_type,
+                token_endpoint,
+                scopes,
+            } if grant_type == "refresh_token"
+                && token_endpoint == "https://api.x.com/2/oauth2/token"
+                && scopes.contains(&"bookmark.read".to_string())
+                && scopes.contains(&"offline.access".to_string())
+        ));
+
+        let x = registry.provider("x").expect("legacy x provider");
+        assert_eq!(
+            x.vault_secrets.get("X_BEARER_TOKEN"),
+            Some(&"secret".to_string())
+        );
+        assert!(!x
+            .capabilities
+            .iter()
+            .any(|capability| capability.id == "x/bookmarks"));
+    }
+
+    #[test]
     fn builtin_openai_registry_scopes_codex_usage_to_read_only_oauth() {
         let registry = builtin_registry().expect("registry should load");
         let openai = registry.provider("openai").expect("openai provider");

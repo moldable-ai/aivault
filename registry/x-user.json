@@ -1,0 +1,40 @@
+{
+  "$schema": "./schemas/registry-provider.schema.json",
+  "provider": "x-user",
+  "vaultSecrets": {
+    "X_OAUTH_JSON": "secret"
+  },
+  "auth": {
+    "o_auth2": {
+      "grant_type": "refresh_token",
+      "token_endpoint": "https://api.x.com/2/oauth2/token",
+      "scopes": [
+        "bookmark.read",
+        "offline.access",
+        "tweet.read",
+        "users.read"
+      ]
+    }
+  },
+  "hosts": [
+    "api.x.com"
+  ],
+  "capabilities": [
+    {
+      "id": "x/bookmarks",
+      "provider": "x-user",
+      "allow": {
+        "hosts": [
+          "api.x.com"
+        ],
+        "methods": [
+          "GET"
+        ],
+        "pathPrefixes": [
+          "/2/users/me",
+          "/2/users/"
+        ]
+      }
+    }
+  ]
+}

@@ -24,6 +24,15 @@
       ]
     },
     {
+      "id": "ev-regsvc-x-bookmarks-oauth",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/registry.rs",
+      "tests": [
+        "builtin_x_registry_scopes_bookmarks_to_read_only_user_oauth"
+      ]
+    },
+    {
       "id": "ev-regsvc-codex-realtime-call-planning",
       "kind": "tests",
       "automated": true,
@@ -751,8 +760,8 @@
       "stories": [
         {
           "slug": "regsvc-x",
-          "story": "As an operator, I want X capabilities (tweets, users, lists, spaces, DMs) available in the built-in registry with app-only Bearer auth, so agents can access X API v2 with zero policy authoring.",
-          "evidenceLinks": ["ev-regsvc-builtin-registry-loads"],
+          "story": "As an operator, I want X capabilities (tweets, users, lists, spaces, DMs, and read-only bookmarks) available in the built-in registry, with bookmark access pinned to refreshable user OAuth, so agents can access X API v2 without receiving tokens or gaining bookmark-write access.",
+          "evidenceLinks": ["ev-regsvc-builtin-registry-loads", "ev-regsvc-x-bookmarks-oauth"],
           "trace": {
             "proofLevel": "runtime",
             "entrypoints": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
@@ -760,7 +769,10 @@
             "guards": [{ "file": "src/registry.rs", "symbol": "Registry::from_templates" }],
             "stateEffects": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
             "userSurface": [{ "file": "src/registry.rs", "symbol": "builtin_registry" }],
-            "assertions": [{ "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" }]
+            "assertions": [
+              { "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" },
+              { "evidenceId": "ev-regsvc-x-bookmarks-oauth", "test": "builtin_x_registry_scopes_bookmarks_to_read_only_user_oauth" }
+            ]
           }
         },
         {
@@ -863,7 +875,7 @@
         "regsvc-github", "regsvc-stripe", "regsvc-resend",
         "regsvc-sendgrid", "regsvc-postmark", "regsvc-mailgun",
         "regsvc-shopify", "regsvc-square", "regsvc-quickbooks", "regsvc-xero",
-        "regsvc-x", "regsvc-youtube", "regsvc-spotify", "regsvc-reddit",
+        "regsvc-youtube", "regsvc-spotify", "regsvc-reddit",
         "regsvc-mistral", "regsvc-groq", "regsvc-cohere", "regsvc-perplexity",
         "regsvc-fireworks", "regsvc-together", "regsvc-huggingface",
         "regsvc-stability", "regsvc-assemblyai"
