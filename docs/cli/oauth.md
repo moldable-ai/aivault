@@ -82,4 +82,28 @@ aivault secrets create --name GOOGLE_GMAIL_OAUTH \
 
 `--value-file` is preferred for token payloads because the secret value does not appear in the process argument list.
 
+## ChatGPT account refresh and recovery
+
+For `CODEX_OAUTH_JSON`, aivault refreshes only the account selected for the
+requested capability. An unusable ChatGPT account does not prevent another
+account, API key, or unrelated provider from making requests. Listing credentials
+does not refresh tokens; a listed account may still need to reconnect.
+
+The native access lease and broker share a per-account process lock, reread the
+stored token after acquiring it, and persist rotated tokens before returning.
+Secret-record updates also use a process lock so usage timestamps cannot overwrite
+new credentials. A reconnect completed during refresh takes precedence over the
+older refresh result.
+
+An upstream API 401 triggers one refresh and one retry, including streamed calls.
+Permanent token failures (`refresh_token_expired`, `refresh_token_reused`,
+`refresh_token_invalidated`, `invalid_refresh_token`, `invalid_grant`, or an
+unclassified token-endpoint 401) report a safe code and ask you to reconnect that
+account. The failure is cached in its encrypted credential until reconnection
+replaces it. Temporary failures remain retryable. Raw token error bodies are
+never included in these diagnostics.
+
+In Moldable, reconnect the affected account from the ChatGPT provider settings.
+Reconnecting replaces its tokens and clears the cached refresh failure.
+
 Next: [Security](/security)

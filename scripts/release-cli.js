@@ -151,7 +151,8 @@ if (dryRun) {
 
 updateCargoVersion(next);
 
-run("cargo generate-lockfile --manifest-path Cargo.toml");
+// A release bump must keep the dependency versions that were verified locally.
+run("cargo update --workspace --manifest-path Cargo.toml");
 
 run("git add Cargo.toml Cargo.lock");
 run(`git commit -m "release: cli v${next}"`);
@@ -163,4 +164,3 @@ if (!noPush) {
 }
 
 console.log(`\nDone. Tagged ${tag}.\n`);
-

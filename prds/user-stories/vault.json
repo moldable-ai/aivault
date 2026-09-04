@@ -226,7 +226,7 @@
       "automated": true,
       "file": "src/app.rs",
       "tests": [
-        "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative"
+        "runtime_refreshes_only_selected_codex_oauth_credential"
       ]
     },
     {
@@ -246,6 +246,45 @@
       "file": "src/broker/tests.rs",
       "tests": [
         "story_vault_per_tenant_host_binding_with_registry"
+      ]
+    },
+    {
+      "id": "ev-vault-codex-account-isolation",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/app/codex-oauth-tests.rs",
+      "tests": [
+        "runtime_codex_failure_isolated_from_other_credentials",
+        "codex_permanent_refresh_failure_is_redacted_and_cached_until_reconnect",
+        "codex_refresh_cannot_overwrite_a_concurrent_reconnect",
+        "codex_transient_refresh_can_retry_and_preserves_metadata"
+      ]
+    },
+    {
+      "id": "ev-vault-codex-process-rotation",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/codex-oauth.rs",
+      "tests": [
+        "codex_refresh_is_serialized_across_processes_and_survives_concurrent_reads"
+      ]
+    },
+    {
+      "id": "ev-vault-codex-request-retry",
+      "kind": "tests",
+      "automated": true,
+      "file": "tests/support/codex-oauth-tls.rs",
+      "tests": [
+        "e2e_codex_401_refresh_retries_buffered_and_streaming_without_other_accounts"
+      ]
+    },
+    {
+      "id": "ev-vault-codex-refresh-errors",
+      "kind": "tests",
+      "automated": true,
+      "file": "src/codex-oauth-errors.rs",
+      "tests": [
+        "codex_refresh_classifies_provider_codes_without_exposing_payloads"
       ]
     }
   ],
@@ -578,7 +617,7 @@
               },
               {
                 "evidenceId": "ev-vault-codex-oauth-registry-alternative-refresh-test",
-                "test": "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative"
+                "test": "runtime_refreshes_only_selected_codex_oauth_credential"
               }
             ]
           }
@@ -1364,6 +1403,111 @@
               {
                 "evidenceId": "ev-vault-secret-listing-ignores-staging-files-test",
                 "test": "list_secrets_ignores_interrupted_atomic_write_staging_files"
+              }
+            ]
+          }
+        },
+        {
+          "slug": "vault-codex-account-refresh-isolation",
+          "story": "As an operator, I want only the selected ChatGPT account refreshed, with serialized token rotation and account-specific reconnect errors, so an expired or revoked account cannot break other accounts or providers.",
+          "evidenceLinks": [
+            "ev-vault-codex-account-isolation",
+            "ev-vault-codex-process-rotation",
+            "ev-vault-codex-request-retry",
+            "ev-vault-codex-refresh-errors"
+          ],
+          "trace": {
+            "proofLevel": "e2e",
+            "entrypoints": [
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "run_capability_envelope_streaming"
+              },
+              {
+                "file": "src/codex_oauth.rs",
+                "symbol": "prepare_codex_oauth_access"
+              }
+            ],
+            "runtime": [
+              {
+                "file": "src/app.rs",
+                "symbol": "plan_capability_envelope"
+              },
+              {
+                "file": "src/app/codex-oauth.rs",
+                "symbol": "prepare_credential"
+              },
+              {
+                "file": "src/codex_oauth.rs",
+                "symbol": "prepare_codex_oauth_value"
+              }
+            ],
+            "guards": [
+              {
+                "file": "src/app.rs",
+                "symbol": "credential_matches_context"
+              },
+              {
+                "file": "src/file-lock.rs",
+                "symbol": "lock"
+              },
+              {
+                "file": "src/codex-oauth-errors.rs",
+                "symbol": "check_refresh_failure"
+              }
+            ],
+            "stateEffects": [
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::rotate_secret_value_if_version"
+              },
+              {
+                "file": "src/vault/mod.rs",
+                "symbol": "VaultRuntime::resolve_secret_ref_snapshot"
+              }
+            ],
+            "userSurface": [
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request"
+              },
+              {
+                "file": "src/app.rs",
+                "symbol": "execute_planned_http_request_streaming"
+              }
+            ],
+            "assertions": [
+              {
+                "evidenceId": "ev-vault-codex-account-isolation",
+                "test": "runtime_codex_failure_isolated_from_other_credentials"
+              },
+              {
+                "evidenceId": "ev-vault-codex-account-isolation",
+                "test": "codex_permanent_refresh_failure_is_redacted_and_cached_until_reconnect"
+              },
+              {
+                "evidenceId": "ev-vault-codex-account-isolation",
+                "test": "codex_refresh_cannot_overwrite_a_concurrent_reconnect"
+              },
+              {
+                "evidenceId": "ev-vault-codex-account-isolation",
+                "test": "codex_transient_refresh_can_retry_and_preserves_metadata"
+              },
+              {
+                "evidenceId": "ev-vault-codex-process-rotation",
+                "test": "codex_refresh_is_serialized_across_processes_and_survives_concurrent_reads"
+              },
+              {
+                "evidenceId": "ev-vault-codex-request-retry",
+                "test": "e2e_codex_401_refresh_retries_buffered_and_streaming_without_other_accounts"
+              },
+              {
+                "evidenceId": "ev-vault-codex-refresh-errors",
+                "test": "codex_refresh_classifies_provider_codes_without_exposing_payloads"
               }
             ]
           }

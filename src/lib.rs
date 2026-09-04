@@ -6,6 +6,8 @@ pub mod cli;
 pub mod codex_oauth;
 pub mod daemon;
 pub mod display;
+#[path = "file-lock.rs"]
+mod file_lock;
 pub mod log_retention;
 pub mod markdown;
 pub mod migrations;

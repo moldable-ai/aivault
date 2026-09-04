@@ -27,7 +27,6 @@ use crate::cli::{
     InvokeArgs, OauthCommand, ProviderCommand, ProviderKind, ScopeKind, SecretsCommand,
     SetupCommand,
 };
-use crate::codex_oauth::codex_oauth_secret_is_current;
 use crate::daemon::{self, DaemonRequest};
 use crate::markdown::{to_markdown, ToMarkdownOptions};
 use crate::vault::{
@@ -36,6 +35,9 @@ use crate::vault::{
 };
 
 const OAUTH2_REFRESH_SKEW_MS: i64 = 5 * 60 * 1000;
+
+#[path = "app/codex-oauth.rs"]
+mod codex_oauth_runtime;
 
 #[derive(Clone, Copy)]
 pub(crate) struct CapabilityExecutionOptions<'a> {
@@ -1261,14 +1263,9 @@ fn registry_secret_ref_for_scope(
     Ok(secret_ref)
 }
 
-fn is_codex_oauth_alternative(alternative: &crate::broker::ProviderCredentialTemplate) -> bool {
-    alternative.vault_secrets.contains_key("CODEX_OAUTH_JSON")
-}
-
 fn derive_registry_credentials_from_vault(
     vault: &VaultRuntime,
     store: Option<&BrokerStore>,
-    refresh_expired_codex_oauth: bool,
 ) -> Result<Vec<StoredCredential>, String> {
     let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
     let mut providers = registry.providers();
@@ -1346,12 +1343,6 @@ fn derive_registry_credentials_from_vault(
                 if !complete {
                     continue;
                 }
-                if is_codex_oauth_alternative(alternative)
-                    && !codex_oauth_secret_is_current(vault, by_name, refresh_expired_codex_oauth)?
-                {
-                    continue;
-                }
-
                 let secret_ref = registry_secret_ref_for_scope(
                     vault,
                     &template.provider,
@@ -1670,7 +1661,7 @@ fn run_credential(vault: &VaultRuntime, command: CredentialCommand) -> Result<()
             for credential in store.credentials().iter().cloned() {
                 merged.insert(credential.id.clone(), credential);
             }
-            for credential in derive_registry_credentials_from_vault(vault, Some(&store), false)? {
+            for credential in derive_registry_credentials_from_vault(vault, Some(&store))? {
                 merged.insert(credential.id.clone(), credential);
             }
             let credentials: Vec<StoredCredential> = merged.into_values().collect();
@@ -1829,8 +1820,7 @@ fn run_capability(vault: &VaultRuntime, command: CapabilityCommand) -> Result<()
         CapabilityCommand::List { verbose } => {
             let registry = crate::registry::builtin_registry().map_err(|e| e.to_string())?;
             let registry_providers = registry.providers();
-            let derived_credentials =
-                derive_registry_credentials_from_vault(vault, Some(&store), false)?;
+            let derived_credentials = derive_registry_credentials_from_vault(vault, Some(&store))?;
             let credentialed_providers: HashSet<String> = store
                 .credentials()
                 .iter()
@@ -3078,7 +3068,7 @@ pub(crate) fn run_capability_envelope(
         && force_refresh_oauth2_credential_for_retry(
             vault,
             store,
-            &planned.credential,
+            &planned,
             workspace_id,
             group_id,
         )?
@@ -3136,7 +3126,7 @@ where
         && force_refresh_oauth2_credential_for_retry(
             vault,
             store,
-            &planned.credential,
+            &planned,
             execution.workspace_id,
             execution.group_id,
         )?
@@ -3221,11 +3211,37 @@ fn plan_capability_envelope(
                 group_id,
             )?;
             broker
-                .execute_envelope(&RequestAuth::Proxy(token.token), envelope, client_ip)
+                .execute_envelope(
+                    &RequestAuth::Proxy(token.token.clone()),
+                    envelope.clone(),
+                    client_ip,
+                )
                 .map_err(|e| e.to_string())?
         }
         Err(err) => return Err(err.to_string()),
     };
+    // Validate the whole request before a token refresh can consume rotating state.
+    let credential = broker
+        .resolve_credential_for_capability(
+            &envelope.capability,
+            envelope.credential.as_deref(),
+            Some(&planned.credential),
+        )
+        .map_err(|error| error.to_string())?;
+    if let Some(value) = codex_oauth_runtime::prepare_credential(vault, &credential.id, None)? {
+        let material = secret_material_from_bytes(
+            &credential.auth,
+            serde_json::to_vec(&value).map_err(|error| error.to_string())?,
+        )?;
+        broker
+            .upsert_secret_material(&credential.id, material)
+            .map_err(|error| error.to_string())?;
+        return broker
+            .execute_envelope(&RequestAuth::Proxy(token.token), envelope, client_ip)
+            .map(|planned| (broker, planned))
+            .map_err(|error| error.to_string());
+    }
+
     Ok((broker, planned))
 }
 
@@ -3277,10 +3293,23 @@ fn refresh_oauth2_for_envelope(
 fn force_refresh_oauth2_credential_for_retry(
     vault: &VaultRuntime,
     store: &BrokerStore,
-    credential_id: &str,
+    planned: &PlannedRequest,
     workspace_id: Option<&str>,
     group_id: Option<&str>,
 ) -> Result<bool, String> {
+    let credential_id = planned.credential.as_str();
+    let rejected_access = planned
+        .headers
+        .iter()
+        .find(|header| header.name.eq_ignore_ascii_case("authorization"))
+        .and_then(|header| header.value.strip_prefix("Bearer "));
+    if let Some(rejected_access) = rejected_access {
+        if codex_oauth_runtime::prepare_credential(vault, credential_id, Some(rejected_access))?
+            .is_some()
+        {
+            return Ok(true);
+        }
+    }
     let Some(stored) = store.credentials().iter().find(|c| c.id == credential_id) else {
         return Ok(false);
     };
@@ -4046,8 +4075,7 @@ fn load_runtime_broker_for_context(
     let registry_lookup = registry.clone();
     let mut broker = Broker::new(cfg, Some(registry));
     let operator = RequestAuth::Operator("operator-cli".to_string());
-    let derived_registry_credentials =
-        derive_registry_credentials_from_vault(vault, Some(store), true)?;
+    let derived_registry_credentials = derive_registry_credentials_from_vault(vault, Some(store))?;
     let derived_registry_credential_ids: HashSet<String> = derived_registry_credentials
         .iter()
         .map(|credential| credential.id.clone())
@@ -5157,6 +5185,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     include!("app/managed_mcp_tests.rs");
+    include!("app/codex-oauth-tests.rs");
 
     #[test]
     fn registry_capability_lookup_ignores_stale_persisted_policy() {
@@ -6024,7 +6053,7 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    fn runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative() {
+    fn runtime_refreshes_only_selected_codex_oauth_credential() {
         let _lock = ENV_LOCK.lock().unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let endpoint = format!("http://{}/oauth/token", listener.local_addr().unwrap());
@@ -6070,6 +6099,29 @@ mod tests {
         .unwrap();
 
         let store = BrokerStore::open_under(vault.paths().root_dir()).unwrap();
+        super::plan_capability_envelope(
+            &vault,
+            &store,
+            ProxyEnvelope {
+                capability: "openai/codex-usage".to_string(),
+                credential: Some("openai:codex-oauth-usage".to_string()),
+                request: ProxyEnvelopeRequest {
+                    method: "GET".to_string(),
+                    path: "/wham/usage".to_string(),
+                    headers: Vec::new(),
+                    body: None,
+                    multipart: None,
+                    multipart_files: Vec::new(),
+                    body_file_path: None,
+                    url: None,
+                },
+            },
+            "127.0.0.1".parse().unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
+        // Reload the already refreshed material for sibling capability assertions.
         let mut broker = load_runtime_broker_for_context(&vault, &store, None, None, None).unwrap();
         server.join().unwrap();
         assert!(broker

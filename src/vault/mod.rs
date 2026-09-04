@@ -745,6 +745,7 @@ impl VaultRuntime {
             .ok_or(VaultError::NotEnabled)?;
         let kek = self.get_kek(&cfg)?;
 
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         match rec.pinned_provider.as_deref() {
             Some(existing) if existing == provider => {
@@ -808,9 +809,12 @@ impl VaultRuntime {
                 continue;
             }
             let raw = std::fs::read_to_string(&path).unwrap_or_default();
-            let Ok(mut rec) = serde_json::from_str::<SecretRecord>(&raw) else {
+            let Ok(rec) = serde_json::from_str::<SecretRecord>(&raw) else {
                 continue;
             };
+            let _record_lock =
+                crate::file_lock::lock(self.paths.root_dir(), "secret", &rec.secret_id)?;
+            let mut rec = self.read_secret(&rec.secret_id)?;
             if rec.revoked_at_ms.is_some() || rec.ciphertext.is_none() {
                 continue;
             }
@@ -867,6 +871,7 @@ impl VaultRuntime {
             .unwrap()
             .clone()
             .ok_or(VaultError::NotEnabled)?;
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         if rec.system_managed == system_managed {
             return Ok(SecretMeta::from(&rec));
@@ -923,6 +928,7 @@ impl VaultRuntime {
             .unwrap()
             .clone()
             .ok_or(VaultError::NotEnabled)?;
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         if let Some(name) = name {
             let n = name.trim().to_string();
@@ -951,6 +957,16 @@ impl VaultRuntime {
         secret_id: &str,
         value: &[u8],
     ) -> Result<SecretMeta, VaultError> {
+        self.rotate_secret_value_if_version(secret_id, value, None)?
+            .ok_or_else(|| VaultError::Other("secret changed during rotation".to_string()))
+    }
+
+    pub(crate) fn rotate_secret_value_if_version(
+        &self,
+        secret_id: &str,
+        value: &[u8],
+        expected_version: Option<u64>,
+    ) -> Result<Option<SecretMeta>, VaultError> {
         let cfg = self
             .cfg
             .lock()
@@ -959,9 +975,13 @@ impl VaultRuntime {
             .ok_or(VaultError::NotEnabled)?;
         let kek = self.get_kek(&cfg)?;
 
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         if rec.revoked_at_ms.is_some() {
             return Err(VaultError::Other("secret revoked".to_string()));
+        }
+        if expected_version.is_some_and(|version| version != rec.value_version) {
+            return Ok(None);
         }
         let dek = random_key_32();
         let kek_id = cfg.kek_id.clone();
@@ -983,7 +1003,7 @@ impl VaultRuntime {
         rec.updated_at_ms = chrono::Utc::now().timestamp_millis();
         self.write_secret(&rec)?;
         self.audit_secret_event("secret.rotate", Some(&rec), None);
-        Ok(SecretMeta::from(&rec))
+        Ok(Some(SecretMeta::from(&rec)))
     }
 
     pub fn revoke_secret(&self, secret_id: &str) -> Result<SecretMeta, VaultError> {
@@ -993,6 +1013,7 @@ impl VaultRuntime {
             .unwrap()
             .clone()
             .ok_or(VaultError::NotEnabled)?;
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         rec.revoked_at_ms = Some(chrono::Utc::now().timestamp_millis());
         rec.ciphertext = None;
@@ -1014,6 +1035,7 @@ impl VaultRuntime {
             .unwrap()
             .clone()
             .ok_or(VaultError::NotEnabled)?;
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         let ws = workspace_id.trim();
         let group_id = group_id.trim();
@@ -1054,6 +1076,7 @@ impl VaultRuntime {
             .unwrap()
             .clone()
             .ok_or(VaultError::NotEnabled)?;
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", secret_id)?;
         let mut rec = self.read_secret(secret_id)?;
         rec.attached_groups
             .retain(|g| !(g.workspace_id == workspace_id.trim() && g.group_id == group_id.trim()));
@@ -1081,6 +1104,16 @@ impl VaultRuntime {
         capability: Option<&str>,
         consumer: Option<&str>,
     ) -> Result<Vec<u8>, VaultError> {
+        self.resolve_secret_ref_snapshot(secret_ref, capability, consumer)
+            .map(|(_, value)| value)
+    }
+
+    pub(crate) fn resolve_secret_ref_snapshot(
+        &self,
+        secret_ref: &str,
+        capability: Option<&str>,
+        consumer: Option<&str>,
+    ) -> Result<(SecretMeta, Vec<u8>), VaultError> {
         let cfg = self
             .cfg
             .lock()
@@ -1088,6 +1121,7 @@ impl VaultRuntime {
             .clone()
             .ok_or(VaultError::NotEnabled)?;
         let sr = SecretRef::parse(secret_ref).map_err(VaultError::Other)?;
+        let _record_lock = crate::file_lock::lock(self.paths.root_dir(), "secret", &sr.secret_id)?;
         let mut rec = self.read_secret(&sr.secret_id)?;
         if rec.revoked_at_ms.is_some() || rec.ciphertext.is_none() {
             return Err(VaultError::Other("secret revoked".to_string()));
@@ -1108,7 +1142,7 @@ impl VaultRuntime {
             consumer: consumer.map(|s| s.to_string()),
             note: None,
         });
-        Ok(value)
+        Ok((SecretMeta::from(&rec), value))
     }
 
     /// Produce an HMAC-SHA256 signature without returning the secret to the
@@ -1428,9 +1462,12 @@ impl VaultRuntime {
                 continue;
             }
             let raw = std::fs::read_to_string(&path).unwrap_or_default();
-            let Ok(mut rec) = serde_json::from_str::<SecretRecord>(&raw) else {
+            let Ok(rec) = serde_json::from_str::<SecretRecord>(&raw) else {
                 continue;
             };
+            let _record_lock =
+                crate::file_lock::lock(self.paths.root_dir(), "secret", &rec.secret_id)?;
+            let mut rec = self.read_secret(&rec.secret_id)?;
             if rec.revoked_at_ms.is_some() {
                 continue;
             }

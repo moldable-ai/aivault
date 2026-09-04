@@ -38,7 +38,7 @@
       "automated": true,
       "file": "src/app.rs",
       "tests": [
-        "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative"
+        "runtime_refreshes_only_selected_codex_oauth_credential"
       ]
     },
     {
@@ -118,7 +118,7 @@
               { "evidenceId": "ev-regsvc-e2e-builtin-registry-activation", "test": "e2e_builtin_registry_activates_initial_transcription_capabilities" },
               { "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_registry_contains_initial_transcription_providers" },
               { "evidenceId": "ev-regsvc-builtin-registry-loads", "test": "builtin_openai_registry_scopes_gpt_live_to_native_oauth_call_creation" },
-              { "evidenceId": "ev-regsvc-codex-realtime-call-planning", "test": "runtime_refreshes_expired_codex_oauth_before_deriving_registry_alternative" }
+              { "evidenceId": "ev-regsvc-codex-realtime-call-planning", "test": "runtime_refreshes_only_selected_codex_oauth_credential" }
             ]
           }
         },

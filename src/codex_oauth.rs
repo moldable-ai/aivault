@@ -2,7 +2,6 @@ use crate::vault::{SecretMeta, SecretRef, VaultRuntime};
 use reqwest::blocking::Client;
 use reqwest::redirect::Policy as RedirectPolicy;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::io::Read;
 use std::time::Duration;
 
@@ -30,55 +29,69 @@ pub fn prepare_codex_oauth_access(
     vault: &VaultRuntime,
     secret_ref: &str,
 ) -> Result<CodexOAuthAccess, String> {
-    let parsed = SecretRef::parse(secret_ref)?;
-    let meta = vault
-        .get_secret_meta(&parsed.secret_id)
-        .map_err(|error| error.to_string())?;
-    if meta.name != "CODEX_OAUTH_JSON" || meta.revoked_at_ms.is_some() {
-        return Err("secret ref is not an active CODEX_OAUTH_JSON credential".to_string());
-    }
-    let mut value = read_codex_oauth_secret_value(vault, &meta)?;
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    if codex_oauth_expires_ms(&value) <= now_ms + CODEX_OAUTH_REFRESH_SKEW_MS {
-        value = refresh_codex_oauth_secret(vault, &meta, &value)?;
-    }
-
+    let value = prepare_codex_oauth_value(vault, secret_ref, None)?;
     let access_token = value_string_field(&value, &["access_token", "accessToken"])
         .ok_or_else(|| "CODEX_OAUTH_JSON is missing access_token".to_string())?;
     let account_id = value_string_field(&value, &["account_id", "accountId"])
         .ok_or_else(|| "CODEX_OAUTH_JSON is missing account_id".to_string())?;
-    let expires_at_ms = codex_oauth_expires_ms(&value);
-    if expires_at_ms <= now_ms {
-        return Err("CODEX_OAUTH_JSON access token is expired".to_string());
-    }
-
     Ok(CodexOAuthAccess {
         access_token,
         account_id,
         email: value_string_field(&value, &["email"]),
-        expires_at_ms,
+        expires_at_ms: codex_oauth_expires_ms(&value),
     })
 }
 
-pub(crate) fn codex_oauth_secret_is_current(
+pub(crate) fn prepare_codex_oauth_value(
     vault: &VaultRuntime,
-    by_name: &HashMap<String, SecretMeta>,
-    refresh_expired: bool,
-) -> Result<bool, String> {
-    let Some(meta) = by_name.get("CODEX_OAUTH_JSON") else {
-        return Ok(false);
-    };
-    let value = read_codex_oauth_secret_value(vault, meta)?;
+    secret_ref: &str,
+    rejected_access_token: Option<&str>,
+) -> Result<Value, String> {
+    let parsed = SecretRef::parse(secret_ref)?;
+    // The native host, CLI, and multiple daemons share rotating credentials.
+    // Reread only after locking, and retain the lock through durable writeback.
+    let _refresh_lock =
+        crate::file_lock::lock(vault.paths().root_dir(), "codex-refresh", &parsed.secret_id)
+            .map_err(|error| error.to_string())?;
+    let (meta, value) = read_codex_oauth_secret_value(vault, secret_ref)?;
+    check_refresh_failure(&value)?;
     let now_ms = chrono::Utc::now().timestamp_millis();
-    if codex_oauth_expires_ms(&value) > now_ms + CODEX_OAUTH_REFRESH_SKEW_MS {
-        return Ok(true);
-    }
-    if !refresh_expired {
-        return Ok(false);
+    let current_access = value_string_field(&value, &["access_token", "accessToken"]);
+    let rejected_current =
+        rejected_access_token.is_some() && rejected_access_token == current_access.as_deref();
+    if !rejected_current && codex_oauth_expires_ms(&value) > now_ms + CODEX_OAUTH_REFRESH_SKEW_MS {
+        return Ok(value);
     }
 
-    let refreshed = refresh_codex_oauth_secret(vault, meta, &value)?;
-    Ok(codex_oauth_expires_ms(&refreshed) > now_ms)
+    let (updated, failure) = match refresh_codex_oauth_secret(&value) {
+        Ok(updated) => (updated, None),
+        Err(RefreshError::Permanent(failure)) => {
+            let mut updated = value.clone();
+            updated["refresh_error"] = serde_json::to_value(&failure).map_err(|e| e.to_string())?;
+            (updated, Some(failure))
+        }
+        Err(RefreshError::Transient(error)) => return Err(error),
+    };
+    let bytes = serde_json::to_vec(&updated).map_err(|error| error.to_string())?;
+    if vault
+        .rotate_secret_value_if_version(&meta.secret_id, &bytes, Some(meta.value_version))
+        .map_err(|error| error.to_string())?
+        .is_none()
+    {
+        // A reconnect may complete while the upstream request is in flight.
+        // Neither its new token nor its healthy state may be overwritten.
+        let (_, current) = read_codex_oauth_secret_value(vault, secret_ref)?;
+        check_refresh_failure(&current)?;
+        return if codex_oauth_expires_ms(&current) > chrono::Utc::now().timestamp_millis() {
+            Ok(current)
+        } else {
+            Err("ChatGPT credentials changed during refresh; retry the request".to_string())
+        };
+    }
+    if let Some(failure) = failure {
+        return Err(failure.to_string());
+    }
+    Ok(updated)
 }
 
 fn value_string_field(value: &Value, keys: &[&str]) -> Option<String> {
@@ -102,26 +115,26 @@ fn codex_oauth_expires_ms(value: &Value) -> i64 {
         .unwrap_or(i64::MIN)
 }
 
-fn read_codex_oauth_secret_value(vault: &VaultRuntime, meta: &SecretMeta) -> Result<Value, String> {
-    let secret_ref = SecretRef {
-        secret_id: meta.secret_id.clone(),
-    }
-    .to_string();
-    let raw = vault
-        .resolve_secret_ref(
-            &secret_ref,
+fn read_codex_oauth_secret_value(
+    vault: &VaultRuntime,
+    secret_ref: &str,
+) -> Result<(SecretMeta, Value), String> {
+    let (meta, raw) = vault
+        .resolve_secret_ref_snapshot(
+            secret_ref,
             Some("secret.codex_oauth.native_lease"),
             Some("moldable-desktop"),
         )
         .map_err(|error| error.to_string())?;
-    serde_json::from_slice(&raw).map_err(|_| "CODEX_OAUTH_JSON must be JSON".to_string())
+    if meta.name != "CODEX_OAUTH_JSON" || meta.revoked_at_ms.is_some() {
+        return Err("secret ref is not an active CODEX_OAUTH_JSON credential".to_string());
+    }
+    let value =
+        serde_json::from_slice(&raw).map_err(|_| "CODEX_OAUTH_JSON must be JSON".to_string())?;
+    Ok((meta, value))
 }
 
-fn refresh_codex_oauth_secret(
-    vault: &VaultRuntime,
-    meta: &SecretMeta,
-    value: &Value,
-) -> Result<Value, String> {
+fn refresh_codex_oauth_secret(value: &Value) -> Result<Value, RefreshError> {
     let refresh_token = value_string_field(value, &["refresh_token", "refreshToken"])
         .ok_or_else(|| "CODEX_OAUTH_JSON is expired and missing refresh_token".to_string())?;
     let token_url = reqwest::Url::parse(&codex_oauth_token_endpoint())
@@ -135,7 +148,9 @@ fn refresh_codex_oauth_secret(
             && is_loopback
             && dev_flag_true("AIVAULT_DEV_ALLOW_HTTP_LOCAL"))
     {
-        return Err("Codex OAuth token endpoint must use https".to_string());
+        return Err("Codex OAuth token endpoint must use https"
+            .to_string()
+            .into());
     }
 
     let client = Client::builder()
@@ -158,7 +173,7 @@ fn refresh_codex_oauth_secret(
         .content_length()
         .is_some_and(|length| length > CODEX_OAUTH_MAX_RESPONSE_BYTES as u64)
     {
-        return Err("Codex OAuth token response is too large".to_string());
+        return Err("Codex OAuth token response is too large".to_string().into());
     }
     let mut body_bytes = Vec::new();
     response
@@ -167,13 +182,13 @@ fn refresh_codex_oauth_secret(
         .read_to_end(&mut body_bytes)
         .map_err(|error| error.to_string())?;
     if body_bytes.len() > CODEX_OAUTH_MAX_RESPONSE_BYTES {
-        return Err("Codex OAuth token response is too large".to_string());
+        return Err("Codex OAuth token response is too large".to_string().into());
     }
     if !status.is_success() {
-        return Err(format!(
-            "Codex OAuth token endpoint returned {}",
-            status.as_u16()
-        ));
+        if let Some(failure) = RefreshFailure::from_response(status.as_u16(), &body_bytes) {
+            return Err(RefreshError::Permanent(failure));
+        }
+        return Err(format!("Codex OAuth token endpoint returned {}", status.as_u16()).into());
     }
 
     let json: Value = serde_json::from_slice(&body_bytes)
@@ -186,9 +201,20 @@ fn refresh_codex_oauth_secret(
         .filter(|seconds| *seconds > 0)
         .unwrap_or(CODEX_DEFAULT_EXPIRES_IN_SECONDS);
     let next_refresh_token = value_string_field(&json, &["refresh_token"]).unwrap_or(refresh_token);
-    let expires_at = chrono::Utc::now().timestamp_millis() + expires_in * 1000;
+    let expires_at = chrono::Utc::now()
+        .timestamp_millis()
+        .saturating_add(expires_in.saturating_mul(1000));
 
-    let mut updated = serde_json::Map::new();
+    let mut updated = value.as_object().cloned().unwrap_or_default();
+    // Canonical expiry wins over legacy aliases after refresh.
+    for key in [
+        "expires",
+        "expiresMs",
+        "accessTokenExpiresAtMs",
+        "refresh_error",
+    ] {
+        updated.remove(key);
+    }
     updated.insert("access_token".to_string(), Value::String(access_token));
     updated.insert(
         "refresh_token".to_string(),
@@ -209,13 +235,12 @@ fn refresh_codex_oauth_secret(
         "updated_at".to_string(),
         Value::String(chrono::Utc::now().to_rfc3339()),
     );
-    let updated = Value::Object(updated);
-    let updated_bytes = serde_json::to_vec_pretty(&updated).map_err(|error| error.to_string())?;
-    vault
-        .rotate_secret_value(&meta.secret_id, &updated_bytes)
-        .map_err(|error| error.to_string())?;
-    Ok(updated)
+    Ok(Value::Object(updated))
 }
+
+#[path = "codex-oauth-errors.rs"]
+mod errors;
+use errors::{check_refresh_failure, RefreshError, RefreshFailure};
 
 fn codex_oauth_token_endpoint() -> String {
     #[cfg(debug_assertions)]

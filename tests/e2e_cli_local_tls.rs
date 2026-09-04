@@ -106,11 +106,13 @@ async fn echo_handler(
             .expect("build streaming response");
     }
 
-    if uri.path() == "/requires-fresh-token"
-        && header_map
-            .get("authorization")
-            .map(|value| value == "Bearer at-1")
-            .unwrap_or(false)
+    if matches!(
+        uri.path(),
+        "/requires-fresh-token" | "/backend-api/wham/usage"
+    ) && header_map
+        .get("authorization")
+        .map(|value| value == "Bearer at-1")
+        .unwrap_or(false)
     {
         return (axum::http::StatusCode::UNAUTHORIZED, "expired access token").into_response();
     }
@@ -1265,3 +1267,5 @@ fn e2e_local_tls_method_and_path_denials_happen_before_upstream() {
         "denied method/path requests should not reach upstream listener"
     );
 }
+
+include!("support/codex-oauth-tls.rs");
